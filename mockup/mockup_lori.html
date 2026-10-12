@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>境外贷款审核 · Mockup 原型</title>
+<style>
+  :root {
+    --navy: #1a2b4a;
+    --navy-light: #2d4063;
+    --blue: #3b6fd4;
+    --blue-soft: #e8f0fe;
+    --bg: #f4f6fa;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --green: #16a34a;
+    --green-soft: #dcfce7;
+    --amber: #d97706;
+    --amber-soft: #fef3c7;
+    --red: #dc2626;
+    --red-soft: #fee2e2;
+    --purple: #7c3aed;
+    --purple-soft: #ede9fe;
+    --radius: 10px;
+    --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+    --shadow-lg: 0 10px 30px rgba(0,0,0,.12);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    font-size: 14px;
+  }
+  /* ---------- Top bar ---------- */
+  .topbar {
+    background: var(--navy);
+    color: #fff;
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky; top: 0; z-index: 50;
+  }
+  .topbar .brand { display: flex; align-items: center; gap: 12px; }
+  .topbar .brand .logo {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: linear-gradient(135deg,#3b6fd4,#6ea8ff);
+    display: grid; place-items: center; font-weight: 700;
+  }
+  .topbar .brand h1 { font-size: 15px; font-weight: 600; }
+  .topbar .brand span { font-size: 11px; color: #a5b4cf; display:block; }
+  .role-switch { display: flex; gap: 8px; align-items:center; }
+  .role-switch .who { font-size:12px; color:#a5b4cf; margin-right:4px;}
+  .role-btn {
+    background: transparent; border: 1px solid #3d517a; color:#cdd8ee;
+    padding: 6px 14px; border-radius: 999px; cursor: pointer; font-size: 13px;
+  }
+  .role-btn.active { background: var(--blue); border-color: var(--blue); color:#fff; }
+
+  /* ---------- Layout ---------- */
+  .shell { display: flex; min-height: calc(100vh - 53px); }
+  .sidebar {
+    width: 220px; background: var(--card); border-right: 1px solid var(--border);
+    padding: 16px 12px; flex-shrink: 0;
+  }
+  .side-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing:.05em; padding: 8px 10px; }
+  .nav-item {
+    display: flex; align-items:center; gap: 10px; padding: 10px 12px; border-radius: 8px;
+    cursor: pointer; color: var(--text); font-size: 14px; margin-bottom: 2px;
+  }
+  .nav-item:hover { background: var(--bg); }
+  .nav-item.active { background: var(--blue-soft); color: var(--blue); font-weight: 600; }
+  .nav-item .ico { width: 18px; text-align:center; }
+  .nav-badge { margin-left:auto; background: var(--red); color:#fff; font-size:11px; border-radius:999px; padding:1px 7px; }
+
+  .main { flex: 1; padding: 24px 28px; overflow: auto; }
+  .page { display: none; }
+  .page.active { display: block; animation: fade .25s ease; }
+  @keyframes fade { from{opacity:0; transform: translateY(6px);} to{opacity:1; transform:none;} }
+
+  .page-head { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom: 18px; }
+  .page-head h2 { font-size: 20px; font-weight: 700; }
+  .page-head p { color: var(--muted); font-size: 13px; margin-top:4px; }
+
+  /* ---------- Components ---------- */
+  .card { background: var(--card); border:1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; margin-bottom: 16px; }
+  .card h3 { font-size: 15px; margin-bottom: 12px; display:flex; align-items:center; gap:8px; }
+  .grid { display:grid; gap:16px; }
+  .grid-2 { grid-template-columns: 1fr 1fr; }
+  .grid-3 { grid-template-columns: repeat(3,1fr); }
+  .btn { background: var(--blue); color:#fff; border:none; padding:9px 18px; border-radius:8px; cursor:pointer; font-size:14px; font-weight:500; }
+  .btn:hover { background:#2f5fc0; }
+  .btn.ghost { background:transparent; color:var(--blue); border:1px solid var(--blue); }
+  .btn.gray { background:#eef1f6; color:var(--text); }
+  .btn.sm { padding:6px 12px; font-size:13px; }
+  .btn.block { width:100%; }
+
+  .stat { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:16px; box-shadow:var(--shadow); }
+  .stat .n { font-size:26px; font-weight:700; }
+  .stat .l { color:var(--muted); font-size:13px; margin-top:2px; }
+
+  .tag { display:inline-block; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:500; }
+  .tag.blue{background:var(--blue-soft);color:var(--blue);}
+  .tag.green{background:var(--green-soft);color:var(--green);}
+  .tag.amber{background:var(--amber-soft);color:var(--amber);}
+  .tag.red{background:var(--red-soft);color:var(--red);}
+  .tag.purple{background:var(--purple-soft);color:var(--purple);}
+  .tag.gray{background:#eef1f6;color:var(--muted);}
+
+  table { width:100%; border-collapse:collapse; }
+  th,td { text-align:left; padding:11px 10px; border-bottom:1px solid var(--border); font-size:13px; }
+  th { color:var(--muted); font-weight:600; font-size:12px; }
+  tr:hover td { background:#fafbfd; }
+
+  .uploader { border:2px dashed var(--border); border-radius:var(--radius); padding:30px; text-align:center; color:var(--muted); cursor:pointer; }
+  .uploader:hover { border-color:var(--blue); color:var(--blue); background:var(--blue-soft); }
+  .file-row { display:flex; align-items:center; gap:10px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; margin-top:8px; }
+  .file-row .ico { width:28px;height:28px;background:var(--blue-soft);border-radius:6px;display:grid;place-items:center;color:var(--blue);}
+
+  label.field { display:block; margin-bottom:12px; }
+  label.field span { display:block; font-size:13px; color:var(--muted); margin-bottom:5px; }
+  input,select,textarea { width:100%; padding:9px 11px; border:1px solid var(--border); border-radius:8px; font-size:14px; font-family:inherit; }
+  textarea { resize:vertical; }
+
+  /* Agent timeline */
+  .agents-row { display:grid; grid-template-columns: repeat(3,1fr); gap:16px; }
+  .agent-card { border:1px solid var(--border); border-radius:var(--radius); padding:16px; background:var(--card); }
+  .agent-card .ah { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .agent-card .avatar { width:38px;height:38px;border-radius:10px;display:grid;place-items:center;color:#fff;font-size:18px;}
+  .avatar.parse{background:#3b6fd4;}
+  .avatar.review{background:#7c3aed;}
+  .avatar.summary{background:#0891b2;}
+  .agent-card .nm{font-weight:600;font-size:14px;}
+  .agent-card .st{font-size:12px;}
+  .progress { height:6px; background:#eef1f6; border-radius:999px; overflow:hidden; margin:10px 0; }
+  .progress > i { display:block; height:100%; background:var(--blue); border-radius:999px; }
+
+  .timeline { position:relative; padding-left:26px; }
+  .timeline::before { content:''; position:absolute; left:9px; top:4px; bottom:4px; width:2px; background:var(--border); }
+  .tl-item { position:relative; padding:10px 0 14px; }
+  .tl-item::before { content:''; position:absolute; left:-21px; top:14px; width:12px;height:12px;border-radius:50%; background:var(--blue); border:2px solid #fff; box-shadow:0 0 0 2px var(--blue); }
+  .tl-item.done::before { background:var(--green); box-shadow:0 0 0 2px var(--green); }
+  .tl-item.wait::before { background:var(--amber); box-shadow:0 0 0 2px var(--amber); }
+  .tl-item.err::before { background:var(--red); box-shadow:0 0 0 2px var(--red); }
+  .tl-item .t { font-size:11px; color:var(--muted); }
+  .tl-item .m { font-size:14px; margin-top:2px; }
+  .tl-item .by { font-size:12px; color:var(--muted); }
+
+  .evt { display:flex; gap:10px; padding:12px; border:1px solid var(--border); border-radius:8px; margin-bottom:8px; align-items:flex-start; }
+  .evt .dot { width:8px;height:8px;border-radius:50%;margin-top:6px;flex-shrink:0;}
+  .evt.補件 .dot,.evt.supplement .dot{background:var(--amber);}
+  .evt.風險 .dot,.evt.risk .dot{background:var(--red);}
+  .evt.fail .dot{background:var(--purple);}
+
+  .findings li{ padding:12px; border:1px solid var(--border); border-left:4px solid var(--blue); border-radius:8px; margin-bottom:10px; list-style:none; }
+  .findings li.ok{border-left-color:var(--green);}
+  .findings li.warn{border-left-color:var(--amber);}
+  .findings li.risk{border-left-color:var(--red);}
+  .findings .ft{font-weight:600;margin-bottom:4px;display:flex;justify-content:space-between;}
+  .quote{background:var(--bg);border-radius:6px;padding:8px 10px;font-size:12px;color:var(--muted);margin-top:6px;border-left:3px solid var(--border);}
+
+  .flow-note{background:var(--amber-soft);border:1px solid #f6d98a;border-radius:8px;padding:10px 14px;font-size:13px;color:#92600a;margin:10px 0;}
+  .muted{color:var(--muted);}
+  .right{ text-align:right;}
+  .mb0{margin-bottom:0;}
+  .mt16{margin-top:16px;}
+  .flex{display:flex;align-items:center;gap:10px;}
+  .between{justify-content:space-between;}
+  .hint{position:fixed;bottom:16px;right:16px;background:var(--navy);color:#fff;padding:8px 14px;border-radius:8px;font-size:12px;opacity:.85;}
+</style>
+</head>
+<body>
+
+<!-- ================= TOP BAR ================= -->
+<div class="topbar">
+  <div class="brand">
+    <div class="logo">贷</div>
+    <div>
+      <h1>境外贷款审核平台</h1>
+      <span id="roleHint">当前角色：审核人员</span>
+    </div>
+  </div>
+  <div class="role-switch">
+    <span class="who">切换角色预览：</span>
+    <button class="role-btn" data-role="applicant" onclick="setRole('applicant')">👤 业务经办人</button>
+    <button class="role-btn active" data-role="reviewer" onclick="setRole('reviewer')">🛡️ 审核人员</button>
+  </div>
+</div>
+
+<div class="shell">
+  <!-- ================= SIDEBAR ================= -->
+  <aside class="sidebar">
+    <!-- Applicant nav -->
+    <div class="nav-group" data-role="applicant" style="display:none">
+      <div class="side-title">业务经办人</div>
+      <div class="nav-item active" onclick="go('a-home',this)"><span class="ico">🏠</span>我的审核任务</div>
+      <div class="nav-item" onclick="go('a-create',this)"><span class="ico">➕</span>发起审核</div>
+      <div class="nav-item" onclick="go('a-detail',this)"><span class="ico">📄</span>任务详情 / 补件<span class="nav-badge">1</span></div>
+      <div class="nav-item" onclick="go('a-result',this)"><span class="ico">✅</span>审核意见反馈</div>
+    </div>
+    <!-- Reviewer nav -->
+    <div class="nav-group" data-role="reviewer">
+      <div class="side-title">审核人员</div>
+      <div class="nav-item active" onclick="go('r-home',this)"><span class="ico">📊</span>审核工作台</div>
+      <div class="nav-item" onclick="go('r-tasks',this)"><span class="ico">📋</span>任务列表</div>
+      <div class="nav-item" onclick="go('r-agents',this)"><span class="ico">🤖</span>Agent 处理过程</div>
+      <div class="nav-item" onclick="go('r-events',this)"><span class="ico">🔔</span>事件 / 待办中心<span class="nav-badge">3</span></div>
+      <div class="nav-item" onclick="go('r-summary',this)"><span class="ico">🧾</span>汇总报告 / 终审</div>
+    </div>
+  </aside>
+
+  <!-- ================= MAIN ================= -->
+  <main class="main">
+
+    <!-- =========================================================
+         业务经办人 - 我的审核任务
+    ========================================================== -->
+    <section class="page active" id="a-home">
+      <div class="page-head">
+        <div><h2>我的审核任务</h2><p>查看你发起的境外贷款审核任务及当前状态</p></div>
+        <button class="btn" onclick="go('a-create')">➕ 发起审核</button>
+      </div>
+      <div class="grid grid-3">
+        <div class="stat"><div class="n">4</div><div class="l">进行中</div></div>
+        <div class="stat"><div class="n" style="color:var(--amber)">1</div><div class="l">待我补件</div></div>
+        <div class="stat"><div class="n" style="color:var(--green)">7</div><div class="l">已完成</div></div>
+      </div>
+      <div class="card mt16">
+        <table>
+          <thead><tr><th>任务编号</th><th>借款人 / 项目</th><th>金额</th><th>状态</th><th>更新时间</th><th></th></tr></thead>
+          <tbody>
+            <tr><td>LN-20261010-003</td><td>ABC Holdings · 境外并购贷</td><td>USD 12.0M</td><td><span class="tag amber">待补件</span></td><td>10:24</td><td class="right"><button class="btn sm ghost" onclick="go('a-detail')">去处理</button></td></tr>
+            <tr><td>LN-20261010-002</td><td>Delta Energy · 项目融资</td><td>USD 8.5M</td><td><span class="tag blue">Agent 审核中</span></td><td>10:12</td><td class="right"><button class="btn sm gray">查看</button></td></tr>
+            <tr><td>LN-20261009-014</td><td>Orion Ltd · 流动资金贷</td><td>EUR 3.0M</td><td><span class="tag purple">人工终审中</span></td><td>昨天</td><td class="right"><button class="btn sm gray">查看</button></td></tr>
+            <tr><td>LN-20261008-007</td><td>Vega Corp · 贸易融资</td><td>USD 5.2M</td><td><span class="tag green">审核通过</span></td><td>10-08</td><td class="right"><button class="btn sm ghost" onclick="go('a-result')">看反馈</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         业务经办人 - 发起审核
+    ========================================================== -->
+    <section class="page" id="a-create">
+      <div class="page-head"><div><h2>发起审核</h2><p>创建审核任务并提交境外贷款材料</p></div></div>
+      <div class="grid grid-2">
+        <div class="card mb0">
+          <h3>📝 基本信息</h3>
+          <label class="field"><span>借款人 / 项目名称</span><input placeholder="如：ABC Holdings 境外并购贷"></label>
+          <div class="grid grid-2">
+            <label class="field"><span>贷款金额</span><input placeholder="12,000,000"></label>
+            <label class="field"><span>币种</span><select><option>USD</option><option>EUR</option><option>HKD</option></select></label>
+          </div>
+          <label class="field"><span>贷款类型</span><select><option>境外并购贷款</option><option>项目融资</option><option>流动资金贷款</option><option>贸易融资</option></select></label>
+          <label class="field mb0"><span>备注</span><textarea rows="3" placeholder="补充说明…"></textarea></label>
+        </div>
+        <div class="card mb0">
+          <h3>📎 上传材料</h3>
+          <div class="uploader">⬆️<br>点击或拖拽上传材料<br><span style="font-size:12px">支持 PDF / Word / 图片，可多选</span></div>
+          <p class="muted" style="font-size:12px;margin:8px 0">材料类型：贷款合同 · 授信请求 · 提款指令 · 支付指令 · 商务合同 · 发票 · 订单</p>
+          <div class="file-row"><div class="ico">📄</div><div style="flex:1"><div>贷款合同.pdf</div><div class="muted" style="font-size:12px">1.2 MB</div></div><span class="tag blue">贷款合同</span></div>
+          <div class="file-row"><div class="ico">📄</div><div style="flex:1"><div>授信请求.pdf</div><div class="muted" style="font-size:12px">0.8 MB</div></div><span class="tag blue">授信请求</span></div>
+          <div class="file-row"><div class="ico">📄</div><div style="flex:1"><div>提款指令.pdf</div><div class="muted" style="font-size:12px">0.5 MB</div></div><span class="tag blue">提款指令</span></div>
+          <div class="file-row"><div class="ico">📄</div><div style="flex:1"><div>支付指令.pdf</div><div class="muted" style="font-size:12px">0.5 MB</div></div><span class="tag blue">支付指令</span></div>
+          <div class="file-row"><div class="ico">📄</div><div style="flex:1"><div>商务合同.pdf</div><div class="muted" style="font-size:12px">2.3 MB</div></div><span class="tag blue">商务合同</span></div>
+          <div class="file-row"><div class="ico">📄</div><div style="flex:1"><div>发票.pdf</div><div class="muted" style="font-size:12px">0.6 MB</div></div><span class="tag blue">发票</span></div>
+          <div class="file-row"><div class="ico">📄</div><div style="flex:1"><div>订单.pdf</div><div class="muted" style="font-size:12px">0.4 MB</div></div><span class="tag blue">订单</span></div>
+          <button class="btn block mt16" onclick="go('a-detail')">提交并创建审核任务 →</button>
+          <p class="muted" style="font-size:12px;margin-top:10px">提交后将由审核任务编排器创建子任务，并交由文件解析 Agent 处理。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         业务经办人 - 任务详情 / 补件
+    ========================================================== -->
+    <section class="page" id="a-detail">
+      <div class="page-head">
+        <div><h2>LN-20261010-003 · 任务详情</h2><p>ABC Holdings · 境外并购贷 · USD 12.0M</p></div>
+        <span class="tag amber">待补件</span>
+      </div>
+      <div class="grid grid-2">
+        <div>
+          <div class="card">
+            <h3>🔔 待办：请补充材料</h3>
+            <div class="flow-note">信息不清或缺少材料 — 系统已生成待确认事项，请根据下方清单补件后重新提交。</div>
+            <div class="file-row"><div class="ico" style="background:var(--amber-soft);color:var(--amber)">!</div><div style="flex:1"><div>缺少近 3 年审计报告</div><div class="muted" style="font-size:12px">财务审核 Agent 发起</div></div><button class="btn sm ghost">上传</button></div>
+            <div class="file-row"><div class="ico" style="background:var(--amber-soft);color:var(--amber)">!</div><div style="flex:1"><div>抵押物评估报告缺签章页</div><div class="muted" style="font-size:12px">合规审核 Agent 发起</div></div><button class="btn sm ghost">上传</button></div>
+            <label class="field mt16"><span>补充说明</span><textarea rows="2" placeholder="对补件内容的说明…"></textarea></label>
+            <button class="btn block" onclick="go('a-home')">提交补件 →</button>
+          </div>
+        </div>
+        <div>
+          <div class="card">
+            <h3>🕒 处理进度</h3>
+            <div class="timeline">
+              <div class="tl-item done"><div class="t">10:05</div><div class="m">提交材料，创建审核任务</div><div class="by">业务经办人</div></div>
+              <div class="tl-item done"><div class="t">10:06</div><div class="m">文件解析 Agent 完成识别与字段提取</div><div class="by">文件解析 Agent</div></div>
+              <div class="tl-item wait"><div class="t">10:08</div><div class="m">发现信息缺失，发布待补件事件</div><div class="by">专项审核 Agent</div></div>
+              <div class="tl-item"><div class="t">—</div><div class="m">等待补件后继续审核</div><div class="by">—</div></div>
+            </div>
+          </div>
+          <div class="card mb0">
+            <h3>📄 已识别字段</h3>
+            <table><tbody>
+              <tr><td class="muted">借款人</td><td>ABC Holdings Ltd.</td></tr>
+              <tr><td class="muted">贷款金额</td><td>USD 12,000,000</td></tr>
+              <tr><td class="muted">贷款期限</td><td>5 年</td></tr>
+              <tr><td class="muted">抵押物</td><td>境外厂房一处</td></tr>
+            </tbody></table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         业务经办人 - 审核意见反馈
+    ========================================================== -->
+    <section class="page" id="a-result">
+      <div class="page-head"><div><h2>审核意见反馈</h2><p>LN-20261008-007 · Vega Corp · 贸易融资</p></div><span class="tag green">审核通过</span></div>
+      <div class="card">
+        <h3>✅ 审核结论</h3>
+        <p>经文件解析、专项审核与人工终审，<b>该境外贷款申请予以通过</b>，建议按标准流程放款。</p>
+      </div>
+      <div class="card">
+        <h3>🧾 关键意见</h3>
+        <ul class="findings">
+          <li class="ok"><div class="ft">财务审核 <span class="tag green">通过</span></div>资产负债率 52%，现金流覆盖充足。</li>
+          <li class="warn"><div class="ft">合规审核 <span class="tag amber">提示</span></div>建议补充境外主体受益所有权说明（不影响放款）。</li>
+          <li class="ok"><div class="ft">抵押物审核 <span class="tag green">通过</span></div>评估价值 USD 9.8M，覆盖率满足要求。</li>
+        </ul>
+      </div>
+      <div class="card mb0">
+        <h3>💬 审核人员留言</h3>
+        <div class="quote">请在放款前完成受益所有权补充说明，归档至合规档案。— 审核人员 王丽，10-08 16:40</div>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         审核人员 - 工作台
+    ========================================================== -->
+    <section class="page active" id="r-home">
+      <div class="page-head"><div><h2>审核工作台</h2><p>跨任务概览 · Agent 自动化处理 + 人工终审</p></div></div>
+      <div class="grid grid-3">
+        <div class="stat"><div class="n">12</div><div class="l">待处理任务</div></div>
+        <div class="stat"><div class="n" style="color:var(--blue)">5</div><div class="l">Agent 审核中</div></div>
+        <div class="stat"><div class="n" style="color:var(--purple)">3</div><div class="l">待我终审</div></div>
+      </div>
+      <div class="grid grid-2 mt16">
+        <div class="card mb0">
+          <h3>🤖 三类 Agent 实时状态</h3>
+          <div class="agents-row" style="grid-template-columns:1fr">
+            <div class="agent-card"><div class="ah"><div class="avatar parse">📑</div><div><div class="nm">文件解析 Agent</div><div class="st tag blue">运行中 · 2 任务</div></div></div><div class="progress"><i style="width:72%"></i></div></div>
+            <div class="agent-card"><div class="ah"><div class="avatar review">🔍</div><div><div class="nm">专项审核 Agent（多个）</div><div class="st tag amber">3 并发 · 1 待人工</div></div></div><div class="progress"><i style="width:48%;background:var(--amber)"></i></div></div>
+            <div class="agent-card"><div class="ah"><div class="avatar summary">🧮</div><div><div class="nm">汇总 Agent</div><div class="st tag green">空闲</div></div></div><div class="progress"><i style="width:100%;background:var(--green)"></i></div></div>
+          </div>
+        </div>
+        <div class="card mb0">
+          <h3>🔔 最新事件</h3>
+          <div class="evt supplement"><div class="dot"></div><div><div>待补件 · LN-...003 缺少审计报告</div><div class="muted" style="font-size:12px">财务审核 Agent · 10:08</div></div></div>
+          <div class="evt risk"><div class="dot"></div><div><div>风险 · LN-...002 关联交易异常</div><div class="muted" style="font-size:12px">合规审核 Agent · 10:12</div></div></div>
+          <div class="evt fail"><div class="dot"></div><div><div>执行失败 · 汇率接口超时，已重试</div><div class="muted" style="font-size:12px">估值工具 · 10:15</div></div></div>
+          <button class="btn ghost block mt16" onclick="go('r-events')">进入事件 / 待办中心 →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         审核人员 - 任务列表
+    ========================================================== -->
+    <section class="page" id="r-tasks">
+      <div class="page-head"><div><h2>任务列表</h2><p>所有审核任务及其子任务进度</p></div>
+        <div class="flex"><select style="width:140px"><option>全部状态</option><option>Agent 审核中</option><option>待人工</option></select><button class="btn">筛选</button></div>
+      </div>
+      <div class="card">
+        <table>
+          <thead><tr><th>任务编号</th><th>借款人</th><th>金额</th><th>子任务进度</th><th>状态</th><th></th></tr></thead>
+          <tbody>
+            <tr><td>LN-...003</td><td>ABC Holdings</td><td>USD 12.0M</td><td><div class="progress" style="width:120px"><i style="width:40%;background:var(--amber)"></i></div></td><td><span class="tag amber">待补件</span></td><td class="right"><button class="btn sm ghost" onclick="go('r-agents')">查看</button></td></tr>
+            <tr><td>LN-...002</td><td>Delta Energy</td><td>USD 8.5M</td><td><div class="progress" style="width:120px"><i style="width:68%"></i></div></td><td><span class="tag blue">审核中</span></td><td class="right"><button class="btn sm ghost" onclick="go('r-agents')">查看</button></td></tr>
+            <tr><td>LN-...014</td><td>Orion Ltd</td><td>EUR 3.0M</td><td><div class="progress" style="width:120px"><i style="width:100%;background:var(--green)"></i></div></td><td><span class="tag purple">待终审</span></td><td class="right"><button class="btn sm" onclick="go('r-summary')">去终审</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         审核人员 - Agent 处理过程 / 时序追踪
+    ========================================================== -->
+    <section class="page" id="r-agents">
+      <div class="page-head"><div><h2>Agent 处理过程 · LN-...002</h2><p>Delta Energy · 项目融资 · 实时时序追踪</p></div><span class="tag blue">Agent 审核中</span></div>
+
+      <div class="agents-row">
+        <div class="agent-card">
+          <div class="ah"><div class="avatar parse">📑</div><div><div class="nm">文件解析 Agent</div><div class="st tag green">已完成</div></div></div>
+          <div class="progress"><i style="width:100%;background:var(--green)"></i></div>
+          <div class="muted" style="font-size:12px">识别 8 份文件，提取 32 个字段，定位原文证据 ✓</div>
+        </div>
+        <div class="agent-card">
+          <div class="ah"><div class="avatar review">🔍</div><div><div class="nm">专项审核 Agent</div><div class="st tag amber">进行中 · 3 并发</div></div></div>
+          <div class="progress"><i style="width:60%;background:var(--amber)"></i></div>
+          <div class="muted" style="font-size:12px">财务 ✓ / 合规 ⚠风险 / 抵押物 ⏳ / 工具调用中</div>
+        </div>
+        <div class="agent-card">
+          <div class="ah"><div class="avatar summary">🧮</div><div><div class="nm">汇总 Agent</div><div class="st tag gray">等待子任务</div></div></div>
+          <div class="progress"><i style="width:0%"></i></div>
+          <div class="muted" style="font-size:12px">待全部子任务收口后进行去重与证据链整理</div>
+        </div>
+      </div>
+
+      <div class="grid grid-2 mt16">
+        <div class="card mb0">
+          <h3>🕒 执行时序</h3>
+          <div class="timeline">
+            <div class="tl-item done"><div class="t">10:05</div><div class="m">创建子任务，分配审核清单</div><div class="by">审核任务编排器</div></div>
+            <div class="tl-item done"><div class="t">10:06</div><div class="m">识别文件 / 提取字段 / 定位原文证据</div><div class="by">文件解析 Agent（Loop）</div></div>
+            <div class="tl-item done"><div class="t">10:08</div><div class="m">拆分并分配专项审核子任务</div><div class="by">审核任务编排器</div></div>
+            <div class="tl-item done"><div class="t">10:10</div><div class="m">财务审核：校验数值、比对规则，生成验证 ✓</div><div class="by">专项审核 Agent</div></div>
+            <div class="tl-item err"><div class="t">10:12</div><div class="m">合规审核：关联交易异常，发布风险事件</div><div class="by">专项审核 Agent → 事件中心</div></div>
+            <div class="tl-item wait"><div class="t">10:15</div><div class="m">估值工具调用超时，自动重试中</div><div class="by">抵押物审核 Agent</div></div>
+            <div class="tl-item"><div class="t">—</div><div class="m">等待汇总</div><div class="by">汇总 Agent</div></div>
+          </div>
+        </div>
+        <div class="card mb0">
+          <h3>🔎 专项审核发现</h3>
+          <ul class="findings">
+            <li class="ok"><div class="ft">财务审核 <span class="tag green">通过</span></div>资产负债率 48%，符合阈值。<div class="quote">证据：财务报表_2025.pdf 第 3 页 · 资产负债表</div></li>
+            <li class="risk"><div class="ft">合规审核 <span class="tag red">风险</span></div>存在未披露关联交易，建议人工复核。<div class="quote">证据：公司章程.pdf 第 12 页 · 关联方说明</div></li>
+            <li class="warn"><div class="ft">抵押物审核 <span class="tag amber">处理中</span></div>汇率转换接口超时，重试中…</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         审核人员 - 事件 / 待办中心
+    ========================================================== -->
+    <section class="page" id="r-events">
+      <div class="page-head"><div><h2>事件 / 待办中心</h2><p>三类事件：待补件 · 风险 · 执行失败</p></div></div>
+      <div class="grid grid-3">
+        <div class="stat"><div class="n" style="color:var(--amber)">4</div><div class="l">待补件事件</div></div>
+        <div class="stat"><div class="n" style="color:var(--red)">2</div><div class="l">风险事件</div></div>
+        <div class="stat"><div class="n" style="color:var(--purple)">1</div><div class="l">执行失败</div></div>
+      </div>
+      <div class="card mt16">
+        <h3>🔔 待办事项</h3>
+        <div class="evt risk"><div class="dot"></div><div style="flex:1"><div class="flex between"><b>风险事件 · 关联交易异常</b><span class="tag red">高</span></div><div class="muted" style="font-size:12px">LN-...002 · 合规审核 Agent · 10:12 · 需人工复核确认</div></div><button class="btn sm" onclick="go('r-agents')">去处理</button></div>
+        <div class="evt supplement"><div class="dot"></div><div style="flex:1"><div class="flex between"><b>待补件事件 · 缺少审计报告</b><span class="tag amber">中</span></div><div class="muted" style="font-size:12px">LN-...003 · 财务审核 Agent · 10:08 · 已通知经办人</div></div><button class="btn sm gray">已通知</button></div>
+        <div class="evt fail"><div class="dot"></div><div style="flex:1"><div class="flex between"><b>执行失败 · 汇率接口超时</b><span class="tag purple">工具</span></div><div class="muted" style="font-size:12px">估值工具 · 10:15 · 自动重试 2/3</div></div><button class="btn sm ghost">转人工</button></div>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         审核人员 - 汇总报告 / 人工终审
+    ========================================================== -->
+    <section class="page" id="r-summary">
+      <div class="page-head"><div><h2>汇总报告 · 人工终审</h2><p>LN-...014 · Orion Ltd · 流动资金贷 · EUR 3.0M</p></div><span class="tag purple">待终审</span></div>
+      <div class="grid grid-2">
+        <div>
+          <div class="card">
+            <h3>🧮 汇总 Agent 报告</h3>
+            <p class="muted" style="font-size:13px;margin-bottom:10px">已去重观点、检查未决证据并整理证据链。</p>
+            <ul class="findings">
+              <li class="ok"><div class="ft">财务审核 <span class="tag green">通过</span></div>偿债能力良好，现金流覆盖 1.8x。</li>
+              <li class="ok"><div class="ft">抵押物审核 <span class="tag green">通过</span></div>评估价值覆盖率 135%。</li>
+              <li class="warn"><div class="ft">合规审核 <span class="tag amber">待决</span></div>1 项受益所有权证据缺失，需人工判断。</li>
+            </ul>
+          </div>
+          <div class="card mb0">
+            <h3>📌 未决事项</h3>
+            <div class="file-row"><div class="ico" style="background:var(--amber-soft);color:var(--amber)">?</div><div style="flex:1">受益所有权链路证据缺失</div><span class="tag amber">待决</span></div>
+          </div>
+        </div>
+        <div>
+          <div class="card">
+            <h3>⚖️ 终审决定</h3>
+            <label class="field"><span>审核结论</span>
+              <select><option>通过</option><option>有条件通过</option><option>退回补件</option><option>拒绝</option></select>
+            </label>
+            <label class="field"><span>审核意见（反馈给经办人）</span><textarea rows="4" placeholder="填写终审意见…"></textarea></label>
+            <div class="flex">
+              <button class="btn" onclick="go('r-home')">提交终审</button>
+              <button class="btn gray" onclick="go('r-events')">退回补件</button>
+            </div>
+            <div class="flow-note mt16">提交后，审核意见将反馈给业务经办人；若选择退回补件则重新触发补件流程。</div>
+          </div>
+          <div class="card mb0">
+            <h3>🧾 证据链</h3>
+            <div class="quote">财务报表_2025.pdf · 现金流量表（P5）</div>
+            <div class="quote" style="margin-top:6px">抵押物评估报告.pdf · 评估结论（P2）</div>
+            <div class="quote" style="margin-top:6px">公司章程.pdf · 受益所有权（缺失）</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="hint">🧩 这是可点击的静态原型 · 点击左侧导航 / 顶部角色切换体验</div>
+
+<script>
+  let role = 'reviewer';
+  function setRole(r){
+    role = r;
+    document.querySelectorAll('.role-btn').forEach(b=>b.classList.toggle('active', b.dataset.role===r));
+    document.querySelectorAll('.nav-group').forEach(g=>g.style.display = g.dataset.role===r?'block':'none');
+    document.getElementById('roleHint').textContent = '当前角色：' + (r==='applicant'?'业务经办人':'审核人员');
+    // show that role's first page
+    const first = r==='applicant' ? 'a-home' : 'r-home';
+    go(first);
+    // highlight first nav
+    const grp = document.querySelector('.nav-group[data-role="'+r+'"]');
+    grp.querySelectorAll('.nav-item').forEach((n,i)=>n.classList.toggle('active', i===0));
+  }
+  function go(id, el){
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    const pg = document.getElementById(id);
+    if(pg) pg.classList.add('active');
+    // sync nav highlight if clicked via nav
+    if(el){
+      el.parentElement.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+      el.classList.add('active');
+    }
+    document.querySelector('.main').scrollTo({top:0,behavior:'smooth'});
+  }
+  setRole('reviewer');
+</script>
+</body>
+</html>
