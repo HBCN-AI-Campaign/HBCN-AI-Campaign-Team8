@@ -53,7 +53,7 @@ test('Codex CLI adapter uses a fixed ephemeral read-only invocation and exposes 
   assert.ok(invocation.args.includes('shell_tool'));
   assert.ok(invocation.args.includes('mcp_servers={}'));
   assert.ok(invocation.args.includes('plugins={}'));
-  for (const feature of ['browser_use', 'computer_use', 'apps', 'hooks', 'code_mode', 'multi_agent', 'standalone_web_search']) {
+  for (const feature of ['file_search', 'browser_use', 'computer_use', 'apps', 'hooks', 'code_mode', 'multi_agent', 'standalone_web_search']) {
     const index = invocation.args.indexOf(feature);
     assert.ok(index > 0 && invocation.args[index - 1] === '--disable', `${feature} should be disabled`);
   }

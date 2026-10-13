@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const runtimeDirectory = fileURLToPath(new URL('../.runtime/codex/', import.meta.url));
 const allowedEfforts = new Set(['minimal', 'low', 'medium', 'high', 'xhigh']);
 const environmentKeys = ['PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'TEMP', 'TMP', 'CODEX_HOME', 'LANG', 'LC_ALL', 'TERM'];
-const disabledFeatures = ['shell_tool', 'browser_use', 'browser_use_external', 'computer_use', 'apps', 'enable_mcp_apps', 'plugins', 'hooks', 'code_mode', 'code_mode_host', 'multi_agent', 'multi_agent_v2', 'standalone_web_search', 'skill_search', 'workspace_dependencies', 'image_generation', 'view_image'];
+const disabledFeatures = ['shell_tool', 'file_search', 'browser_use', 'browser_use_external', 'computer_use', 'apps', 'enable_mcp_apps', 'plugins', 'hooks', 'code_mode', 'code_mode_host', 'multi_agent', 'multi_agent_v2', 'standalone_web_search', 'skill_search', 'workspace_dependencies', 'image_generation', 'view_image'];
 const maxStdoutBytes = 2 * 1024 * 1024;
 const maxLineBytes = 512 * 1024;
 
