@@ -207,7 +207,8 @@
       <div class="side-title">审核人员</div>
       <div class="nav-item active" onclick="go('r-home',this)"><span class="ico">📊</span>审核工作台</div>
       <div class="nav-item" onclick="go('r-tasks',this)"><span class="ico">📋</span>任务列表</div>
-      <div class="nav-item" onclick="go('r-agents',this)"><span class="ico">🤖</span>Agent 处理过程</div>
+      <div class="nav-item" onclick="go('r-agents',this)"><span class="ico">⚙️</span>智能处理进度</div>
+      <div class="nav-item" onclick="go('r-checklist',this)"><span class="ico">🔗</span>文件比对核对</div>
       <div class="nav-item" onclick="go('r-events',this)"><span class="ico">🔔</span>事件 / 待办中心<span class="nav-badge">3</span></div>
       <div class="nav-item" onclick="go('r-summary',this)"><span class="ico">🧾</span>汇总报告 / 终审</div>
     </div>
@@ -234,7 +235,7 @@
           <thead><tr><th>任务编号</th><th>借款人 / 项目</th><th>金额</th><th>状态</th><th>更新时间</th><th></th></tr></thead>
           <tbody>
             <tr><td>LN-20261010-003</td><td>ABC Holdings · 境外并购贷</td><td>USD 12.0M</td><td><span class="tag amber">待补件</span></td><td>10:24</td><td class="right"><button class="btn sm ghost" onclick="go('a-detail')">去处理</button></td></tr>
-            <tr><td>LN-20261010-002</td><td>Delta Energy · 项目融资</td><td>USD 8.5M</td><td><span class="tag blue">Agent 审核中</span></td><td>10:12</td><td class="right"><button class="btn sm gray">查看</button></td></tr>
+            <tr><td>LN-20261010-002</td><td>Delta Energy · 项目融资</td><td>USD 8.5M</td><td><span class="tag blue">智能审核中</span></td><td>10:12</td><td class="right"><button class="btn sm gray">查看</button></td></tr>
             <tr><td>LN-20261009-014</td><td>Orion Ltd · 流动资金贷</td><td>EUR 3.0M</td><td><span class="tag purple">人工终审中</span></td><td>昨天</td><td class="right"><button class="btn sm gray">查看</button></td></tr>
             <tr><td>LN-20261008-007</td><td>Vega Corp · 贸易融资</td><td>USD 5.2M</td><td><span class="tag green">审核通过</span></td><td>10-08</td><td class="right"><button class="btn sm ghost" onclick="go('a-result')">看反馈</button></td></tr>
           </tbody>
@@ -261,16 +262,17 @@
         <div class="card mb0">
           <h3>📎 上传材料</h3>
           <div class="uploader">⬆️<br>点击或拖拽上传材料<br><span style="font-size:12px">支持 PDF / Word / 图片，可多选</span></div>
-          <p class="muted" style="font-size:12px;margin:8px 0">材料类型：贷款合同 · 授信请求 · 提款指令 · 支付指令 · 商务合同 · 发票 · 订单</p>
+          <p class="muted" style="font-size:12px;margin:8px 0">材料类型：贷款合同 · 授信请求 · 提款指令 · 支付指令 · 商务合同 · 形式发票 · 报关单 · 运单</p>
           <div class="file-row"><div class="ico">📄</div><div style="flex:1"><div>贷款合同.pdf</div><div class="muted" style="font-size:12px">1.2 MB</div></div><span class="tag blue">贷款合同</span></div>
           <div class="file-row"><div class="ico">📄</div><div style="flex:1"><div>授信请求.pdf</div><div class="muted" style="font-size:12px">0.8 MB</div></div><span class="tag blue">授信请求</span></div>
           <div class="file-row"><div class="ico">📄</div><div style="flex:1"><div>提款指令.pdf</div><div class="muted" style="font-size:12px">0.5 MB</div></div><span class="tag blue">提款指令</span></div>
           <div class="file-row"><div class="ico">📄</div><div style="flex:1"><div>支付指令.pdf</div><div class="muted" style="font-size:12px">0.5 MB</div></div><span class="tag blue">支付指令</span></div>
           <div class="file-row"><div class="ico">📄</div><div style="flex:1"><div>商务合同.pdf</div><div class="muted" style="font-size:12px">2.3 MB</div></div><span class="tag blue">商务合同</span></div>
-          <div class="file-row"><div class="ico">📄</div><div style="flex:1"><div>发票.pdf</div><div class="muted" style="font-size:12px">0.6 MB</div></div><span class="tag blue">发票</span></div>
-          <div class="file-row"><div class="ico">📄</div><div style="flex:1"><div>订单.pdf</div><div class="muted" style="font-size:12px">0.4 MB</div></div><span class="tag blue">订单</span></div>
+          <div class="file-row"><div class="ico">📄</div><div style="flex:1"><div>形式发票.pdf</div><div class="muted" style="font-size:12px">0.6 MB</div></div><span class="tag blue">形式发票</span></div>
+          <div class="file-row"><div class="ico">📄</div><div style="flex:1"><div>报关单.pdf</div><div class="muted" style="font-size:12px">0.5 MB</div></div><span class="tag blue">报关单</span></div>
+          <div class="file-row"><div class="ico">📄</div><div style="flex:1"><div>运单.pdf</div><div class="muted" style="font-size:12px">0.4 MB</div></div><span class="tag blue">运单</span></div>
           <button class="btn block mt16" onclick="go('a-detail')">提交并创建审核任务 →</button>
-          <p class="muted" style="font-size:12px;margin-top:10px">提交后将由审核任务编排器创建子任务，并交由文件解析 Agent 处理。</p>
+          <p class="muted" style="font-size:12px;margin-top:10px">提交后平台将自动解析材料、智能核对并生成待办事项。</p>
         </div>
       </div>
     </section>
@@ -287,9 +289,9 @@
         <div>
           <div class="card">
             <h3>🔔 待办：请补充材料</h3>
-            <div class="flow-note">信息不清或缺少材料 — 系统已生成待确认事项，请根据下方清单补件后重新提交。</div>
-            <div class="file-row"><div class="ico" style="background:var(--amber-soft);color:var(--amber)">!</div><div style="flex:1"><div>缺少近 3 年审计报告</div><div class="muted" style="font-size:12px">财务审核 Agent 发起</div></div><button class="btn sm ghost">上传</button></div>
-            <div class="file-row"><div class="ico" style="background:var(--amber-soft);color:var(--amber)">!</div><div style="flex:1"><div>抵押物评估报告缺签章页</div><div class="muted" style="font-size:12px">合规审核 Agent 发起</div></div><button class="btn sm ghost">上传</button></div>
+            <div class="flow-note">信息不清或缺少材料 — 系统已生成待确认事项，请根据下方清单补件/补充信息后重新提交。</div>
+            <div class="file-row"><div class="ico" style="background:var(--amber-soft);color:var(--amber)">!</div><div style="flex:1"><div>提款指令缺授权签章页</div><div class="muted" style="font-size:12px">系统自动识别</div></div><button class="btn sm ghost">上传</button></div>
+            <div class="file-row"><div class="ico" style="background:var(--amber-soft);color:var(--amber)">!</div><div style="flex:1"><div>需补充历史提款总额（用于核对到期日/还款计划）</div><div class="muted" style="font-size:12px">系统智能核对</div></div><button class="btn sm ghost">填写</button></div>
             <label class="field mt16"><span>补充说明</span><textarea rows="2" placeholder="对补件内容的说明…"></textarea></label>
             <button class="btn block" onclick="go('a-home')">提交补件 →</button>
           </div>
@@ -299,18 +301,20 @@
             <h3>🕒 处理进度</h3>
             <div class="timeline">
               <div class="tl-item done"><div class="t">10:05</div><div class="m">提交材料，创建审核任务</div><div class="by">业务经办人</div></div>
-              <div class="tl-item done"><div class="t">10:06</div><div class="m">文件解析 Agent 完成识别与字段提取</div><div class="by">文件解析 Agent</div></div>
-              <div class="tl-item wait"><div class="t">10:08</div><div class="m">发现信息缺失，发布待补件事件</div><div class="by">专项审核 Agent</div></div>
-              <div class="tl-item"><div class="t">—</div><div class="m">等待补件后继续审核</div><div class="by">—</div></div>
+              <div class="tl-item done"><div class="t">10:06</div><div class="m">平台完成文件识别与字段提取</div><div class="by">智能处理</div></div>
+              <div class="tl-item wait"><div class="t">10:08</div><div class="m">比对发现字段缺失/不清，生成待补件事件</div><div class="by">智能处理</div></div>
+              <div class="tl-item"><div class="t">—</div><div class="m">补件后仅重跑受影响的子任务，继续比对审核</div><div class="by">—</div></div>
             </div>
           </div>
           <div class="card mb0">
-            <h3>📄 已识别字段</h3>
+            <h3>📄 提款指令已识别字段</h3>
             <table><tbody>
               <tr><td class="muted">借款人</td><td>ABC Holdings Ltd.</td></tr>
-              <tr><td class="muted">贷款金额</td><td>USD 12,000,000</td></tr>
-              <tr><td class="muted">贷款期限</td><td>5 年</td></tr>
-              <tr><td class="muted">抵押物</td><td>境外厂房一处</td></tr>
+              <tr><td class="muted">拟授信使用日</td><td>2026-10-13</td></tr>
+              <tr><td class="muted">拟使用授信段</td><td>人民币循环贷款授信</td></tr>
+              <tr><td class="muted">币种 / 金额</td><td>USD 8,500,000</td></tr>
+              <tr><td class="muted">利息期</td><td>3 个月</td></tr>
+              <tr><td class="muted">支付账号</td><td>123-456789-001</td></tr>
             </tbody></table>
           </div>
         </div>
@@ -324,14 +328,14 @@
       <div class="page-head"><div><h2>审核意见反馈</h2><p>LN-20261008-007 · Vega Corp · 贸易融资</p></div><span class="tag green">审核通过</span></div>
       <div class="card">
         <h3>✅ 审核结论</h3>
-        <p>经文件解析、专项审核与人工终审，<b>该境外贷款申请予以通过</b>，建议按标准流程放款。</p>
+        <p>经文件解析、智能核对（字段比对 + 法规合规）与人工终审，<b>该境外贷款申请材料核对无误、合规通过</b>，建议按标准流程放款。</p>
       </div>
       <div class="card">
         <h3>🧾 关键意见</h3>
         <ul class="findings">
-          <li class="ok"><div class="ft">财务审核 <span class="tag green">通过</span></div>资产负债率 52%，现金流覆盖充足。</li>
-          <li class="warn"><div class="ft">合规审核 <span class="tag amber">提示</span></div>建议补充境外主体受益所有权说明（不影响放款）。</li>
-          <li class="ok"><div class="ft">抵押物审核 <span class="tag green">通过</span></div>评估价值 USD 9.8M，覆盖率满足要求。</li>
+          <li class="ok"><div class="ft">字段比对（提款/支付/授信） <span class="tag green">一致</span></div>币种、金额、账号、汇款人名称等关键字段与授信函/贷款合同（FOL）一致。</li>
+          <li class="ok"><div class="ft">用途与合同核对 <span class="tag green">通过</span></div>贷款用途在 FOL 允许范围内，与商务合同/发票相互印证。</li>
+          <li class="warn"><div class="ft">法规合规比对（北大法宝） <span class="tag amber">提示</span></div>建议补充境外主体受益所有权说明（不影响放款）。</li>
         </ul>
       </div>
       <div class="card mb0">
@@ -344,26 +348,27 @@
          审核人员 - 工作台
     ========================================================== -->
     <section class="page active" id="r-home">
-      <div class="page-head"><div><h2>审核工作台</h2><p>跨任务概览 · Agent 自动化处理 + 人工终审</p></div></div>
+      <div class="page-head"><div><h2>审核工作台</h2><p>跨任务概览 · 平台智能处理 + 人工终审</p></div></div>
       <div class="grid grid-3">
         <div class="stat"><div class="n">12</div><div class="l">待处理任务</div></div>
-        <div class="stat"><div class="n" style="color:var(--blue)">5</div><div class="l">Agent 审核中</div></div>
+        <div class="stat"><div class="n" style="color:var(--blue)">5</div><div class="l">智能审核中</div></div>
         <div class="stat"><div class="n" style="color:var(--purple)">3</div><div class="l">待我终审</div></div>
       </div>
       <div class="grid grid-2 mt16">
         <div class="card mb0">
-          <h3>🤖 三类 Agent 实时状态</h3>
+          <h3>⚙️ 智能处理实时状态</h3>
           <div class="agents-row" style="grid-template-columns:1fr">
-            <div class="agent-card"><div class="ah"><div class="avatar parse">📑</div><div><div class="nm">文件解析 Agent</div><div class="st tag blue">运行中 · 2 任务</div></div></div><div class="progress"><i style="width:72%"></i></div></div>
-            <div class="agent-card"><div class="ah"><div class="avatar review">🔍</div><div><div class="nm">专项审核 Agent（多个）</div><div class="st tag amber">3 并发 · 1 待人工</div></div></div><div class="progress"><i style="width:48%;background:var(--amber)"></i></div></div>
-            <div class="agent-card"><div class="ah"><div class="avatar summary">🧮</div><div><div class="nm">汇总 Agent</div><div class="st tag green">空闲</div></div></div><div class="progress"><i style="width:100%;background:var(--green)"></i></div></div>
+            <div class="agent-card"><div class="ah"><div class="avatar parse">📑</div><div><div class="nm">文件解析</div><div class="st tag blue">进行中 · 2 任务</div></div></div><div class="progress"><i style="width:72%"></i></div></div>
+            <div class="agent-card"><div class="ah"><div class="avatar review">🔍</div><div><div class="nm">智能核对</div><div class="st tag amber">进行中 · 5 类专项维度</div></div></div><div class="progress"><i style="width:48%;background:var(--amber)"></i></div></div>
+            <div class="agent-card"><div class="ah"><div class="avatar summary">🧮</div><div><div class="nm">结果汇总</div><div class="st tag green">待开始</div></div></div><div class="progress"><i style="width:100%;background:var(--green)"></i></div></div>
           </div>
         </div>
         <div class="card mb0">
           <h3>🔔 最新事件</h3>
-          <div class="evt supplement"><div class="dot"></div><div><div>待补件 · LN-...003 缺少审计报告</div><div class="muted" style="font-size:12px">财务审核 Agent · 10:08</div></div></div>
-          <div class="evt risk"><div class="dot"></div><div><div>风险 · LN-...002 关联交易异常</div><div class="muted" style="font-size:12px">合规审核 Agent · 10:12</div></div></div>
-          <div class="evt fail"><div class="dot"></div><div><div>执行失败 · 汇率接口超时，已重试</div><div class="muted" style="font-size:12px">估值工具 · 10:15</div></div></div>
+          <div class="evt supplement"><div class="dot"></div><div><div>待补件 · LN-...003 提款指令缺签章页</div><div class="muted" style="font-size:12px">系统自动识别 · 10:08</div></div></div>
+          <div class="evt risk"><div class="dot"></div><div><div>风险 · LN-...002 提款币种与授信条款不符</div><div class="muted" style="font-size:12px">智能核对 · 10:12</div></div></div>
+          <div class="evt risk"><div class="dot"></div><div><div>合规风险 · LN-...002 反洗钱/制裁名单筛查命中</div><div class="muted" style="font-size:12px">法规合规比对（北大法宝）· 10:13</div></div></div>
+          <div class="evt fail"><div class="dot"></div><div><div>执行失败 · 汇率折算接口超时，已重试</div><div class="muted" style="font-size:12px">到期日/金额核对 · 10:15</div></div></div>
           <button class="btn ghost block mt16" onclick="go('r-events')">进入事件 / 待办中心 →</button>
         </div>
       </div>
@@ -374,7 +379,7 @@
     ========================================================== -->
     <section class="page" id="r-tasks">
       <div class="page-head"><div><h2>任务列表</h2><p>所有审核任务及其子任务进度</p></div>
-        <div class="flex"><select style="width:140px"><option>全部状态</option><option>Agent 审核中</option><option>待人工</option></select><button class="btn">筛选</button></div>
+        <div class="flex"><select style="width:140px"><option>全部状态</option><option>智能审核中</option><option>待人工</option></select><button class="btn">筛选</button></div>
       </div>
       <div class="card">
         <table>
@@ -389,50 +394,196 @@
     </section>
 
     <!-- =========================================================
-         审核人员 - Agent 处理过程 / 时序追踪
+         审核人员 - 智能处理进度 / 时序追踪
     ========================================================== -->
     <section class="page" id="r-agents">
-      <div class="page-head"><div><h2>Agent 处理过程 · LN-...002</h2><p>Delta Energy · 项目融资 · 实时时序追踪</p></div><span class="tag blue">Agent 审核中</span></div>
+      <div class="page-head"><div><h2>智能处理进度 · LN-...002</h2><p>Delta Energy · 项目融资 · 平台自动处理实时进度</p></div><span class="tag blue">智能审核中</span></div>
 
       <div class="agents-row">
         <div class="agent-card">
-          <div class="ah"><div class="avatar parse">📑</div><div><div class="nm">文件解析 Agent</div><div class="st tag green">已完成</div></div></div>
+          <div class="ah"><div class="avatar parse">📑</div><div><div class="nm">文件解析</div><div class="st tag green">已完成</div></div></div>
           <div class="progress"><i style="width:100%;background:var(--green)"></i></div>
-          <div class="muted" style="font-size:12px">识别 8 份文件，提取 32 个字段，定位原文证据 ✓</div>
+          <div class="muted" style="font-size:12px">识别 8 类材料，提取提款指令 15 字段 + 支付指令字段，定位原文证据 ✓</div>
         </div>
         <div class="agent-card">
-          <div class="ah"><div class="avatar review">🔍</div><div><div class="nm">专项审核 Agent</div><div class="st tag amber">进行中 · 3 并发</div></div></div>
+          <div class="ah"><div class="avatar review">🔍</div><div><div class="nm">智能核对</div><div class="st tag amber">进行中 · 5 类专项维度</div></div></div>
           <div class="progress"><i style="width:60%;background:var(--amber)"></i></div>
-          <div class="muted" style="font-size:12px">财务 ✓ / 合规 ⚠风险 / 抵押物 ⏳ / 工具调用中</div>
+          <div class="muted" style="font-size:12px">字段交叉比对 ⚠ / 用途与合同核对 ✓ / 法规核查（北大法宝）⚠ / 主体资格 ✓ / 支持性文件交叉核对 ⏳</div>
         </div>
         <div class="agent-card">
-          <div class="ah"><div class="avatar summary">🧮</div><div><div class="nm">汇总 Agent</div><div class="st tag gray">等待子任务</div></div></div>
+          <div class="ah"><div class="avatar summary">🧮</div><div><div class="nm">结果汇总</div><div class="st tag gray">待核对完成</div></div></div>
           <div class="progress"><i style="width:0%"></i></div>
-          <div class="muted" style="font-size:12px">待全部子任务收口后进行去重与证据链整理</div>
+          <div class="muted" style="font-size:12px">待全部比对完成后进行去重与证据链整理</div>
         </div>
       </div>
 
       <div class="grid grid-2 mt16">
         <div class="card mb0">
-          <h3>🕒 执行时序</h3>
+          <h3>🕒 处理时序</h3>
           <div class="timeline">
-            <div class="tl-item done"><div class="t">10:05</div><div class="m">创建子任务，分配审核清单</div><div class="by">审核任务编排器</div></div>
-            <div class="tl-item done"><div class="t">10:06</div><div class="m">识别文件 / 提取字段 / 定位原文证据</div><div class="by">文件解析 Agent（Loop）</div></div>
-            <div class="tl-item done"><div class="t">10:08</div><div class="m">拆分并分配专项审核子任务</div><div class="by">审核任务编排器</div></div>
-            <div class="tl-item done"><div class="t">10:10</div><div class="m">财务审核：校验数值、比对规则，生成验证 ✓</div><div class="by">专项审核 Agent</div></div>
-            <div class="tl-item err"><div class="t">10:12</div><div class="m">合规审核：关联交易异常，发布风险事件</div><div class="by">专项审核 Agent → 事件中心</div></div>
-            <div class="tl-item wait"><div class="t">10:15</div><div class="m">估值工具调用超时，自动重试中</div><div class="by">抵押物审核 Agent</div></div>
-            <div class="tl-item"><div class="t">—</div><div class="m">等待汇总</div><div class="by">汇总 Agent</div></div>
+            <div class="tl-item done"><div class="t">10:05</div><div class="m">创建审核任务，加载比对 Checklist</div><div class="by">平台</div></div>
+            <div class="tl-item done"><div class="t">10:06</div><div class="m">识别 8 类材料 / 提取字段 / 定位原文证据</div><div class="by">文件解析</div></div>
+            <div class="tl-item done"><div class="t">10:08</div><div class="m">拆分为 5 类专项审核维度（字段交叉比对·用途合同·法规·主体资格·支持性文件交叉核对），按依赖并行执行</div><div class="by">平台</div></div>
+            <div class="tl-item done"><div class="t">10:10</div><div class="m">组②提款指令↔支付指令：币种/金额/账号一致 ✓</div><div class="by">智能核对</div></div>
+            <div class="tl-item err"><div class="t">10:12</div><div class="m">组①提款币种不在授信条款范围，生成风险事件</div><div class="by">智能核对</div></div>
+            <div class="tl-item err"><div class="t">10:13</div><div class="m">法规核查：北大法宝命中反洗钱/制裁筛查，生成合规风险事件</div><div class="by">智能核对</div></div>
+            <div class="tl-item wait"><div class="t">10:15</div><div class="m">到期日核对需历史提款额，汇率接口超时重试中</div><div class="by">智能核对</div></div>
+            <div class="tl-item wait"><div class="t">10:22</div><div class="m">经办人补件后，仅重跑受影响的子任务（无需全量重算）</div><div class="by">平台</div></div>
+            <div class="tl-item"><div class="t">—</div><div class="m">各必要子任务均有明确状态后进入汇总</div><div class="by">结果汇总</div></div>
           </div>
         </div>
         <div class="card mb0">
           <h3>🔎 专项审核发现</h3>
           <ul class="findings">
-            <li class="ok"><div class="ft">财务审核 <span class="tag green">通过</span></div>资产负债率 48%，符合阈值。<div class="quote">证据：财务报表_2025.pdf 第 3 页 · 资产负债表</div></li>
-            <li class="risk"><div class="ft">合规审核 <span class="tag red">风险</span></div>存在未披露关联交易，建议人工复核。<div class="quote">证据：公司章程.pdf 第 12 页 · 关联方说明</div></li>
-            <li class="warn"><div class="ft">抵押物审核 <span class="tag amber">处理中</span></div>汇率转换接口超时，重试中…</li>
+            <li class="ok"><div class="ft">提款金额 ≤ 授信金额 <span class="tag green">通过</span></div>提款 USD 8.5M，未超多币种循环贷款授信额度。<div class="quote">提款指令 (e)金额 ↔ FOL 授信/金额 · 多币种循环贷款授信</div></li>
+            <li class="risk"><div class="ft">提款币种 vs 授信条款 <span class="tag red">不符</span></div>提款币种 USD 不在该授信段「人民币循环贷款授信」允许范围内。<div class="quote">提款指令 (d)币种 ↔ FOL 特别授信条款 · 授信使用的货币为人民币</div></li>
+            <li class="warn"><div class="ft">贷款到期日 <span class="tag amber">处理中</span></div>需用户输入历史提款总额以核对还款计划，汇率接口超时重试中…</li>
           </ul>
+          <button class="btn ghost block mt16" onclick="go('r-checklist')">查看完整文件比对核对 →</button>
         </div>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         审核人员 - 文件比对核对 (Checklist)
+    ========================================================== -->
+    <section class="page" id="r-checklist">
+      <div class="page-head">
+        <div><h2>文件比对核对 · LN-...002</h2><p>依据核对清单(Checklist)逐字段比对，并叠加北大法宝法规库的国家/场景合规比对</p></div>
+        <span class="tag amber">字段 1 项不符 · 合规 1 项待复核</span>
+      </div>
+
+      <!-- 专项审核维度总览（时序图第10步：拆分并行执行的 5 类专项审核） -->
+      <div class="card">
+        <h3>🧩 专项审核维度（平台拆分 · 并行核对）</h3>
+        <p class="muted" style="font-size:12px;margin:6px 0 12px">平台将本次审核拆分为以下专项维度，按依赖关系并行核对；下方 ① ~ ⑤ 为各维度的比对明细。</p>
+        <div class="grid grid-3">
+          <div class="file-row"><div class="ico">🔗</div><div style="flex:1"><div>字段交叉比对</div><div class="muted" style="font-size:12px">提款指令 / 支付指令 / 授信函 FOL 字段一致性</div></div><span class="tag red">1 项不符</span></div>
+          <div class="file-row"><div class="ico">🎯</div><div style="flex:1"><div>用途与合同核对</div><div class="muted" style="font-size:12px">贷款用途 vs FOL 条款 / 商务合同采购标的</div></div><span class="tag green">通过</span></div>
+          <div class="file-row"><div class="ico">⚖️</div><div style="flex:1"><div>法规核查</div><div class="muted" style="font-size:12px">北大法宝 · 国家/场景合规</div></div><span class="tag red">待复核</span></div>
+          <div class="file-row"><div class="ico">🧾</div><div style="flex:1"><div>主体资格</div><div class="muted" style="font-size:12px">销售方/收货方名称一致 · 是否关联方/制裁国</div></div><span class="tag green">通过</span></div>
+          <div class="file-row"><div class="ico">🔁</div><div style="flex:1"><div>支持性文件交叉核对</div><div class="muted" style="font-size:12px">合同/订单/运单/报关单/发票 ↔ 提款·支付勾稽</div></div><span class="tag amber">核对中</span></div>
+        </div>
+      </div>
+
+      <!-- 比对组切换 -->
+      <div class="card">
+        <div class="flex" style="flex-wrap:wrap;gap:8px">
+          <button class="btn sm" onclick="ckTab(0,this)" id="ckb0">① 提款指令 ↔ 授信函/贷款合同 (FOL)</button>
+          <button class="btn sm gray" onclick="ckTab(1,this)" id="ckb1">② 提款指令 ↔ 支付指令</button>
+          <button class="btn sm gray" onclick="ckTab(2,this)" id="ckb2">③ 授信函 FOL ↔ 支付指令</button>
+          <button class="btn sm gray" onclick="ckTab(3,this)" id="ckb3">④ 法规合规比对 · 北大法宝</button>
+          <button class="btn sm gray" onclick="ckTab(4,this)" id="ckb4">⑤ 支持性文件交叉核对</button>
+        </div>
+        <p class="muted" style="font-size:12px;margin:10px 0 0">① ~ ③ 为 Checklist 字段比对；④ 为依据材料对应<b>国家 / 场景</b>调用<b>北大法宝法规库</b>进行的额外合规核对；⑤ 为商务合同/订单/运单/报关单/发票与提款、支付指令之间的<b>支持性文件交叉核对</b>。</p>
+      </div>
+
+      <!-- 组1: 提款指令 vs FOL -->
+      <div class="card ck-group" id="ck0">
+        <h3>① 授信使用申请书（提款指令） vs 授信函 / 贷款合同（FOL）</h3>
+        <table>
+          <thead><tr><th>比对字段</th><th>提款指令取值</th><th>FOL 取值 / 条款</th><th>比对标准</th><th>结果</th></tr></thead>
+          <tbody>
+            <tr><td>日期</td><td>2026-10-11</td><td>FOL 订立日 2026-09-01</td><td>不早于授信函日期与拟授信使用日</td><td><span class="tag green">通过</span></td></tr>
+            <tr><td>分支行</td><td>AA(中国)上海分行</td><td>AA(中国)上海分行</td><td>必填，与 FOL 一致</td><td><span class="tag green">通过</span></td></tr>
+            <tr><td>授信函日期</td><td>2026-09-01</td><td>2026-09-01</td><td>等于 FOL 最初/最新日期</td><td><span class="tag green">通过</span></td></tr>
+            <tr><td>提款日</td><td>2026-10-13</td><td>—</td><td>必填·非节假日·不早于当前</td><td><span class="tag green">通过</span></td></tr>
+            <tr><td>授信段</td><td>人民币循环贷款授信</td><td>存在该授信段</td><td>内容在 FOL 对应段落</td><td><span class="tag green">通过</span></td></tr>
+            <tr><td>授信</td><td>人民币循环贷款授信</td><td>相同表述</td><td>必填·表述一致</td><td><span class="tag green">通过</span></td></tr>
+            <tr style="background:var(--red-soft)"><td><b>提款币种</b></td><td><b>USD</b></td><td>授信使用的货币为<b>人民币</b></td><td>币种须在 FOL 授信条款范围内</td><td><span class="tag red">不符</span></td></tr>
+            <tr><td>提款金额</td><td>8,500,000</td><td>≤ 授信额度</td><td>≤ FOL 对应授信金额</td><td><span class="tag green">通过</span></td></tr>
+            <tr><td>利息期</td><td>3 个月</td><td>1/3/6 个月</td><td>符合其一即可</td><td><span class="tag green">通过</span></td></tr>
+            <tr><td>贷款利率</td><td>LPR+0.5%</td><td>LPR 另加年率</td><td>与 FOL 对应利率一致</td><td><span class="tag green">通过</span></td></tr>
+            <tr style="background:var(--amber-soft)"><td><b>贷款到期日</b></td><td>2027-01-13</td><td>期限 ≤ xx 个月 + 还款计划</td><td>需历史提款总额核对还款计划</td><td><span class="tag amber">待用户输入</span></td></tr>
+            <tr><td>贷款用途</td><td>流动资金·采购原材料</td><td>流动资金需求</td><td>在 FOL 用途范围内·无禁止用途</td><td><span class="tag green">通过</span></td></tr>
+            <tr><td>贷款支付账号</td><td>123-456789-001</td><td>—</td><td>12 位格式校验</td><td><span class="tag green">通过</span></td></tr>
+            <tr><td>贷款支付方式</td><td>银行受托支付</td><td>限额 RMB xxx</td><td>超限额须勾选受托支付</td><td><span class="tag green">通过</span></td></tr>
+            <tr><td>承诺内容</td><td>标准承诺</td><td>标准条款</td><td>与标准内容一致</td><td><span class="tag green">通过</span></td></tr>
+          </tbody>
+        </table>
+        <div class="flow-note">⚠ 组① 发现 1 项不符（提款币种）、1 项待用户输入（到期日需历史提款总额）。平台已生成风险事件并通知对应审核人员。</div>
+        <div class="quote">原文证据 · FOL 第 10 页 · 特别授信条款「人民币循环贷款授信 — 授信使用的货币为人民币」</div>
+      </div>
+
+      <!-- 组2: 提款指令 vs 支付指令 -->
+      <div class="card ck-group" id="ck1" style="display:none">
+        <h3>② 提款指令 vs 支付指令（境外汇款申请书）</h3>
+        <table>
+          <thead><tr><th>比对字段</th><th>提款指令</th><th>支付指令</th><th>比对标准</th><th>结果</th></tr></thead>
+          <tbody>
+            <tr><td>币种</td><td>USD</td><td>USD</td><td>币种可不相等</td><td><span class="tag green">通过</span></td></tr>
+            <tr><td>金额</td><td>8,500,000</td><td>8,500,000（加总）</td><td>折算后支付加总 ≥ 提款金额</td><td><span class="tag green">通过</span></td></tr>
+            <tr><td>金额大写</td><td>—</td><td>SAY US DOLLARS EIGHT MILLION FIVE HUNDRED THOUSAND</td><td>大写与数字一致</td><td><span class="tag green">通过</span></td></tr>
+            <tr><td>支付账号</td><td>123-456789-001</td><td>123-456789-001</td><td>账号一致</td><td><span class="tag green">通过</span></td></tr>
+          </tbody>
+        </table>
+        <div class="flow-note" style="background:var(--green-soft);border-color:#9ae6b4;color:#166534">✓ 组② 全部通过。</div>
+      </div>
+
+      <!-- 组3: FOL vs 支付指令 -->
+      <div class="card ck-group" id="ck2" style="display:none">
+        <h3>③ 授信函 FOL vs 支付指令（境外汇款申请书）</h3>
+        <table>
+          <thead><tr><th>比对字段</th><th>FOL</th><th>支付指令</th><th>比对标准</th><th>结果</th></tr></thead>
+          <tbody>
+            <tr><td>汇款人名称</td><td>借款人：XXXXXXXXXX Ltd.</td><td>Full Name：XXXXXXXXXX Ltd.</td><td>名称一致</td><td><span class="tag blue">核对中</span></td></tr>
+          </tbody>
+        </table>
+        <div class="flow-note">⏳ 组③ 正在核对中（等待汇率接口恢复）。</div>
+      </div>
+
+      <!-- 组4: 法规合规比对 · 北大法宝法规库 -->
+      <div class="card ck-group" id="ck3" style="display:none">
+        <div class="flex between" style="flex-wrap:wrap;gap:8px">
+          <h3 style="margin:0">④ 法规合规比对 · 北大法宝法规库</h3>
+          <span class="tag purple">法规库：北大法宝</span>
+        </div>
+        <p class="muted" style="font-size:13px;margin:8px 0 12px">
+          平台依据材料识别出的<b>国家 / 地区</b>与<b>业务场景</b>，自动检索北大法宝法规库中适用的法律法规、
+          外汇与跨境结算规定，核对本次境外贷款材料是否满足法定合规要求（在 Checklist 字段比对之外的额外合规维度）。
+        </p>
+        <div class="grid grid-2" style="margin-bottom:12px">
+          <div class="file-row"><div class="ico">🌐</div><div style="flex:1"><div>适用国家 / 地区</div><div class="muted" style="font-size:12px">中国内地（付款行）· 中国香港（收款行）</div></div><span class="tag blue">自动识别</span></div>
+          <div class="file-row"><div class="ico">🧭</div><div style="flex:1"><div>业务场景</div><div class="muted" style="font-size:12px">境外并购贷款 · 跨境资金汇出</div></div><span class="tag blue">自动识别</span></div>
+        </div>
+        <table>
+          <thead><tr><th>合规检查项</th><th>法规依据（北大法宝）</th><th>材料情况</th><th>结果</th></tr></thead>
+          <tbody>
+            <tr><td>跨境担保登记</td><td>《跨境担保外汇管理规定》（汇发〔2014〕29号）</td><td>已附内保外贷登记凭证</td><td><span class="tag green">符合</span></td></tr>
+            <tr><td>对外投资真实性审核</td><td>《银行办理结售汇业务管理办法》</td><td>商务合同 + 形式发票 + 报关单可相互印证</td><td><span class="tag green">符合</span></td></tr>
+            <tr style="background:var(--amber-soft)"><td><b>资金用途与投向合规</b></td><td>《关于进一步引导和规范境外投资方向的指导意见》</td><td>贷款用途「采购原材料」需补充境外投向证明</td><td><span class="tag amber">待补充</span></td></tr>
+            <tr style="background:var(--red-soft)"><td><b>反洗钱 / 制裁名单筛查</b></td><td>《金融机构反洗钱规定》· 制裁名单核查</td><td>收款人所在地触发加强尽调（EDD）提示</td><td><span class="tag red">需人工复核</span></td></tr>
+            <tr><td>大额跨境人民币申报</td><td>《人民币跨境收付信息管理系统管理办法》</td><td>金额未达大额申报阈值</td><td><span class="tag green">符合</span></td></tr>
+          </tbody>
+        </table>
+        <div class="flow-note">⚠ 法规合规比对发现 1 项「待补充」、1 项「需人工复核」，平台已生成合规风险事件并关联对应法规原文。</div>
+        <div class="quote">法规原文 · 北大法宝 ·《跨境担保外汇管理规定》第十二条「……境内机构提供内保外贷的，应当……办理内保外贷签约登记。」</div>
+      </div>
+
+      <!-- 组5: 支持性文件交叉核对（checklist v2 · 支持性文件检查） -->
+      <div class="card ck-group" id="ck4" style="display:none">
+        <div class="flex between" style="flex-wrap:wrap;gap:8px">
+          <h3 style="margin:0">⑤ 支持性文件交叉核对（商务合同 · 订单 · 运单 · 报关单 · 形式发票 ↔ 提款/支付指令）</h3>
+          <span class="tag amber">4 项核对中 · 1 项待确认</span>
+        </div>
+        <p class="muted" style="font-size:13px;margin:8px 0 12px">依据《文件比对要求 v2 · 支持性文件检查》逐项交叉核对贸易背景真实性与资金去向合规性，确认各支持性文件相互勾稽、与提款/支付指令一致。</p>
+        <table>
+          <thead><tr><th style="width:130px">核对项</th><th>比对规则（Checklist v2）</th><th style="width:96px">结果</th></tr></thead>
+          <tbody>
+            <tr><td>合同号 / 订单号</td><td>订单、运单、形式发票的合同号与商务合同一致；报关单协议号与合同/订单/发票号其一相符；编号勾稽 合同 ≥ 订单 ≥ 发票 = 运单 = 报关单</td><td><span class="tag green">一致</span></td></tr>
+            <tr><td>提单号</td><td>运单提单号与报关单一致，并经海关网站 / 船公司 / FIATA 真伪验证</td><td><span class="tag green">已验真</span></td></tr>
+            <tr style="background:var(--amber-soft)"><td><b>采购 / 服务标的</b></td><td>各文件采购标的相互印证（含包含关系）；在 FOL 贷款用途范围内；不涉及禁止领域；在借款人经营范围内；关键信息译中文</td><td><span class="tag amber">核对中</span></td></tr>
+            <tr><td>日期 & 账期</td><td>商务合同日期 ≤ 其他文件；依支付条款判断订单/运单/报关/发票日期合理性；支付指令付款日 ≤ 提款日</td><td><span class="tag green">合理</span></td></tr>
+            <tr><td>销售方 / 收货方</td><td>同一套文件销售方名称一致且 = 支付指令收款方；收货方 = 借款人；核查销售方是否为关联方、是否落入制裁国</td><td><span class="tag green">通过</span></td></tr>
+            <tr style="background:var(--amber-soft)"><td><b>贷款去向</b></td><td>支付指令收款行所在国 = 运单/报关单启运国、= 合同/订单/发票收款行国别；核查是否制裁国</td><td><span class="tag amber">待确认启运国</span></td></tr>
+            <tr><td>金额</td><td>支付指令金额 ≤ 形式发票 ≤ 报关单/运单/订单/商务合同（考虑文件交叉与部分货品）</td><td><span class="tag green">一致</span></td></tr>
+            <tr><td>货物数量 / 单价</td><td>形式发票数量 ≤ 报关单/运单/订单/合同；发票单价 = 报关单，与订单/合同一致（区分含税/不含税、浮动单价条款）</td><td><span class="tag green">一致</span></td></tr>
+            <tr><td>有效性（盖章/签字）</td><td>按生效条款核查签章；同公司同性质印章一致；核查合同生效期与续期，确认是否已过期失效</td><td><span class="tag green">有效</span></td></tr>
+            <tr><td>收款账号 / 支付方式</td><td>合同/订单载明收款账号时与支付指令收款信息一致；明确支付方式须为转账 / TT / 现金</td><td><span class="tag green">一致</span></td></tr>
+          </tbody>
+        </table>
+        <div class="flow-note">⚠ 组⑤ 发现「采购/服务标的」仍在核对、「贷款去向」待确认启运国，其余支持性文件勾稽一致。平台已将待确认项并入待办。</div>
+        <div class="quote">原文证据 · 商务合同.pdf / 报关单.pdf / 运单.pdf / 形式发票.pdf · 合同号与订单号勾稽一致</div>
       </div>
     </section>
 
@@ -440,17 +591,19 @@
          审核人员 - 事件 / 待办中心
     ========================================================== -->
     <section class="page" id="r-events">
-      <div class="page-head"><div><h2>事件 / 待办中心</h2><p>三类事件：待补件 · 风险 · 执行失败</p></div></div>
+      <div class="page-head"><div><h2>事件 / 待办中心</h2><p>平台智能生成的待办：待补件 · 风险 · 执行失败</p></div></div>
       <div class="grid grid-3">
         <div class="stat"><div class="n" style="color:var(--amber)">4</div><div class="l">待补件事件</div></div>
-        <div class="stat"><div class="n" style="color:var(--red)">2</div><div class="l">风险事件</div></div>
+        <div class="stat"><div class="n" style="color:var(--red)">3</div><div class="l">风险事件</div></div>
         <div class="stat"><div class="n" style="color:var(--purple)">1</div><div class="l">执行失败</div></div>
       </div>
       <div class="card mt16">
         <h3>🔔 待办事项</h3>
-        <div class="evt risk"><div class="dot"></div><div style="flex:1"><div class="flex between"><b>风险事件 · 关联交易异常</b><span class="tag red">高</span></div><div class="muted" style="font-size:12px">LN-...002 · 合规审核 Agent · 10:12 · 需人工复核确认</div></div><button class="btn sm" onclick="go('r-agents')">去处理</button></div>
-        <div class="evt supplement"><div class="dot"></div><div style="flex:1"><div class="flex between"><b>待补件事件 · 缺少审计报告</b><span class="tag amber">中</span></div><div class="muted" style="font-size:12px">LN-...003 · 财务审核 Agent · 10:08 · 已通知经办人</div></div><button class="btn sm gray">已通知</button></div>
-        <div class="evt fail"><div class="dot"></div><div style="flex:1"><div class="flex between"><b>执行失败 · 汇率接口超时</b><span class="tag purple">工具</span></div><div class="muted" style="font-size:12px">估值工具 · 10:15 · 自动重试 2/3</div></div><button class="btn sm ghost">转人工</button></div>
+        <div class="evt risk"><div class="dot"></div><div style="flex:1"><div class="flex between"><b>风险事件 · 提款币种不在授信条款范围</b><span class="tag red">高</span></div><div class="muted" style="font-size:12px">LN-...002 · 智能核对 · 10:12 · 提款 USD vs 授信条款限人民币 · 需人工复核</div></div><button class="btn sm" onclick="go('r-checklist')">去处理</button></div>
+        <div class="evt risk"><div class="dot"></div><div style="flex:1"><div class="flex between"><b>合规风险事件 · 反洗钱/制裁名单筛查命中</b><span class="tag red">高</span></div><div class="muted" style="font-size:12px">LN-...002 · 法规合规比对（北大法宝）· 10:13 · 收款人所在地触发加强尽调（EDD）· 需人工复核</div></div><button class="btn sm" onclick="go('r-checklist')">去处理</button></div>
+        <div class="evt supplement"><div class="dot"></div><div style="flex:1"><div class="flex between"><b>待补件事件 · 境外投向证明</b><span class="tag amber">中</span></div><div class="muted" style="font-size:12px">LN-...002 · 法规合规比对（北大法宝）· 10:13 ·《引导和规范境外投资方向指导意见》要求补充 · 已通知经办人</div></div><button class="btn sm gray">已通知</button></div>
+        <div class="evt supplement"><div class="dot"></div><div style="flex:1"><div class="flex between"><b>待补件事件 · 提款指令缺签章页</b><span class="tag amber">中</span></div><div class="muted" style="font-size:12px">LN-...003 · 系统自动识别 · 10:08 · 已通知经办人</div></div><button class="btn sm gray">已通知</button></div>
+        <div class="evt fail"><div class="dot"></div><div style="flex:1"><div class="flex between"><b>执行失败 · 汇率接口超时</b><span class="tag purple">工具</span></div><div class="muted" style="font-size:12px">到期日/金额折算核对 · 10:15 · 自动重试 2/3</div></div><button class="btn sm ghost">转人工</button></div>
       </div>
     </section>
 
@@ -460,40 +613,94 @@
     <section class="page" id="r-summary">
       <div class="page-head"><div><h2>汇总报告 · 人工终审</h2><p>LN-...014 · Orion Ltd · 流动资金贷 · EUR 3.0M</p></div><span class="tag purple">待终审</span></div>
       <div class="grid grid-2">
-        <div>
-          <div class="card">
-            <h3>🧮 汇总 Agent 报告</h3>
-            <p class="muted" style="font-size:13px;margin-bottom:10px">已去重观点、检查未决证据并整理证据链。</p>
-            <ul class="findings">
-              <li class="ok"><div class="ft">财务审核 <span class="tag green">通过</span></div>偿债能力良好，现金流覆盖 1.8x。</li>
-              <li class="ok"><div class="ft">抵押物审核 <span class="tag green">通过</span></div>评估价值覆盖率 135%。</li>
-              <li class="warn"><div class="ft">合规审核 <span class="tag amber">待决</span></div>1 项受益所有权证据缺失，需人工判断。</li>
-            </ul>
-          </div>
-          <div class="card mb0">
-            <h3>📌 未决事项</h3>
-            <div class="file-row"><div class="ico" style="background:var(--amber-soft);color:var(--amber)">?</div><div style="flex:1">受益所有权链路证据缺失</div><span class="tag amber">待决</span></div>
-          </div>
+        <!-- 左：智能汇总报告 -->
+        <div class="card mb0">
+          <h3>🧮 智能汇总报告</h3>
+          <p class="muted" style="font-size:13px;margin-bottom:10px">已按 Checklist 汇总三组比对结果，并叠加北大法宝法规库的合规比对，去重观点、检查未决证据并整理证据链。</p>
+          <div class="flow-note" style="margin-bottom:12px">📏 汇总规则：各必要子任务均有明确状态后方进入汇总；<b>风险、待补件、无法核实均不视为「自动通过」</b>，需人工终审确认。</div>
+          <ul class="findings">
+            <li class="ok"><div class="ft">② 提款指令 ↔ 支付指令 <span class="tag green">通过</span></div>币种/金额/大写/账号均一致。</li>
+            <li class="ok"><div class="ft">③ FOL ↔ 支付指令 <span class="tag green">通过</span></div>汇款人名称一致。</li>
+            <li class="risk"><div class="ft">① 提款指令 ↔ FOL <span class="tag red">1 项不符</span></div>提款币种 USD 不在该授信段允许币种（人民币）范围内。</li>
+            <li class="risk"><div class="ft">④ 法规合规比对（北大法宝）<span class="tag red">1 项需复核 · 1 项待补充</span></div>反洗钱/制裁名单筛查命中加强尽调；资金境外投向证明待补充。</li>
+          </ul>
         </div>
-        <div>
-          <div class="card">
-            <h3>⚖️ 终审决定</h3>
-            <label class="field"><span>审核结论</span>
-              <select><option>通过</option><option>有条件通过</option><option>退回补件</option><option>拒绝</option></select>
-            </label>
-            <label class="field"><span>审核意见（反馈给经办人）</span><textarea rows="4" placeholder="填写终审意见…"></textarea></label>
-            <div class="flex">
-              <button class="btn" onclick="go('r-home')">提交终审</button>
-              <button class="btn gray" onclick="go('r-events')">退回补件</button>
-            </div>
-            <div class="flow-note mt16">提交后，审核意见将反馈给业务经办人；若选择退回补件则重新触发补件流程。</div>
+
+        <!-- 右：终审决定 -->
+        <div class="card mb0">
+          <h3>⚖️ 终审决定</h3>
+          <label class="field"><span>审核结论</span>
+            <select><option>通过</option><option>有条件通过</option><option>退回补件</option><option>拒绝</option></select>
+          </label>
+          <label class="field"><span>审核意见（反馈给经办人）</span><textarea id="reviewOpinion" rows="4" placeholder="填写终审意见…"></textarea></label>
+          <div class="flex">
+            <button class="btn" onclick="go('r-home')">提交终审</button>
+            <button class="btn gray" onclick="go('r-events')">退回补件</button>
           </div>
-          <div class="card mb0">
-            <h3>🧾 证据链</h3>
-            <div class="quote">财务报表_2025.pdf · 现金流量表（P5）</div>
-            <div class="quote" style="margin-top:6px">抵押物评估报告.pdf · 评估结论（P2）</div>
-            <div class="quote" style="margin-top:6px">公司章程.pdf · 受益所有权（缺失）</div>
-          </div>
+          <div class="flow-note mt16">提交后，审核意见将反馈给业务经办人；若选择退回补件则重新触发补件流程。</div>
+        </div>
+      </div>
+
+      <div class="grid grid-2 mt16">
+        <!-- 左：未决事项 -->
+        <div class="card mb0">
+          <h3>📌 未决事项</h3>
+          <div class="file-row"><div class="ico" style="background:var(--red-soft);color:var(--red)">!</div><div style="flex:1">提款币种与授信条款不符</div><span class="tag red">不符</span></div>
+          <div class="file-row"><div class="ico" style="background:var(--amber-soft);color:var(--amber)">?</div><div style="flex:1">贷款到期日核对待历史提款总额</div><span class="tag amber">待决</span></div>
+          <div class="file-row"><div class="ico" style="background:var(--red-soft);color:var(--red)">⚖</div><div style="flex:1">反洗钱/制裁名单筛查命中（北大法宝）</div><span class="tag red">需复核</span></div>
+          <div class="file-row"><div class="ico" style="background:var(--amber-soft);color:var(--amber)">?</div><div style="flex:1">资金境外投向证明待补充（北大法宝）</div><span class="tag amber">待补充</span></div>
+        </div>
+
+        <!-- 右：证据链 -->
+        <div class="card mb0">
+          <h3>🧾 证据链</h3>
+          <div class="quote">贷款合同.pdf · 特别授信条款·人民币循环贷款授信（P10）</div>
+          <div class="quote" style="margin-top:6px">提款指令.pdf · (d)币种 / (e)金额（P1）</div>
+          <div class="quote" style="margin-top:6px">支付指令.pdf · 汇款币种及金额 / Full Name</div>
+        </div>
+      </div>
+
+      <!-- 整宽：反馈邮件（内容较宽，单独占一行） -->
+      <div class="card mb0 mt16">
+        <div class="flex between" style="flex-wrap:wrap;gap:8px">
+          <h3 style="margin:0">✉️ 反馈邮件 · AI 协同生成</h3>
+          <span class="tag purple" id="mailStage">草稿 v1 · AI 生成</span>
+        </div>
+        <p class="muted" style="font-size:13px;margin:8px 0 10px">平台先据比对与合规结果自动起草邮件；审核人员可在下方给出修改意见，由 AI 据此生成<b>最终版本</b>后发送给业务经办人。</p>
+        <div class="grid grid-2">
+          <label class="field mb0"><span>收件人</span><input value="zhang.jing@corp.com（业务经办人）"></label>
+          <label class="field mb0"><span>主题</span><input value="【境外贷款审核反馈】LN-...014 · Orion Ltd · 需补件与合规复核"></label>
+        </div>
+        <label class="field mb0" style="margin-top:12px"><span>邮件正文</span><textarea id="mailBody" rows="12" style="font-size:13px;line-height:1.6">张经理，您好：
+
+关于 Orion Ltd「流动资金贷 EUR 3.0M」（任务号 LN-...014）的审核，平台已完成材料比对与法规合规核对，结果反馈如下：
+
+一、字段比对
+1. 提款指令 ↔ 授信函/贷款合同（FOL）：发现 1 项不符 —— 提款币种为 USD，但该授信段「人民币循环贷款授信」约定授信使用货币为人民币，请核实并更正提款币种或改用对应币种授信段。
+2. 贷款到期日：需补充历史提款总额以核对还款计划，请一并提供。
+3. 提款指令 ↔ 支付指令、FOL ↔ 支付指令：币种/金额/账号/汇款人名称均一致，通过。
+
+二、法规合规比对（北大法宝法规库）
+1. 反洗钱/制裁名单筛查：收款人所在地触发加强尽调（EDD），需补充相关尽调材料以供人工复核。
+2. 资金用途与投向：依据《关于进一步引导和规范境外投资方向的指导意见》，请补充本笔资金的境外投向证明。
+
+请在收到本邮件后 2 个工作日内补齐上述材料并重新提交，如有疑问欢迎随时联系。
+
+此致
+XX 银行 境外贷款审核团队
+2026-10-13</textarea></label>
+
+        <!-- 第28步：审核人员把修改意见反馈给 AI，由 AI 生成最终版邮件 -->
+        <div class="flow-note mt16" style="background:var(--purple-soft);border-color:#d6bcfa;color:#553c9a">
+          💬 向 AI 反馈修改意见：审核人员填写调整要求，AI 将据此改写并生成最终版邮件。
+        </div>
+        <label class="field mb0"><span>我的修改意见（反馈给 AI）</span>
+          <textarea id="mailFeedback" rows="3" placeholder="例如：语气更正式、补件时限改为 3 个工作日、强调合规整改为前置条件、抄送风控…"></textarea>
+        </label>
+        <div class="flex mt16" style="flex-wrap:wrap;gap:8px">
+          <button class="btn sm" onclick="genFinalMail()">🤖 据意见生成最终版</button>
+          <button class="btn sm ghost" onclick="copyMail()">📋 复制邮件</button>
+          <button class="btn sm gray" onclick="quoteMail()">↳ 引用到审核意见</button>
         </div>
       </div>
     </section>
@@ -527,6 +734,42 @@
       el.classList.add('active');
     }
     document.querySelector('.main').scrollTo({top:0,behavior:'smooth'});
+  }
+  function ckTab(i, el){
+    document.querySelectorAll('.ck-group').forEach((g,idx)=>g.style.display = idx===i?'block':'none');
+    for(let k=0;k<5;k++){
+      const b=document.getElementById('ckb'+k);
+      if(b) b.className = 'btn sm' + (k===i?'':' gray');
+    }
+  }
+
+  // 第28步：审核人员把修改意见反馈给 AI，AI 据此生成最终版邮件
+  let mailVer = 1;
+  function genFinalMail(){
+    const fb = (document.getElementById('mailFeedback').value || '').trim();
+    const body = document.getElementById('mailBody');
+    if(!fb){ alert('请先填写给 AI 的修改意见，再生成最终版。'); return; }
+    mailVer++;
+    // 原型示意：AI 依据反馈意见改写邮件（此处用追加「本轮调整」说明模拟 LLM 产出）
+    let txt = body.value;
+    const note = '\n\n—— 本轮按审核人员意见调整：' + fb + '（AI 已据此改写措辞与条款）';
+    // 去掉上一轮的调整说明，避免重复堆叠
+    txt = txt.replace(/\n\n—— 本轮按审核人员意见调整：[\s\S]*$/,'');
+    body.value = txt + note;
+    document.getElementById('mailStage').textContent = '最终版 v' + mailVer + ' · AI 据反馈生成';
+    document.getElementById('mailFeedback').value = '';
+    alert('AI 已根据你的修改意见生成最终版邮件（最终版 v' + mailVer + '）。原型为示意，正式环境将由大模型重写整封邮件。');
+  }
+  function copyMail(){
+    const body = document.getElementById('mailBody');
+    body.select();
+    try{ document.execCommand('copy'); }catch(e){}
+    alert('已复制当前邮件到剪贴板（原型示意）。');
+  }
+  function quoteMail(){
+    const op = document.getElementById('reviewOpinion');
+    if(op){ op.value = document.getElementById('mailBody').value; op.focus(); }
+    alert('已将当前邮件内容引用到「审核意见」。');
   }
   setRole('reviewer');
 </script>
