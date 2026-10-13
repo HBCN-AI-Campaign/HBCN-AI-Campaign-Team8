@@ -1,0 +1,1409 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>HSBC · 跨境贷款审核台 — POC</title>
+<style>
+/* ============ 全局样式 ============ */
+:root{
+  --brand:#12365c;
+  --brand-2:#1b477a;
+  --brand-3:#2a5b91;
+  --bg:#f5f6f8;
+  --card:#ffffff;
+  --line:#e5e7eb;
+  --line-2:#eef0f3;
+  --ink:#0f1b2d;
+  --ink-2:#3b4a5c;
+  --ink-3:#6b7785;
+  --green:#127a43;
+  --green-bg:#e6f4ec;
+  --amber:#a95f00;
+  --amber-bg:#fbf1e1;
+  --red:#b32d20;
+  --red-bg:#fbe7e3;
+  --radius:10px;
+  --radius-sm:6px;
+  --shadow:0 1px 2px rgba(15,27,45,.04), 0 1px 1px rgba(15,27,45,.03);
+  --shadow-md:0 2px 6px rgba(15,27,45,.06);
+  --mono:"SF Mono","Cascadia Mono","Consolas","Liberation Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,"Microsoft YaHei","PingFang SC","Noto Sans CJK SC",sans-serif;
+  font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;font-size:inherit;color:inherit;cursor:pointer;border:none;background:none}
+input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
+a{color:var(--brand);text-decoration:none}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-3)}
+.divider{height:1px;background:var(--line);margin:8px 0}
+
+/* ============ 顶部 App Bar ============ */
+.appbar{position:sticky;top:0;z-index:50;background:var(--brand);color:#fff;
+  display:flex;align-items:center;gap:24px;padding:0 24px;height:56px;
+  box-shadow:0 1px 0 rgba(0,0,0,.1)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:14px;letter-spacing:.2px}
+.brand .logo{width:26px;height:26px;border-radius:6px;background:#fff;display:flex;align-items:center;justify-content:center;
+  color:var(--brand);font-weight:800;font-size:13px;font-family:var(--mono)}
+.brand .sep{width:1px;height:18px;background:rgba(255,255,255,.18);margin:0 2px}
+.brand .name{font-weight:500;opacity:.95}
+.nav{display:flex;gap:4px;margin-left:8px}
+.nav button{color:rgba(255,255,255,.78);padding:8px 14px;border-radius:6px;font-size:13px;
+  transition:.15s}
+.nav button:hover{background:rgba(255,255,255,.08);color:#fff}
+.nav button.active{background:rgba(255,255,255,.14);color:#fff;font-weight:600;
+  box-shadow:inset 0 -2px 0 #fff}
+.appbar .spacer{flex:1}
+.role{display:flex;align-items:center;gap:8px;font-size:12px;color:rgba(255,255,255,.85)}
+.role .chip{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.18);
+  padding:4px 10px;border-radius:14px;display:inline-flex;align-items:center;gap:6px}
+.role .demo{background:#a95f00;color:#fff;padding:3px 8px;border-radius:4px;font-size:11px;
+  font-weight:600;letter-spacing:.3px}
+
+/* ============ 通用卡片/按钮 ============ */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;
+  font-size:12px;font-weight:500;line-height:1.2;border:1px solid var(--line);
+  background:#fff;color:var(--ink-2);transition:.12s;white-space:nowrap}
+.btn:hover{background:#f0f2f5;border-color:#d3d8df}
+.btn.primary{background:var(--brand);color:#fff;border-color:var(--brand)}
+.btn.primary:hover{background:var(--brand-2);border-color:var(--brand-2)}
+.btn.green{background:var(--green);color:#fff;border-color:var(--green)}
+.btn.green:hover{filter:brightness(.95)}
+.btn.amber{background:var(--amber);color:#fff;border-color:var(--amber)}
+.btn.amber:hover{filter:brightness(.95)}
+.btn.red{background:var(--red);color:#fff;border-color:var(--red)}
+.btn.red:hover{filter:brightness(.95)}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--ink-2)}
+.btn.ghost:hover{background:#eef0f3;color:var(--ink)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.tag{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;
+  font-size:11px;font-weight:500;background:#eef0f3;color:var(--ink-2)}
+.tag.brand{background:#e3eaf3;color:var(--brand)}
+.tag.green{background:var(--green-bg);color:var(--green)}
+.tag.amber{background:var(--amber-bg);color:var(--amber)}
+.tag.red{background:var(--red-bg);color:var(--red)}
+.tag.gray{background:#eef0f3;color:var(--ink-3)}
+
+/* 三色灯 */
+.lamp{display:inline-block;width:10px;height:10px;border-radius:50%;flex-shrink:0;
+  box-shadow:0 0 0 2px rgba(0,0,0,.04) inset}
+.lamp.green{background:var(--green);box-shadow:0 0 0 3px var(--green-bg)}
+.lamp.amber{background:var(--amber);box-shadow:0 0 0 3px var(--amber-bg)}
+.lamp.red{background:var(--red);box-shadow:0 0 0 3px var(--red-bg)}
+.lamp-row{display:inline-flex;gap:3px;align-items:center;vertical-align:middle}
+.lamp-row .lamp{width:9px;height:9px}
+
+/* ============ 页面容器 ============ */
+.page{padding:20px 24px 32px;display:none}
+.page.active{display:block}
+.page-hd{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:14px;gap:16px}
+.page-hd h1{margin:0;font-size:18px;font-weight:600;color:var(--ink);letter-spacing:.2px}
+.page-hd .sub{font-size:12px;color:var(--ink-3);margin-top:4px}
+
+/* ============ KPI 卡 ============ */
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+.kpi .label{font-size:12px;color:var(--ink-3);display:flex;align-items:center;gap:6px}
+.kpi .num{font-size:28px;font-weight:600;color:var(--ink);font-family:var(--mono);
+  margin-top:6px;letter-spacing:-.5px}
+.kpi .num .unit{font-size:13px;color:var(--ink-3);font-weight:400;margin-left:4px}
+.kpi .bar{margin-top:10px;height:4px;background:#eef0f3;border-radius:2px;overflow:hidden}
+.kpi .bar > div{height:100%;border-radius:2px;transition:width .4s}
+.kpi .meta{display:flex;justify-content:space-between;margin-top:8px;font-size:11px;color:var(--ink-3)}
+
+/* ============ 过滤/搜索条 ============ */
+.filterbar{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#fff;
+  border:1px solid var(--line);border-radius:var(--radius);margin-bottom:12px}
+.segment{display:inline-flex;background:#f0f2f5;border-radius:6px;padding:2px;gap:2px}
+.segment button{padding:5px 12px;border-radius:4px;font-size:12px;color:var(--ink-2)}
+.segment button.on{background:#fff;color:var(--ink);font-weight:600;box-shadow:var(--shadow)}
+.search{margin-left:auto;display:flex;align-items:center;gap:6px;background:#f5f6f8;
+  border:1px solid var(--line);border-radius:6px;padding:6px 10px;min-width:240px}
+.search input{border:0;background:transparent;outline:none;flex:1;font-size:12px}
+.search .ic{color:var(--ink-3);font-size:12px}
+
+/* ============ 表格 ============ */
+.table{width:100%;background:#fff;border:1px solid var(--line);border-radius:var(--radius);
+  overflow:hidden;border-collapse:separate;border-spacing:0}
+.table th,.table td{padding:12px 14px;text-align:left;border-bottom:1px solid var(--line-2);
+  font-size:12.5px;vertical-align:middle}
+.table th{background:#fafbfc;font-weight:600;color:var(--ink-2);font-size:11.5px;
+  text-transform:uppercase;letter-spacing:.4px}
+.table tbody tr{transition:.1s;cursor:pointer}
+.table tbody tr:hover{background:#f8fafd}
+.table tbody tr:last-child td{border-bottom:none}
+.table .right{text-align:right}
+.table .center{text-align:center}
+.table .strong{font-weight:600;color:var(--ink)}
+
+/* ============ 工作台三栏 ============ */
+.workbench{display:grid;grid-template-columns:264px 1fr 384px;gap:14px;align-items:start}
+.col-title{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-3);
+  font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+
+/* 左栏 - 对象链路 */
+.tree{padding:10px 8px;background:#fff;border:1px solid var(--line);border-radius:var(--radius)}
+.tree ul{list-style:none;padding:0;margin:0}
+.tree li{position:relative;padding-left:14px}
+.tree li::before{content:"";position:absolute;left:5px;top:0;bottom:0;border-left:1px dashed #d6dbe2}
+.tree li:last-child::before{bottom:auto;height:14px}
+.tree .node{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;
+  cursor:pointer;font-size:12.5px;transition:.1s}
+.tree .node:hover{background:#f0f4fa}
+.tree .node.active{background:#e3eaf3;color:var(--brand);font-weight:600}
+.tree .node .lamp{margin-left:auto}
+.tree .lvl-label{font-size:10.5px;color:var(--ink-3);font-weight:600;letter-spacing:.4px;
+  padding:6px 8px 4px;text-transform:uppercase}
+
+/* 中栏 - 文件查看器 */
+.docwrap{background:#fff;border:1px solid var(--line);border-radius:var(--radius);
+  display:flex;flex-direction:column;min-height:560px}
+.doctabs{display:flex;align-items:center;gap:4px;padding:8px 10px;border-bottom:1px solid var(--line);
+  background:#fafbfc;border-radius:var(--radius) var(--radius) 0 0;flex-wrap:wrap}
+.doctabs button{padding:6px 12px;font-size:12px;color:var(--ink-2);border-radius:4px}
+.doctabs button.on{background:#fff;color:var(--ink);font-weight:600;
+  box-shadow:inset 0 -2px 0 var(--brand)}
+.doctabs .docmeta{margin-left:auto;font-size:11.5px;color:var(--ink-3);display:flex;gap:10px;align-items:center}
+.docarea{flex:1;padding:20px 24px;overflow:auto;background:#f7f8fa}
+.paper{background:#fff;border:1px solid var(--line);border-radius:6px;
+  max-width:780px;margin:0 auto;padding:36px 44px;box-shadow:var(--shadow);
+  font-size:12.5px;line-height:1.7;color:var(--ink-2)}
+.paper .title{font-size:16px;font-weight:600;color:var(--ink);text-align:center;
+  margin:0 0 6px;letter-spacing:1px}
+.paper .sub{text-align:center;color:var(--ink-3);font-size:11.5px;margin-bottom:22px;
+  font-family:var(--mono)}
+.paper .row{display:flex;justify-content:space-between;padding:6px 0;
+  border-bottom:1px dashed var(--line-2);font-size:12.5px}
+.paper .row .k{color:var(--ink-3);width:120px;flex-shrink:0}
+.paper .row .v{color:var(--ink);font-family:var(--mono);text-align:right}
+.paper h3{font-size:13px;color:var(--ink);margin:18px 0 8px;font-weight:600;
+  border-left:3px solid var(--brand);padding-left:8px}
+.paper .tbl{width:100%;border-collapse:collapse;margin-top:8px;font-size:12px}
+.paper .tbl th,.paper .tbl td{border:1px solid var(--line);padding:6px 10px;text-align:left}
+.paper .tbl th{background:#f5f6f8;font-weight:600;color:var(--ink-2)}
+.paper .tbl td.num{text-align:right;font-family:var(--mono)}
+.paper .note{background:#fdf6e3;border:1px solid #f4e1a8;border-radius:4px;
+  padding:8px 12px;font-size:11.5px;color:#7a5b00;margin-top:10px;
+  display:flex;align-items:flex-start;gap:6px}
+.paper .note.red{background:var(--red-bg);border-color:#f0c4bd;color:var(--red)}
+.paper .note.amber{background:var(--amber-bg);border-color:#f3d6a3;color:var(--amber)}
+.hl{background:#fff3a8;padding:1px 3px;border-radius:2px;
+  transition:.25s;display:inline-block;font-family:var(--mono)}
+.hl.flash{animation:flash 1.2s ease-in-out 2}
+.hl.warn{background:#ffd6c8}
+.hl.amber-mark{background:#ffe5b8}
+@keyframes flash{0%,100%{background:#fff3a8}50%{background:#ffd76b;box-shadow:0 0 0 3px rgba(255,200,0,.3)}}
+
+/* 右栏 - AI 校验面板 */
+.aipanel{background:#fff;border:1px solid var(--line);border-radius:var(--radius);
+  display:flex;flex-direction:column;max-height:calc(100vh - 140px);position:sticky;top:72px}
+.aipanel-hd{padding:14px 16px;border-bottom:1px solid var(--line)}
+.summary{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;
+  background:#fff8f6;border:1px solid #f0c4bd}
+.summary .lamp{width:14px;height:14px}
+.summary .big{font-size:13.5px;font-weight:600;color:var(--red)}
+.summary .count{margin-left:auto;display:flex;gap:8px;font-size:11.5px}
+.summary .count span{display:inline-flex;align-items:center;gap:3px;font-weight:600}
+.aipanel-tabs{display:flex;gap:4px;padding:8px 12px;border-bottom:1px solid var(--line-2)}
+.aipanel-tabs button{padding:5px 10px;font-size:11.5px;color:var(--ink-2);border-radius:4px;
+  display:inline-flex;align-items:center;gap:5px;font-weight:500}
+.aipanel-tabs button.on{background:#e3eaf3;color:var(--brand);font-weight:600}
+.aipanel-tabs .cnt{background:#fff;border:1px solid var(--line);border-radius:8px;
+  padding:0 5px;font-size:10.5px;font-family:var(--mono);color:var(--ink-3)}
+.aipanel-tabs button.on .cnt{background:#fff;color:var(--brand)}
+.aipanel-list{flex:1;overflow:auto;padding:8px 10px}
+.check{background:#fff;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;
+  transition:.15s;overflow:hidden}
+.check:hover{border-color:#d3d8df;box-shadow:var(--shadow)}
+.check.green.done{background:#fafdfb;opacity:.75}
+.check.red{border-left:3px solid var(--red)}
+.check.amber{border-left:3px solid var(--amber)}
+.check.green{border-left:3px solid var(--green)}
+.check-hd{display:flex;align-items:flex-start;gap:8px;padding:10px 12px;cursor:pointer}
+.check-hd .lamp{margin-top:2px}
+.check-hd .title{font-size:12.5px;font-weight:600;color:var(--ink);flex:1;line-height:1.4}
+.check-hd .title .rule{font-size:11px;color:var(--ink-3);font-family:var(--mono);
+  font-weight:400;margin-left:6px}
+.check-hd .conf{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-3);
+  font-family:var(--mono);margin-top:2px}
+.check-hd .conf .mini-bar{width:40px;height:3px;background:#eef0f3;border-radius:2px;overflow:hidden}
+.check-hd .conf .mini-bar > div{height:100%;border-radius:2px}
+.check-hd .caret{margin-left:6px;color:var(--ink-3);font-size:10px}
+.check-bd{padding:0 12px 12px 30px;display:none;font-size:12px;color:var(--ink-2)}
+.check.open .check-bd{display:block}
+.check-bd .reason{background:#f7f8fa;border-radius:6px;padding:8px 10px;
+  font-size:11.5px;line-height:1.6;margin-top:6px;color:var(--ink-2)}
+.check-bd .actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+.check-bd .override-input{display:flex;gap:6px;margin-top:8px}
+.check-bd .override-input input{flex:1;padding:6px 10px;border:1px solid var(--line);
+  border-radius:4px;outline:none;font-size:12px}
+.check-bd .override-input input:focus{border-color:var(--brand)}
+.badge-acted{font-size:11px;font-weight:600;padding:2px 6px;border-radius:4px;
+  margin-left:6px;display:inline-flex;align-items:center;gap:3px}
+.badge-acted.accept{background:var(--green-bg);color:var(--green)}
+.badge-acted.override{background:#e3eaf3;color:var(--brand)}
+.badge-acted.reject{background:var(--red-bg);color:var(--red)}
+
+/* 工作台顶部摘要 */
+.case-summary{background:#fff;border:1px solid var(--line);border-radius:var(--radius);
+  padding:14px 18px;margin-bottom:14px;display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center}
+.case-summary .left{display:flex;flex-direction:column;gap:6px}
+.case-id{font-family:var(--mono);font-size:15px;font-weight:600;color:var(--brand)}
+.case-meta{font-size:12px;color:var(--ink-3)}
+.case-meta b{color:var(--ink-2);font-weight:600}
+.case-summary .right{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.case-fields{display:flex;gap:18px;font-size:11.5px;color:var(--ink-3);margin-top:2px;flex-wrap:wrap}
+.case-fields b{color:var(--ink);font-weight:600;font-family:var(--mono)}
+
+/* 底部支付拆分 */
+.paytbl{margin-top:14px}
+.paytbl h4{font-size:13px;color:var(--ink);margin:0 0 8px;font-weight:600;
+  display:flex;align-items:center;gap:8px}
+
+/* ============ 合规法规库 ============ */
+.compliance{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.compliance .panel{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+.compliance .panel h3{font-size:13px;color:var(--ink);margin:0 0 12px;font-weight:600;
+  display:flex;align-items:center;gap:6px}
+.search-block{display:flex;gap:6px;margin-bottom:10px}
+.search-block input{flex:1;padding:7px 10px;border:1px solid var(--line);border-radius:6px;
+  outline:none;font-size:12px;background:#fafbfc}
+.search-block input:focus{border-color:var(--brand);background:#fff}
+.clause-list{border:1px solid var(--line);border-radius:6px;max-height:280px;overflow:auto}
+.clause{padding:10px 12px;border-bottom:1px solid var(--line-2);font-size:12px}
+.clause:last-child{border-bottom:none}
+.clause .head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.clause .head b{color:var(--ink);font-size:12.5px}
+.clause .body{color:var(--ink-3);font-size:11.5px;line-height:1.5}
+.clause.empty{padding:30px;text-align:center;color:var(--ink-3)}
+.sanction-row{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;
+  border:1px solid var(--line);border-radius:6px;margin-bottom:6px;font-size:12px}
+.sanction-row .name{font-weight:600;color:var(--ink)}
+.sanction-row.hit{border-color:var(--red);background:var(--red-bg)}
+.sanction-row .meta{font-size:11px;color:var(--ink-3)}
+.aml-block{background:#f7f8fa;border-radius:6px;padding:10px 12px;margin-top:8px;
+  font-size:11.5px;line-height:1.6;color:var(--ink-2)}
+
+/* ============ 审计与留痕 ============ */
+.audit-toolbar{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.audit-list{background:#fff;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.audit-item{padding:12px 16px;border-bottom:1px solid var(--line-2);
+  display:grid;grid-template-columns:90px 110px 1fr 110px 90px;gap:14px;align-items:center;font-size:12px}
+.audit-item:last-child{border-bottom:none}
+.audit-item:hover{background:#fafbfc}
+.audit-item .ts{font-family:var(--mono);color:var(--ink-3);font-size:11.5px}
+.audit-item .who{color:var(--ink);font-weight:600}
+.audit-item .what{color:var(--ink-2)}
+.audit-item .what b{color:var(--ink)}
+.audit-item .why{color:var(--ink-3);font-size:11.5px;font-style:italic}
+.audit-item .act{text-align:right}
+.empty-state{padding:40px;text-align:center;color:var(--ink-3);font-size:12px}
+
+/* ============ Toast ============ */
+.toast-wrap{position:fixed;top:72px;right:24px;z-index:1000;display:flex;flex-direction:column;gap:8px}
+.toast{background:var(--ink);color:#fff;padding:10px 14px;border-radius:6px;
+  font-size:12.5px;box-shadow:var(--shadow-md);display:flex;align-items:center;gap:8px;
+  animation:slideIn .25s ease-out;max-width:320px}
+.toast.success{background:var(--green)}
+.toast.warn{background:var(--amber)}
+.toast.error{background:var(--red)}
+.toast.info{background:var(--brand)}
+@keyframes slideIn{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes slideOut{to{transform:translateX(20px);opacity:0}}
+
+/* ============ 模态 ============ */
+.modal-mask{position:fixed;inset:0;background:rgba(15,27,45,.4);z-index:200;
+  display:flex;align-items:center;justify-content:center;display:none}
+.modal-mask.on{display:flex}
+.modal{background:#fff;border-radius:10px;width:480px;max-width:90vw;
+  box-shadow:0 10px 30px rgba(0,0,0,.2);overflow:hidden}
+.modal-hd{padding:14px 18px;border-bottom:1px solid var(--line);font-weight:600;color:var(--ink);
+  display:flex;align-items:center;justify-content:space-between}
+.modal-hd .x{cursor:pointer;color:var(--ink-3);font-size:14px}
+.modal-bd{padding:16px 18px;font-size:12.5px;color:var(--ink-2);line-height:1.6}
+.modal-bd textarea{width:100%;min-height:80px;border:1px solid var(--line);border-radius:6px;
+  padding:8px 10px;font-size:12px;outline:none;margin-top:8px;resize:vertical}
+.modal-bd textarea:focus{border-color:var(--brand)}
+.modal-ft{padding:10px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
+
+/* ============ Misc ============ */
+.icon{display:inline-flex;align-items:center;gap:4px}
+.divider-y{display:inline-block;width:1px;height:14px;background:var(--line);margin:0 4px;vertical-align:middle}
+.kbd{font-family:var(--mono);font-size:11px;background:#eef0f3;padding:1px 5px;border-radius:3px;color:var(--ink-2)}
+.scroll-x{overflow-x:auto}
+
+/* 响应式窄屏基础降级 */
+@media (max-width:1280px){
+  .workbench{grid-template-columns:240px 1fr 360px}
+}
+@media (max-width:1100px){
+  .workbench{grid-template-columns:1fr}
+  .aipanel{position:static;max-height:none}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ 顶部 App Bar ============ -->
+<header class="appbar">
+  <div class="brand">
+    <div class="logo">HS</div>
+    <div class="name">跨境贷款审核台</div>
+    <div class="sep"></div>
+    <div style="opacity:.7;font-size:12px">Cross-Border Loan Review · POC</div>
+  </div>
+  <nav class="nav">
+    <button data-nav="todo" class="active">📋 我的待办</button>
+    <button data-nav="case">🔍 案件工作台</button>
+    <button data-nav="compliance">📚 合规法规库</button>
+    <button data-nav="audit">📝 审计与留痕</button>
+  </nav>
+  <div class="spacer"></div>
+  <div class="role">
+    <div class="chip">👤 贷款运营·陈晓</div>
+    <div class="demo">POC · 演示数据</div>
+    <button class="btn ghost" id="btnReset" style="color:#fff;background:rgba(255,255,255,.1);
+      border-color:rgba(255,255,255,.2);margin-left:8px">↻ 重置演示数据</button>
+  </div>
+</header>
+
+<!-- ============ 页面 1：我的待办 ============ -->
+<section class="page active" id="page-todo">
+  <div class="page-hd">
+    <div>
+      <h1>我的待办</h1>
+      <div class="sub">贷款运营专员视角 · 待我处理的跨境贷款放款审核案件</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn">📥 导出清单</button>
+      <button class="btn">⚙ 筛选设置</button>
+    </div>
+  </div>
+
+  <div class="kpi-row">
+    <div class="kpi">
+      <div class="label">⏱ 待我处理</div>
+      <div class="num">12<span class="unit">件</span></div>
+      <div class="bar"><div style="width:48%;background:var(--brand)"></div></div>
+      <div class="meta"><span>较昨日 +3</span><span style="color:var(--brand)">48%</span></div>
+    </div>
+    <div class="kpi">
+      <div class="label">✅ 绿通自动放行占比</div>
+      <div class="num">68<span class="unit">%</span></div>
+      <div class="bar"><div style="width:68%;background:var(--green)"></div></div>
+      <div class="meta"><span>目标 ≥ 60%</span><span style="color:var(--green)">达标</span></div>
+    </div>
+    <div class="kpi">
+      <div class="label">🟡 黄灯待复核</div>
+      <div class="num">5<span class="unit">件</span></div>
+      <div class="bar"><div style="width:25%;background:var(--amber)"></div></div>
+      <div class="meta"><span>AI 建议置信度 55–88%</span><span style="color:var(--amber)">需介入</span></div>
+    </div>
+    <div class="kpi">
+      <div class="label">🔴 红灯拦截</div>
+      <div class="num">2<span class="unit">件</span></div>
+      <div class="bar"><div style="width:8%;background:var(--red)"></div></div>
+      <div class="meta"><span>合规/AML 命中</span><span style="color:var(--red)">不可放行</span></div>
+    </div>
+  </div>
+
+  <div class="filterbar">
+    <div class="segment" id="filterSeg">
+      <button class="on" data-f="all">全部 <span class="tag" style="margin-left:4px">6</span></button>
+      <button data-f="red">🔴 红灯 <span class="tag red" style="margin-left:4px">1</span></button>
+      <button data-f="amber">🟡 黄灯 <span class="tag amber" style="margin-left:4px">3</span></button>
+      <button data-f="green">✅ 绿通 <span class="tag green" style="margin-left:4px">3</span></button>
+    </div>
+    <div class="search">
+      <span class="ic">🔎</span>
+      <input id="todoSearch" placeholder="搜索案件号 / 客户 / 合同号…" />
+    </div>
+  </div>
+
+  <table class="table" id="todoTable">
+    <thead>
+      <tr>
+        <th>案件号</th>
+        <th>客户</th>
+        <th>贷款合同</th>
+        <th class="right">提款金额</th>
+        <th>提交时间</th>
+        <th class="center">校验结果</th>
+        <th>状态</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="todoTbody"></tbody>
+  </table>
+</section>
+
+<!-- ============ 页面 2：案件工作台 ============ -->
+<section class="page" id="page-case">
+  <div class="page-hd">
+    <div>
+      <h1>案件工作台</h1>
+      <div class="sub">以业务对象为主键 · 三色灯为语言 · 人机协作为闭环</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn">📤 分享</button>
+      <button class="btn">🖨 打印</button>
+      <button class="btn" onclick="goNav('todo')">← 返回待办</button>
+    </div>
+  </div>
+
+  <!-- 案件摘要 -->
+  <div class="case-summary">
+    <div class="left">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="case-id" id="caseId">DD-2026-0312</span>
+        <span class="tag red" id="caseLampTag">🔴 存在 1 项红线 · 3 项待复核</span>
+        <span class="tag gray">客户：华兴制造（香港）有限公司</span>
+      </div>
+      <div class="case-fields">
+        <span>合同号 <b>FA-2026-0088</b></span>
+        <span>额度 <b>3,000 万</b></span>
+        <span>用途 <b>日常经营</b></span>
+        <span>利率 <b>LPR+1.5%</b></span>
+        <span>期限 <b>2026-03-01 ~ 2027-02-28</b></span>
+        <span>提款金额 <b style="color:var(--brand)">1,000 万</b></span>
+        <span>放款日 <b>2026-03-12</b></span>
+        <span>到期日 <b>2027-03-11</b></span>
+      </div>
+    </div>
+    <div class="right">
+      <button class="btn amber" id="btnToHuman">👤 转人工</button>
+      <button class="btn" id="btnReturn">↩ 退回补充</button>
+      <button class="btn green" id="btnBatchPass">✅ 批量放行绿项</button>
+      <button class="btn primary" id="btnSubmit">📤 提交审批</button>
+    </div>
+  </div>
+
+  <!-- 三栏主体 -->
+  <div class="workbench">
+    <!-- 左栏 · 对象链路 -->
+    <aside>
+      <div class="col-title">🧭 对象链路（业务对象为主键）</div>
+      <div class="tree" id="objectTree">
+        <div class="lvl-label">客户 Customer</div>
+        <ul>
+          <li>
+            <div class="node" data-jump="customer">
+              <span style="color:var(--brand-3)">👤</span>
+              <span style="flex:1">华兴制造（香港）</span>
+              <span class="lamp green"></span>
+            </div>
+            <ul>
+              <li>
+                <div class="lvl-label">贷款合同 Facility</div>
+                <div class="node" data-jump="facility">
+                  <span style="color:var(--brand-3)">📄</span>
+                  <span style="flex:1"><span class="mono">FA-2026-0088</span></span>
+                  <span class="lamp green"></span>
+                </div>
+                <ul>
+                  <li>
+                    <div class="lvl-label">提款指令 Drawdown</div>
+                    <div class="node active" data-jump="drawdown">
+                      <span style="color:var(--brand-3)">💰</span>
+                      <span style="flex:1"><span class="mono">DD-2026-0312</span></span>
+                      <span class="lamp-row">
+                        <span class="lamp green"></span>
+                        <span class="lamp amber"></span>
+                        <span class="lamp amber"></span>
+                        <span class="lamp amber"></span>
+                      </span>
+                    </div>
+                    <ul>
+                      <li>
+                        <div class="lvl-label">支付指令 Payment</div>
+                        <div class="node" data-jump="p1">
+                          <span>💸</span>
+                          <span style="flex:1">P1 · 供应商 A</span>
+                          <span class="lamp amber"></span>
+                        </div>
+                      </li>
+                      <li>
+                        <div class="node" data-jump="p2">
+                          <span>💸</span>
+                          <span style="flex:1">P2 · 服务商 B</span>
+                          <span class="lamp red"></span>
+                        </div>
+                      </li>
+                      <li>
+                        <div class="node" data-jump="p3">
+                          <span>💸</span>
+                          <span style="flex:1">P3 · 税务专户</span>
+                          <span class="lamp green"></span>
+                        </div>
+                      </li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </div>
+
+      <div style="margin-top:14px">
+        <div class="col-title">📎 支持性材料</div>
+        <div class="card" style="padding:10px 12px;font-size:12px">
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 0">
+            <span>📑</span><span class="mono">CT-2026-0091</span>
+            <span class="muted" style="margin-left:auto">采购合同</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 0">
+            <span>🧾</span><span class="mono">INV-2026-0417</span>
+            <span class="muted" style="margin-left:auto">发票</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 0">
+            <span>📑</span><span class="mono">SC-2026-0033</span>
+            <span class="muted" style="margin-left:auto">服务合同</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 0">
+            <span>🏛</span><span style="font-family:var(--mono)">TAX-NOTICE</span>
+            <span class="muted" style="margin-left:auto">付税通知</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 中栏 · 文件查看器 -->
+    <main>
+      <div class="col-title">📄 文件查看器（文档是对象的附件）</div>
+      <div class="docwrap">
+        <div class="doctabs" id="docTabs">
+          <button class="on" data-doc="drawdown">提款指令</button>
+          <button data-doc="facility">贷款合同</button>
+          <button data-doc="invoice">发票 A (CT/INV)</button>
+          <button data-doc="service">服务合同 B (SC)</button>
+          <div class="docmeta">
+            <span>📐 A4 · 1/1</span>
+            <span><span class="kbd">Tab</span> 切换</span>
+          </div>
+        </div>
+        <div class="docarea" id="docArea"></div>
+      </div>
+    </main>
+
+    <!-- 右栏 · AI 校验面板 -->
+    <aside>
+      <div class="col-title">🤖 AI 校验面板（人机协作裁定）</div>
+      <div class="aipanel">
+        <div class="aipanel-hd">
+          <div class="summary" id="overallSummary">
+            <span class="lamp red"></span>
+            <div>
+              <div class="big">🔴 存在 1 项红线</div>
+              <div style="font-size:11.5px;color:var(--ink-3);margin-top:2px">3 项待复核 · 6 项已放行</div>
+            </div>
+            <div class="count">
+              <span style="color:var(--green)">●6</span>
+              <span style="color:var(--amber)">●3</span>
+              <span style="color:var(--red)">●1</span>
+            </div>
+          </div>
+        </div>
+        <div class="aipanel-tabs" id="aiTabs">
+          <button class="on" data-lv="all">全部 <span class="cnt">10</span></button>
+          <button data-lv="L1"><span class="lamp green"></span>L1 硬性 <span class="cnt">4</span></button>
+          <button data-lv="L2"><span class="lamp amber"></span>L2 逻辑 <span class="cnt">4</span></button>
+          <button data-lv="L3"><span class="lamp red"></span>L3 合规 <span class="cnt">3</span></button>
+        </div>
+        <div class="aipanel-list" id="checkList"></div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 底部 支付拆分 -->
+  <div class="paytbl">
+    <h4>💸 支付拆分（与提款指令一一对应） <span class="tag brand mono">合计 1,000 万</span></h4>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>序号</th>
+          <th>收件人</th>
+          <th>用途</th>
+          <th class="right">金额</th>
+          <th>对应材料</th>
+          <th class="center">校验灯</th>
+          <th>状态</th>
+        </tr>
+      </thead>
+      <tbody id="payTbody"></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 页面 3：合规法规库 ============ -->
+<section class="page" id="page-compliance">
+  <div class="page-hd">
+    <div>
+      <h1>合规法规库</h1>
+      <div class="sub">用途条款检索 · 制裁/监控名单 · AML / 外汇管制</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn">📥 导出规则包</button>
+      <button class="btn">🔄 同步版本</button>
+    </div>
+  </div>
+
+  <div class="compliance">
+    <div class="panel">
+      <h3>📚 用途合规条款检索</h3>
+      <div class="search-block">
+        <input id="purposeInput" placeholder="输入用途关键词，如：日常经营 / 服务费 / 付税…" />
+        <button class="btn primary" id="purposeSearch">🔍 检索</button>
+      </div>
+      <div style="font-size:11.5px;color:var(--ink-3);margin-bottom:8px">
+        检索范围：贷款用途正面清单 · 负面清单 · 跨境用途分类树
+      </div>
+      <div class="clause-list" id="purposeResult">
+        <div class="clause empty">输入关键词以检索条款 · 默认载入「日常经营」结果</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>🛡 制裁/监控名单（Sanctions List v2026.03）</h3>
+      <div class="search-block">
+        <input id="sanctionInput" placeholder="查询对手方名称、注册地或代码…" value="服务商 B" />
+        <button class="btn primary" id="sanctionSearch">🔍 查询</button>
+      </div>
+      <div id="sanctionResult"></div>
+    </div>
+
+    <div class="panel" style="grid-column:1/3">
+      <h3>🏛 AML / 外汇管制规则摘要</h3>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+        <div class="aml-block">
+          <div style="font-weight:600;color:var(--ink);margin-bottom:4px">📌 AML 指引 · 跨境付款 4.2</div>
+          跨境付款且涉及第三国收款方，须附交易背景说明与报关单；单笔 ≥ 等值 50 万美元须额外提交《跨境付款背景说明》。
+          <div style="margin-top:6px;color:var(--ink-3);font-size:11px">适用：本案 P2 服务商 B（命中）</div>
+        </div>
+        <div class="aml-block">
+          <div style="font-weight:600;color:var(--ink);margin-bottom:4px">📌 外汇管制 · 跨境放款</div>
+          境内银行向境外（含香港）放款须登记；放款资金回流须经同名账户或经审批的指定账户。本次 P1/P3 均合规，P2 收款方注册地涉及第三国。
+        </div>
+        <div class="aml-block">
+          <div style="font-weight:600;color:var(--ink);margin-bottom:4px">📌 用途正面清单 · 日常经营</div>
+          允许：原材料采购、专业服务费、税赋缴纳、办公租金。禁止：股权/证券投资、虚拟资产、偿还境外关联方贷款。
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 页面 4：审计与留痕 ============ -->
+<section class="page" id="page-audit">
+  <div class="page-hd">
+    <div>
+      <h1>审计与留痕</h1>
+      <div class="sub">谁 · 何时 · 对哪项 · 动作 · 理由 · 实时联动工作台</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn">🗑 清空筛选</button>
+      <button class="btn primary" id="btnExportAudit">📤 导出审计记录</button>
+    </div>
+  </div>
+
+  <div class="audit-toolbar">
+    <div class="segment" id="auditFilter">
+      <button class="on" data-af="all">全部</button>
+      <button data-af="accept">✅ 采纳</button>
+      <button data-af="override">🟦 覆盖</button>
+      <button data-af="reject">↩ 打回</button>
+    </div>
+    <div style="font-size:12px;color:var(--ink-3);margin-left:auto">
+      累计 <b id="auditCount">0</b> 条操作记录
+    </div>
+  </div>
+
+  <div class="audit-list" id="auditList">
+    <div class="empty-state">尚无操作记录 · 在案件工作台进行采纳 / 覆盖 / 打回将自动同步至此</div>
+  </div>
+</section>
+
+<!-- ============ Toast 容器 ============ -->
+<div class="toast-wrap" id="toastWrap"></div>
+
+<!-- ============ 模态：覆盖理由 ============ -->
+<div class="modal-mask" id="modalMask">
+  <div class="modal">
+    <div class="modal-hd">
+      <span id="modalTitle">填写覆盖理由</span>
+      <span class="x" onclick="closeModal()">✕</span>
+    </div>
+    <div class="modal-bd">
+      <div id="modalDesc" style="color:var(--ink-3);font-size:12px;margin-bottom:6px">
+        请说明你与 AI 结论不一致的理由。理由将写入审计与留痕。
+      </div>
+      <textarea id="modalText" placeholder="例如：经与业务员电话核实，差额 50 万对应 4 月备货订单尾款，附 PO 单号 PO-2026-0410……"></textarea>
+    </div>
+    <div class="modal-ft">
+      <button class="btn" onclick="closeModal()">取消</button>
+      <button class="btn primary" id="modalConfirm">提交覆盖</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============ 数据 ============ */
+const STATE = {
+  filter:'all',
+  search:'',
+  auditFilter:'all',
+  audits:[],
+  aiTab:'all',
+  openCheckIds:new Set(),
+  docTab:'drawdown',
+  activeJump:null,
+  activeCheckId:null,
+};
+
+const CHECKS = [
+  // L1
+  {id:'C1',lv:'L1',color:'green',conf:100,rule:'L1-AMT-01',
+   title:'提款金额 ≤ 合同额度',
+   summary:'1,000 万 ≤ 3,000 万，占用后剩余可用额度 2,000 万',
+   reason:'合同 FA-2026-0088 约定总额度 3,000 万，本次提款指令金额 1,000 万，占比 33.3%，未触发硬性上限。占用后剩余 2,000 万。',
+   state:'pending'},
+  {id:'C2',lv:'L1',color:'green',conf:98,rule:'L1-RATE-02',
+   title:'利率与合同一致',
+   summary:'提款指令利率字段与合同约定利率完全一致',
+   reason:'提款指令利率 = LPR+1.5%，与贷款合同 FA-2026-0088 利率条款完全一致。',
+   state:'pending'},
+  {id:'C3',lv:'L1',color:'green',conf:99,rule:'L1-DATE-03',
+   title:'到期日 ≤ 合同期限，且非节假日',
+   summary:'期限 364 天 ≤ 合同 1 年；到期日为工作日',
+   reason:'放款日 2026-03-12 到期日 2027-03-11，期限 364 天 ≤ 合同期 1 年；2027-03-11（周四）为工作日。',
+   state:'pending'},
+  {id:'C4',lv:'L1',color:'green',conf:100,rule:'L1-REQ-04',
+   title:'必填字段完整',
+   summary:'合同号/金额/利率/日期/用途均已填写',
+   reason:'合同号、提款金额、利率、放款日、到期日、用途均已填写，无空值。',
+   state:'pending'},
+  // L2
+  {id:'C5',lv:'L2',color:'amber',conf:62,rule:'用途分类树·日常经营',
+   title:'用途穿透一致性',
+   summary:'提款用途可映射至合同用途；P2 边界模糊，建议人工',
+   reason:'提款用途「日常经营支出」可映射至合同「日常经营」；但 P2 服务费用途语义边界较模糊（专业服务费 vs 顾问咨询），建议人工确认。',
+   state:'pending'},
+  {id:'C6',lv:'L2',color:'green',conf:91,rule:'L2-MATCH-06',
+   title:'标的物匹配（P1）',
+   summary:'采购合同与发票标的物一致（特种钢材），落在合同大范围内',
+   reason:'采购合同 CT-2026-0091 与发票 INV-2026-0417 标的物均为「特种钢材 Q355B」，金额口径与合同大范围一致。',
+   state:'pending'},
+  {id:'C7',lv:'L2',color:'amber',conf:55,rule:'L2-AMT-07',
+   title:'发票金额 vs 支付金额（P1）',
+   summary:'发票 350 万 > 本次支付 300 万，差额 50 万原因未说明',
+   reason:'发票 INV-2026-0417 价税合计 350 万，本次 P1 拟支付 300 万，差额 50 万可能对应后续批次，但当前未附说明，需业务员补充。',
+   state:'pending', jump:'invoice', highlight:'.hl-inv-amt'},
+  {id:'C8',lv:'L2',color:'amber',conf:58,rule:'L2-TERM-08',
+   title:'支付条款合规（P2）',
+   summary:'服务合同约定「支票」结算，本次拟「贷款转账」，方式不一致',
+   reason:'服务合同 SC-2026-0033 约定「支票结算」，本次 P2 拟以「贷款转账」方式支付，结算方式不一致，需确认是否有补充协议。',
+   state:'pending', jump:'service', highlight:'.hl-sc-term'},
+  // L3
+  {id:'C9',lv:'L3',color:'red',conf:88,rule:'Sanctions List v2026.03',
+   title:'交易对手制裁/监控筛查（P2）',
+   summary:'收款方「服务商 B」命中制裁/监控名单（注册地属高风险地区）',
+   reason:'收款方「服务商 B」注册地属高风险地区（OFAC SDN 关联名单二级），须转合规人工复核；不得自动放行。',
+   state:'pending', jump:'service', highlight:'.hl-sc-party'},
+  {id:'C10',lv:'L3',color:'green',conf:90,rule:'合规库·贷款用途正面清单',
+   title:'用途法规合规',
+   summary:'「日常经营」用途未见境内外法规禁止性条款命中',
+   reason:'经检索境内《商业银行跨境贷款管理办法》及境外 OFAC/EU 制裁清单，「日常经营」用途未命中禁止性条款。',
+   state:'pending'},
+  {id:'C11',lv:'L3',color:'amber',conf:66,rule:'AML 指引·跨境付款 4.2',
+   title:'AML / 外汇管制',
+   summary:'跨境付款且涉及第三国收款方，建议附交易背景说明与报关单',
+   reason:'P2 收款方「服务商 B」注册地与放款主体、合同主体不在同一司法管辖区，触发跨境付款第三国场景，建议附交易背景说明与报关单。',
+   state:'pending', jump:'service', highlight:'.hl-sc-party'},
+];
+
+const TODOS = [
+  {id:'DD-2026-0312',cust:'华兴制造（香港）',fa:'FA-2026-0088',amt:'1,000 万',time:'2026-03-10 14:22',
+   lamps:['red','amber','amber','amber'], status:'待人工处置', statusType:'red'},
+  {id:'DD-2026-0308',cust:'南星贸易（新加坡）',fa:'FA-2026-0075',amt:'640 万',time:'2026-03-10 11:05',
+   lamps:['green','green','green','green'], status:'绿通待放行', statusType:'green'},
+  {id:'DD-2026-0301',cust:'恒立科技（开曼）',fa:'FA-2026-0061',amt:'2,200 万',time:'2026-03-09 16:40',
+   lamps:['amber','amber'], status:'待复核', statusType:'amber'},
+  {id:'DD-2026-0295',cust:'华兴制造（香港）',fa:'FA-2026-0088',amt:'520 万',time:'2026-03-09 09:18',
+   lamps:['green','green','green','green'], status:'绿通待放行', statusType:'green'},
+  {id:'DD-2026-0287',cust:'远航物流（BVI）',fa:'FA-2026-0044',amt:'880 万',time:'2026-03-08 15:30',
+   lamps:['red','amber'], status:'红灯拦截', statusType:'red'},
+  {id:'DD-2026-0280',cust:'南星贸易（新加坡）',fa:'FA-2026-0075',amt:'300 万',time:'2026-03-08 10:12',
+   lamps:['green','green','green','green'], status:'绿通待放行', statusType:'green'},
+];
+
+const PAYS = [
+  {id:'P1',who:'供应商 A',use:'购买原材料',amt:'300 万',mat:'CT-2026-0091 + INV-2026-0417',lamp:'amber',st:'待补充差额说明'},
+  {id:'P2',who:'服务商 B',use:'支付服务费',amt:'300 万',mat:'SC-2026-0033',lamp:'red',st:'制裁命中·需合规复核'},
+  {id:'P3',who:'税务专户',use:'付税',amt:'400 万',mat:'付税通知',lamp:'green',st:'已放行'},
+];
+
+/* ============ 文档内容（纯 HTML 字符串，可含 .hl* 高亮节点） ============ */
+const DOCS = {
+  drawdown: () => `
+    <div class="paper" data-doc="drawdown">
+      <div class="title">跨境贷款提款指令</div>
+      <div class="sub">Drawdown Instruction · 单据编号 DD-2026-0312</div>
+      <div class="row"><span class="k">合同号</span><span class="v">FA-2026-0088</span></div>
+      <div class="row"><span class="k">客户</span><span class="v">华兴制造（香港）有限公司</span></div>
+      <div class="row"><span class="k">提款金额</span><span class="v"><span class="hl" data-hl="dd-amt">¥ 10,000,000.00（人民币 1,000 万）</span></span></div>
+      <div class="row"><span class="k">利率</span><span class="v"><span class="hl" data-hl="dd-rate">LPR + 150 bps</span></span></div>
+      <div class="row"><span class="k">放款日</span><span class="v"><span class="hl" data-hl="dd-start">2026-03-12</span></span></div>
+      <div class="row"><span class="k">到期日</span><span class="v"><span class="hl" data-hl="dd-end">2027-03-11</span></span></div>
+      <div class="row"><span class="k">用途</span><span class="v"><span class="hl" data-hl="dd-use">日常经营支出</span></span></div>
+      <h3>支付拆分</h3>
+      <table class="tbl">
+        <thead><tr><th>序号</th><th>收件人</th><th>用途</th><th class="num">金额</th></tr></thead>
+        <tbody>
+          <tr><td>P1</td><td>供应商 A</td><td>购买原材料</td><td class="num">¥ 3,000,000.00</td></tr>
+          <tr><td>P2</td><td>服务商 B</td><td>支付服务费</td><td class="num">¥ 3,000,000.00</td></tr>
+          <tr><td>P3</td><td>税务专户</td><td>付税</td><td class="num">¥ 4,000,000.00</td></tr>
+        </tbody>
+      </table>
+      <div class="note">⚠ 本指令项下 P2 收款方「服务商 B」已命中制裁监控名单，须经合规复核后方可执行。</div>
+    </div>`,
+  facility: () => `
+    <div class="paper" data-doc="facility">
+      <div class="title">跨境贷款合同</div>
+      <div class="sub">Facility Agreement · 编号 FA-2026-0088</div>
+      <div class="row"><span class="k">客户</span><span class="v">华兴制造（香港）有限公司</span></div>
+      <div class="row"><span class="k">贷款额度</span><span class="v">¥ 30,000,000.00（人民币 3,000 万）</span></div>
+      <div class="row"><span class="k">用途</span><span class="v">日常经营</span></div>
+      <div class="row"><span class="k">利率</span><span class="v">LPR + 150 bps</span></div>
+      <div class="row"><span class="k">期限</span><span class="v">2026-03-01 至 2027-02-28</span></div>
+      <div class="row"><span class="k">签约地</span><span class="v">中国香港</span></div>
+      <h3>主要条款</h3>
+      <div style="font-size:12px;color:var(--ink-2);line-height:1.7">
+        <p>第一条 · 借款人应将贷款资金用于日常经营支出，包括但不限于原材料采购、专业服务费、税赋缴纳及办公租金。</p>
+        <p>第二条 · 借款人不得将贷款资金直接或间接用于：股权或证券投资、虚拟资产交易、偿还境外关联方贷款。</p>
+        <p>第三条 · 单笔支付 ≥ 等值 100 万美元，应提前 3 个工作日报备。</p>
+        <p>第七条 · 任何支付方式应与对应基础交易合同约定一致；变更需书面补充协议。</p>
+      </div>
+      <div class="note">📎 合同正本由本行香港分行托管，电子签章：HSBC_TRUST_2026_03_001。</div>
+    </div>`,
+  invoice: () => `
+    <div class="paper" data-doc="invoice">
+      <div class="title">采购合同 + 增值税专用发票</div>
+      <div class="sub">CT-2026-0091 / INV-2026-0417 · 价税合计 ¥ 3,500,000.00</div>
+      <div class="row"><span class="k">采购合同号</span><span class="v">CT-2026-0091</span></div>
+      <div class="row"><span class="k">发票号</span><span class="v">INV-2026-0417</span></div>
+      <div class="row"><span class="k">销货方</span><span class="v">华兴制造（香港）有限公司</span></div>
+      <div class="row"><span class="k">购货方</span><span class="v">境内供应商 A（脱敏）</span></div>
+      <div class="row"><span class="k">标的物</span><span class="v">特种钢材 Q355B · 50 吨</span></div>
+      <div class="row"><span class="k">价税合计</span><span class="v"><span class="hl warn" data-hl="inv-amt">¥ 3,500,000.00（人民币 350 万）</span></span></div>
+      <h3>发票明细</h3>
+      <table class="tbl">
+        <thead><tr><th>货物名称</th><th>规格</th><th>数量</th><th class="num">单价</th><th class="num">金额</th></tr></thead>
+        <tbody>
+          <tr><td>特种钢材</td><td>Q355B</td><td>50 吨</td><td class="num">¥ 60,000/吨</td><td class="num">¥ 3,000,000.00</td></tr>
+          <tr><td>加工费</td><td>—</td><td>1 批</td><td class="num">—</td><td class="num">¥ 169,811.32</td></tr>
+          <tr><td>税额（13%）</td><td colspan="3" style="text-align:right">增值税</td><td class="num">¥ 330,188.68</td></tr>
+          <tr><td colspan="4" style="text-align:right;font-weight:600">价税合计</td><td class="num"><b>¥ 3,500,000.00</b></td></tr>
+        </tbody>
+      </table>
+      <div class="note amber">⚠ 发票金额 350 万 > 本次 P1 拟支付 300 万，差额 50 万原因未说明，建议补充 PO 单号 PO-2026-0410（4 月备货订单尾款）。</div>
+    </div>`,
+  service: () => `
+    <div class="paper" data-doc="service">
+      <div class="title">服务合同 · 服务商 B</div>
+      <div class="sub">Service Contract · 编号 SC-2026-0033</div>
+      <div class="row"><span class="k">合同号</span><span class="v">SC-2026-0033</span></div>
+      <div class="row"><span class="k">甲方</span><span class="v">华兴制造（香港）有限公司</span></div>
+      <div class="row"><span class="k">乙方</span><span class="v"><span class="hl warn" data-hl="sc-party">「服务商 B」（注册地：第三国高风险地区 · 脱敏）</span></span></div>
+      <div class="row"><span class="k">服务内容</span><span class="v">海外市场咨询及推广服务（6 个月）</span></div>
+      <div class="row"><span class="k">合同总额</span><span class="v">USD 420,000（≈ ¥ 3,000,000）</span></div>
+      <div class="row"><span class="k">结算方式</span><span class="v"><span class="hl amber-mark" data-hl="sc-term">支票结算（Bank Draft）</span></span></div>
+      <h3>主要条款</h3>
+      <div style="font-size:12px;color:var(--ink-2);line-height:1.7">
+        <p>第二条 · 乙方应于每月 5 日前向甲方提供上月服务报告及发票。</p>
+        <p>第四条 · 甲方应于收到发票后 15 个工作日内以<span style="background:#ffe5b8;padding:1px 3px;border-radius:2px">支票</span>方式支付。</p>
+        <p>第八条 · 任一方变更结算方式须书面通知对方并签署补充协议。</p>
+      </div>
+      <div class="note red">🔴 风险提示：① 乙方注册地属高风险地区，已命中制裁监控名单；② 合同约定「支票结算」，本次 P2 拟「贷款转账」方式支付，方式不一致，须补充书面协议。</div>
+    </div>`,
+};
+
+/* ============ 渲染：待办表 ============ */
+function lampRow(arr){
+  return '<span class="lamp-row">' + arr.map(c=>`<span class="lamp ${c}"></span>`).join('') + '</span>';
+}
+function statusTag(s,t){ return `<span class="tag ${t}">${s}</span>`; }
+
+function renderTodos(){
+  const tb = document.getElementById('todoTbody');
+  let rows = TODOS.slice();
+  // filter
+  if(STATE.filter === 'red') rows = rows.filter(r=>r.lamps.includes('red'));
+  else if(STATE.filter === 'amber') rows = rows.filter(r=>r.lamps.includes('amber') && !r.lamps.includes('red'));
+  else if(STATE.filter === 'green') rows = rows.filter(r=>r.lamps.every(c=>c==='green'));
+  // search
+  const q = STATE.search.trim().toLowerCase();
+  if(q) rows = rows.filter(r => r.id.toLowerCase().includes(q) || r.cust.toLowerCase().includes(q) || r.fa.toLowerCase().includes(q));
+
+  if(rows.length === 0){
+    tb.innerHTML = `<tr><td colspan="8" class="empty-state">没有匹配的案件</td></tr>`;
+    return;
+  }
+  tb.innerHTML = rows.map(r=>`
+    <tr data-jump2case="${r.id}">
+      <td class="mono strong">${r.id}</td>
+      <td>${r.cust}</td>
+      <td class="mono">${r.fa}</td>
+      <td class="right mono strong">${r.amt}</td>
+      <td class="mono">${r.time}</td>
+      <td class="center">${lampRow(r.lamps)}</td>
+      <td>${statusTag(r.status,r.statusType)}</td>
+      <td class="right"><span class="muted" style="font-size:11px">→ 进入工作台</span></td>
+    </tr>`).join('');
+}
+
+/* ============ 渲染：AI 校验列表 ============ */
+function renderChecks(){
+  const list = document.getElementById('checkList');
+  let arr = CHECKS.slice();
+  if(STATE.aiTab !== 'all') arr = arr.filter(c=>c.lv===STATE.aiTab);
+
+  list.innerHTML = arr.map(c=>{
+    const open = STATE.openCheckIds.has(c.id);
+    const actedClass = c.state==='accept' ? 'green done' : (c.state==='reject' ? '' : '');
+    const actedBadge = c.state==='accept'
+      ? `<span class="badge-acted accept">✅ 已放行</span>`
+      : c.state==='override'
+      ? `<span class="badge-acted override">🟦 已覆盖</span>`
+      : c.state==='reject'
+      ? `<span class="badge-acted reject">↩ 已打回</span>`
+      : '';
+    const conf = c.conf;
+    const confBar = `<div class="mini-bar"><div style="width:${conf}%;background:${
+      conf>=85?'var(--green)':conf>=60?'var(--amber)':'var(--red)'}"></div></div>`;
+
+    return `
+      <div class="check ${c.color} ${open?'open':''} ${c.state==='accept'?'done':''}" data-cid="${c.id}">
+        <div class="check-hd">
+          <span class="lamp ${c.color}"></span>
+          <div style="flex:1">
+            <div class="title">${c.title} <span class="rule">${c.rule}</span>${actedBadge}</div>
+            <div class="conf">${confBar}<span>${conf}%</span></div>
+          </div>
+          <span class="caret">${open?'▾':'▸'}</span>
+        </div>
+        <div class="check-bd">
+          <div style="color:var(--ink-3);font-size:11.5px">${c.summary}</div>
+          <div class="reason">🤖 ${c.reason}</div>
+          <div class="actions">
+            <button class="btn green" data-act="accept" data-cid="${c.id}" ${c.state!=='pending'?'disabled':''}>✅ 采纳</button>
+            <button class="btn" data-act="override" data-cid="${c.id}" ${c.state!=='pending'?'disabled':''}>🟦 覆盖</button>
+            <button class="btn red" data-act="reject" data-cid="${c.id}" ${c.state!=='pending'?'disabled':''}>↩ 打回补充</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+/* ============ 渲染：底部支付拆分 ============ */
+function renderPays(){
+  const tb = document.getElementById('payTbody');
+  tb.innerHTML = PAYS.map(p=>{
+    const stMap = {amber:['待补充差额说明','amber'],red:['制裁命中·需合规复核','red'],green:['已放行','green']};
+    const [sLabel,sType] = stMap[p.lamp];
+    return `
+      <tr>
+        <td class="mono strong">${p.id}</td>
+        <td>${p.who}</td>
+        <td>${p.use}</td>
+        <td class="right mono strong">${p.amt}</td>
+        <td class="mono" style="font-size:11.5px">${p.mat}</td>
+        <td class="center"><span class="lamp ${p.lamp}"></span></td>
+        <td><span class="tag ${sType}">${sLabel}</span></td>
+      </tr>`;
+  }).join('');
+}
+
+/* ============ 渲染：文档 ============ */
+function renderDoc(tab){
+  STATE.docTab = tab;
+  const area = document.getElementById('docArea');
+  area.innerHTML = DOCS[tab] ? DOCS[tab]() : '';
+  // 高亮 active jump
+  setTimeout(()=>{
+    if(STATE.activeJump){
+      const target = area.querySelector(STATE.activeJump);
+      if(target){
+        target.scrollIntoView({behavior:'smooth',block:'center'});
+        target.classList.add('flash');
+        setTimeout(()=>target.classList.remove('flash'),2600);
+      }
+    } else if(STATE.activeCheckId){
+      const c = CHECKS.find(x=>x.id===STATE.activeCheckId);
+      if(c && c.highlight){
+        const t = area.querySelector(c.highlight);
+        if(t){
+          t.scrollIntoView({behavior:'smooth',block:'center'});
+          t.classList.add('flash');
+          setTimeout(()=>t.classList.remove('flash'),2600);
+        }
+      }
+    }
+  },60);
+  // tab 高亮
+  document.querySelectorAll('#docTabs button').forEach(b=>{
+    b.classList.toggle('on', b.dataset.doc===tab);
+  });
+}
+
+/* ============ 渲染：审计 ============ */
+function renderAudit(){
+  const list = document.getElementById('auditList');
+  document.getElementById('auditCount').textContent = STATE.audits.length;
+  let arr = STATE.audits.slice().reverse();
+  if(STATE.auditFilter !== 'all'){
+    arr = arr.filter(a=>{
+      if(STATE.auditFilter==='accept') return a.act==='采纳';
+      if(STATE.auditFilter==='override') return a.act==='覆盖';
+      if(STATE.auditFilter==='reject') return a.act==='打回';
+      return true;
+    });
+  }
+  if(arr.length===0){
+    list.innerHTML = `<div class="empty-state">尚无操作记录 · 在案件工作台进行采纳 / 覆盖 / 打回将自动同步至此</div>`;
+    return;
+  }
+  list.innerHTML = arr.map(a=>{
+    const cls = a.act==='采纳'?'green':(a.act==='覆盖'?'brand':'red');
+    return `
+      <div class="audit-item">
+        <div class="ts">${a.ts}</div>
+        <div class="who">${a.who}</div>
+        <div class="what">对 <b>${a.target}</b> 执行「<span class="tag ${cls}">${a.act}</span>」</div>
+        <div class="why">${a.why ? '💬 '+a.why : ''}</div>
+        <div class="act"><span class="tag gray">${a.act==='采纳'?'✅':a.act==='覆盖'?'🟦':'↩'}</span></div>
+      </div>`;
+  }).join('');
+}
+
+/* ============ Toast ============ */
+function toast(msg, type='info', timeout=2200){
+  const wrap = document.getElementById('toastWrap');
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  const icon = type==='success'?'✅':type==='warn'?'⚠️':type==='error'?'🔴':'ℹ️';
+  el.innerHTML = `<span>${icon}</span><span>${msg}</span>`;
+  wrap.appendChild(el);
+  setTimeout(()=>{
+    el.style.animation = 'slideOut .25s ease-out forwards';
+    setTimeout(()=>el.remove(),260);
+  },timeout);
+}
+
+/* ============ 导航 ============ */
+function goNav(name){
+  document.querySelectorAll('.nav button').forEach(b=>{
+    b.classList.toggle('active', b.dataset.nav===name);
+  });
+  document.querySelectorAll('.page').forEach(p=>{
+    p.classList.toggle('active', p.id === 'page-'+name);
+  });
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ============ 模态：覆盖理由 ============ */
+let modalContext = null;
+function openModal(title, desc, onConfirm){
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalDesc').textContent = desc;
+  document.getElementById('modalText').value = '';
+  document.getElementById('modalMask').classList.add('on');
+  modalContext = onConfirm;
+  setTimeout(()=>document.getElementById('modalText').focus(),60);
+}
+function closeModal(){ document.getElementById('modalMask').classList.remove('on'); modalContext=null; }
+document.getElementById('modalConfirm').addEventListener('click', ()=>{
+  const text = document.getElementById('modalText').value.trim();
+  if(!text){ toast('覆盖理由不能为空', 'warn'); return; }
+  if(modalContext) modalContext(text);
+  closeModal();
+});
+document.getElementById('modalMask').addEventListener('click', e=>{
+  if(e.target.id==='modalMask') closeModal();
+});
+
+/* ============ 操作：采纳 / 覆盖 / 打回 ============ */
+function nowTs(){
+  const d = new Date();
+  const p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+function recordAct(target, act, why){
+  STATE.audits.push({ts:nowTs(), who:'贷款运营·陈晓', target, act, why:why||''});
+  renderAudit();
+}
+function actOnCheck(id, action){
+  const c = CHECKS.find(x=>x.id===id);
+  if(!c || c.state!=='pending') return;
+  if(action==='accept'){
+    c.state='accept';
+    recordAct(`${c.title}（${c.rule}）`, '采纳', '与 AI 结论一致');
+    toast(`已采纳：${c.title}`, 'success');
+  } else if(action==='reject'){
+    openModal('打回补充 · '+c.title,
+      '请列出需要业务员补充的材料或说明（将写入审计与留痕）。',
+      text=>{
+        c.state='reject';
+        recordAct(`${c.title}（${c.rule}）`, '打回', text);
+        toast(`已打回补充：${c.title}`, 'error');
+        renderChecks();
+        updateSummary();
+      }
+    );
+    return; // 等 modal 回调
+  }
+  renderChecks();
+  updateSummary();
+}
+
+function updateSummary(){
+  const green = CHECKS.filter(c=>c.color==='green').length;
+  const amber = CHECKS.filter(c=>c.color==='amber').length;
+  const red = CHECKS.filter(c=>c.color==='red').length;
+  const accepted = CHECKS.filter(c=>c.state==='accept').length;
+  document.querySelector('#overallSummary .count').innerHTML =
+    `<span style="color:var(--green)">●${green}</span>
+     <span style="color:var(--amber)">●${amber}</span>
+     <span style="color:var(--red)">●${red}</span>`;
+  document.querySelector('#overallSummary .big').textContent =
+    red>0 ? `🔴 存在 ${red} 项红线` : (amber>0?`🟡 ${amber} 项待复核`:`✅ 全部通过`);
+  document.querySelector('#overallSummary .big').style.color =
+    red>0 ? 'var(--red)' : (amber>0?'var(--amber)':'var(--green)');
+  document.querySelector('#caseLampTag').innerHTML = red>0
+    ? `🔴 存在 ${red} 项红线 · ${amber} 项待复核`
+    : (amber>0?`🟡 ${amber} 项待复核`:`✅ 全部通过`);
+  document.querySelector('#caseLampTag').className = 'tag ' + (red>0?'red':(amber>0?'amber':'green'));
+}
+
+/* ============ 事件绑定 ============ */
+document.querySelectorAll('.nav button').forEach(b=>{
+  b.addEventListener('click', ()=>goNav(b.dataset.nav));
+});
+
+document.getElementById('filterSeg').addEventListener('click', e=>{
+  const btn = e.target.closest('button[data-f]');
+  if(!btn) return;
+  document.querySelectorAll('#filterSeg button').forEach(x=>x.classList.remove('on'));
+  btn.classList.add('on');
+  STATE.filter = btn.dataset.f;
+  renderTodos();
+});
+document.getElementById('todoSearch').addEventListener('input', e=>{
+  STATE.search = e.target.value;
+  renderTodos();
+});
+
+document.getElementById('todoTbody').addEventListener('click', e=>{
+  const tr = e.target.closest('tr[data-jump2case]');
+  if(!tr) return;
+  goNav('case');
+});
+
+// 工作台事件
+document.getElementById('docTabs').addEventListener('click', e=>{
+  const b = e.target.closest('button[data-doc]');
+  if(!b) return;
+  STATE.activeJump = null;
+  STATE.activeCheckId = null;
+  renderDoc(b.dataset.doc);
+});
+
+document.getElementById('objectTree').addEventListener('click', e=>{
+  const node = e.target.closest('.node[data-jump]');
+  if(!node) return;
+  document.querySelectorAll('#objectTree .node').forEach(n=>n.classList.remove('active'));
+  node.classList.add('active');
+  const map = {customer:'facility', facility:'facility', drawdown:'drawdown',
+    p1:'invoice', p2:'service', p3:'drawdown'};
+  const doc = map[node.dataset.jump] || 'drawdown';
+  STATE.activeJump = node.dataset.jump==='p1' ? '.hl-inv-amt' :
+                     node.dataset.jump==='p2' ? '.hl-sc-party' :
+                     node.dataset.jump==='p3' ? null : null;
+  if(node.dataset.jump==='p1' || node.dataset.jump==='p2'){
+    // 同时把高亮元素映射到 doc 里
+    if(node.dataset.jump==='p1') STATE.activeJump = '[data-hl="inv-amt"]';
+    if(node.dataset.jump==='p2') STATE.activeJump = '[data-hl="sc-party"]';
+  }
+  renderDoc(doc);
+});
+
+// 校验面板事件
+document.getElementById('aiTabs').addEventListener('click', e=>{
+  const b = e.target.closest('button[data-lv]');
+  if(!b) return;
+  document.querySelectorAll('#aiTabs button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');
+  STATE.aiTab = b.dataset.lv;
+  renderChecks();
+});
+
+document.getElementById('checkList').addEventListener('click', e=>{
+  const actBtn = e.target.closest('button[data-act]');
+  if(actBtn){
+    e.stopPropagation();
+    actOnCheck(actBtn.dataset.cid, actBtn.dataset.act);
+    return;
+  }
+  const card = e.target.closest('.check[data-cid]');
+  if(card){
+    const id = card.dataset.cid;
+    if(STATE.openCheckIds.has(id)) STATE.openCheckIds.delete(id);
+    else STATE.openCheckIds.add(id);
+    // 同时跳转
+    const c = CHECKS.find(x=>x.id===id);
+    STATE.activeCheckId = id;
+    STATE.activeJump = null;
+    if(c.jump) renderDoc(c.jump);
+    else renderChecks();
+    return;
+  }
+});
+
+// 工作台顶部按钮
+document.getElementById('btnBatchPass').addEventListener('click', ()=>{
+  const greens = CHECKS.filter(c=>c.color==='green' && c.state==='pending');
+  if(greens.length===0){ toast('没有待放行的绿灯项', 'info'); return; }
+  greens.forEach(c=>{ c.state='accept'; recordAct(`${c.title}（${c.rule}）`, '采纳', '批量放行绿灯'); });
+  renderChecks();
+  updateSummary();
+  toast(`已批量放行 ${greens.length} 项绿灯`, 'success');
+});
+document.getElementById('btnToHuman').addEventListener('click', ()=>{
+  toast('已生成转人工工单 · 待合规/AML 复核', 'warn');
+  recordAct('案件整体', '转人工', '存在红线与多项目黄灯复核项');
+});
+document.getElementById('btnReturn').addEventListener('click', ()=>{
+  openModal('退回补充', '请说明退回补充的原因（将写入审计与留痕）。', text=>{
+    recordAct('案件整体', '打回', text);
+    toast('已退回业务员补充材料', 'error');
+  });
+});
+document.getElementById('btnSubmit').addEventListener('click', ()=>{
+  const redPending = CHECKS.filter(c=>c.color==='red' && c.state==='pending').length;
+  if(redPending>0){
+    toast('存在未处置的红灯项，不可提交审批', 'error');
+    return;
+  }
+  toast('已提交至信贷审批人', 'success');
+  recordAct('案件整体', '提交审批', '所有红灯项已处置');
+});
+
+// 重置
+document.getElementById('btnReset').addEventListener('click', ()=>{
+  if(!confirm('确认重置演示数据？所有操作记录与采纳/覆盖/打回状态将清除。')) return;
+  CHECKS.forEach(c=>c.state='pending');
+  STATE.audits = [];
+  STATE.openCheckIds = new Set();
+  STATE.activeCheckId = null;
+  STATE.activeJump = null;
+  STATE.docTab = 'drawdown';
+  renderTodos(); renderChecks(); renderPays(); renderDoc('drawdown'); renderAudit(); updateSummary();
+  toast('演示数据已重置', 'info');
+});
+
+// 合规页
+const PURPOSE_DB = [
+  {k:'日常经营', v:'正面清单', body:'允许：原材料采购、专业服务费、税赋缴纳、办公租金。', hit:true},
+  {k:'日常经营 · 服务费', v:'边界项', body:'专业服务费列入日常经营；顾问咨询费须附服务合同及发票，建议人工复核。', hit:true},
+  {k:'日常经营 · 付税', v:'正面清单', body:'税赋缴纳（含关税、增值税、企业所得税）列入日常经营。', hit:true},
+  {k:'股权 / 证券投资', v:'禁止性条款', body:'禁止：直接或间接用于股权、证券、期货、衍生品投资。', hit:false},
+  {k:'虚拟资产', v:'禁止性条款', body:'禁止：直接或间接用于虚拟资产交易。', hit:false},
+  {k:'偿还境外关联方贷款', v:'禁止性条款', body:'禁止：以本笔贷款偿还境外关联方借款。', hit:false},
+];
+document.getElementById('purposeSearch').addEventListener('click', doPurposeSearch);
+document.getElementById('purposeInput').addEventListener('keydown', e=>{ if(e.key==='Enter') doPurposeSearch(); });
+function doPurposeSearch(){
+  const q = (document.getElementById('purposeInput').value || '日常经营').trim();
+  const list = PURPOSE_DB.filter(x => x.k.includes(q) || q.includes(x.k.split(' · ')[0]));
+  const box = document.getElementById('purposeResult');
+  if(list.length===0){
+    box.innerHTML = `<div class="clause empty">未命中与「${q}」相关的条款</div>`;
+    toast('未命中条款', 'info');
+    return;
+  }
+  box.innerHTML = list.map(x=>`
+    <div class="clause">
+      <div class="head">
+        <b>${x.k}</b>
+        <span class="tag ${x.hit?'green':'red'}">${x.v}</span>
+      </div>
+      <div class="body">${x.body}</div>
+    </div>`).join('');
+  toast(`命中 ${list.length} 条与「${q}」相关的条款`, 'success');
+}
+
+const SANCTIONS = [
+  {name:'供应商 A', country:'中国大陆', code:'SUP-A-001', hit:false, meta:'已通过筛查'},
+  {name:'服务商 B', country:'第三国高风险地区', code:'SRV-B-9921', hit:true, meta:'OFAC SDN 关联名单二级 · 注册地命中'},
+  {name:'税务专户（境内）', country:'中国大陆', code:'TAX-CN-001', hit:false, meta:'政府账户 · 豁免'},
+  {name:'南星贸易（新加坡）', country:'新加坡', code:'NS-SG-114', hit:false, meta:'低风险'},
+];
+document.getElementById('sanctionSearch').addEventListener('click', doSanctionSearch);
+document.getElementById('sanctionInput').addEventListener('keydown', e=>{ if(e.key==='Enter') doSanctionSearch(); });
+function doSanctionSearch(){
+  const q = (document.getElementById('sanctionInput').value || '').trim();
+  const list = q ? SANCTIONS.filter(s=>s.name.includes(q) || s.country.includes(q) || s.code.includes(q)) : SANCTIONS;
+  const box = document.getElementById('sanctionResult');
+  if(list.length===0){
+    box.innerHTML = `<div class="clause empty">未在制裁名单中匹配到「${q}」</div>`;
+    toast('未匹配', 'info');
+    return;
+  }
+  box.innerHTML = list.map(s=>`
+    <div class="sanction-row ${s.hit?'hit':''}">
+      <div>
+        <div class="name">${s.name} ${s.hit?'<span class="lamp red" style="margin-left:6px"></span>':''}</div>
+        <div class="meta">${s.country} · <span class="mono">${s.code}</span></div>
+      </div>
+      <div style="text-align:right">
+        <span class="tag ${s.hit?'red':'green'}">${s.hit?'命中':'通过'}</span>
+        <div class="meta" style="margin-top:4px">${s.meta}</div>
+      </div>
+    </div>`).join('');
+  toast(someHits=list.some(s=>s.hit)?'命中制裁名单 · 须转合规人工复核':'未命中 · 通过', someHits?'error':'success');
+}
+
+// 审计筛选
+document.getElementById('auditFilter').addEventListener('click', e=>{
+  const b = e.target.closest('button[data-af]');
+  if(!b) return;
+  document.querySelectorAll('#auditFilter button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');
+  STATE.auditFilter = b.dataset.af;
+  renderAudit();
+});
+document.getElementById('btnExportAudit').addEventListener('click', ()=>{
+  const data = STATE.audits.map(a=>`[${a.ts}] ${a.who} | ${a.target} | ${a.act} | ${a.why}`).join('\n');
+  const blob = new Blob(['# 审计与留痕导出\n\n'+data], {type:'text/plain;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'audit-log.txt'; a.click();
+  URL.revokeObjectURL(url);
+  toast('审计记录已导出', 'success');
+});
+
+/* ============ 初始化 ============ */
+renderTodos();
+renderChecks();
+renderPays();
+renderDoc('drawdown');
+renderAudit();
+updateSummary();
+doPurposeSearch(); // 默认载入
+doSanctionSearch(); // 默认载入
+</script>
+</body>
+</html>

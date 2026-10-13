@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智汇跨境贷途 · 跨境贷款文件智能审核台</title>
+<style>
+:root{
+  --red:#DB0011; --red-bg:#fdeaea;
+  --green:#16a34a; --green-bg:#e9f7ee;
+  --amber:#d97706; --amber-bg:#fdf3e3;
+  --gray:#9ca3af; --gray-bg:#f3f4f6;
+  --ink:#1f2329; --ink2:#5c6470; --line:#e5e7eb;
+  --bg:#f4f5f7; --card:#ffffff;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;}
+body{font-family:"Segoe UI","Microsoft YaHei","PingFang SC","Hiragino Sans GB",Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:13px;overflow:hidden;}
+::-webkit-scrollbar{width:8px;height:8px;}
+::-webkit-scrollbar-thumb{background:#cfd4dc;border-radius:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+
+/* ===== 顶栏 ===== */
+header{height:52px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 20px;flex-shrink:0;}
+.logo{display:flex;align-items:center;gap:10px;}
+.logo-mark{width:26px;height:26px;border-radius:4px;background:var(--red);color:#fff;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;}
+.logo-name{font-size:15px;font-weight:700;}
+.logo-name em{font-style:normal;color:var(--red);}
+nav{display:flex;gap:4px;margin-left:36px;height:100%;}
+nav a{display:flex;align-items:center;padding:0 16px;cursor:pointer;color:var(--ink2);border-bottom:2.5px solid transparent;user-select:none;font-size:13.5px;}
+nav a:hover{color:var(--ink);background:#fafafa;}
+nav a.on{color:var(--red);border-bottom-color:var(--red);font-weight:600;}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:14px;}
+.user{display:flex;align-items:center;gap:8px;color:var(--ink2);}
+.avatar{width:26px;height:26px;border-radius:50%;background:#eef0f3;color:var(--ink2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;}
+.btn{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:5px;padding:5px 12px;cursor:pointer;font-size:12.5px;}
+.btn:hover{border-color:#c9cdd4;background:#fafafa;}
+.btn-primary{background:var(--red);border-color:var(--red);color:#fff;}
+.btn-primary:hover{background:#c2000f;}
+.btn-primary:disabled{background:#f3b8bd;border-color:#f3b8bd;cursor:not-allowed;}
+.btn-ghost-red{color:var(--red);border-color:#f0c2c6;background:#fff;}
+.btn-ghost-red:hover{background:var(--red-bg);}
+.btn-sm{padding:3px 9px;font-size:12px;}
+
+/* ===== 页面容器 ===== */
+main{height:calc(100vh - 52px);position:relative;}
+.page{display:none;height:100%;overflow:auto;padding:18px 20px;}
+.page.on{display:block;}
+#page-case.on{display:flex;flex-direction:column;overflow:hidden;padding:0;}
+
+/* ===== 灯 ===== */
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;flex-shrink:0;vertical-align:-1px;}
+.dot.g{background:var(--green);} .dot.y{background:var(--amber);} .dot.r{background:var(--red);} .dot.w{background:#d1d5db;border:1px solid #b6bcc6;}
+.lg{color:var(--green);font-weight:600;} .ly{color:var(--amber);font-weight:600;} .lr{color:var(--red);font-weight:600;} .lw{color:var(--ink2);font-weight:600;}
+.lsum{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--ink2);}
+.lsum .dot{width:8px;height:8px;}
+
+/* ===== 待办页 ===== */
+.stats-row{display:flex;gap:14px;margin-bottom:16px;}
+.stat-card{flex:1;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 18px;}
+.stat-card .n{font-size:26px;font-weight:700;line-height:1.2;}
+.stat-card .l{color:var(--ink2);margin-top:3px;}
+.stat-card.hl .n{color:var(--red);}
+.case-card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:18px 20px;display:flex;align-items:center;gap:22px;cursor:pointer;transition:box-shadow .15s;}
+.case-card:hover{box-shadow:0 4px 14px rgba(0,0,0,.08);border-color:#d8dbe0;}
+.cc-no{font-size:15px;font-weight:700;}
+.cc-bor{color:var(--ink2);margin-top:3px;}
+.cc-mid{flex:1;}
+.cc-tags{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;}
+.tag{background:#f3f4f6;border-radius:4px;padding:2px 8px;color:var(--ink2);font-size:12px;}
+.tag.red{background:var(--red-bg);color:var(--red);}
+.cc-lights{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--ink2);min-width:210px;}
+.cc-lights .row{display:flex;gap:12px;}
+.status-chip{background:#eef4ff;color:#2b5fd9;border-radius:4px;padding:3px 10px;font-size:12px;font-weight:600;}
+
+/* ===== 工作台布局 ===== */
+.case-wrap{flex:1;min-height:0;display:flex;flex-direction:column;}
+.three-col{flex:1;min-height:0;display:flex;gap:0;}
+.col{overflow-y:auto;min-height:0;background:var(--bg);}
+.col-left{width:264px;flex-shrink:0;border-right:1px solid var(--line);background:#fbfbfc;padding:12px;}
+.col-mid{flex:1;min-width:0;padding:12px 14px;}
+.col-right{width:384px;flex-shrink:0;border-left:1px solid var(--line);background:#fbfbfc;padding:12px;}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:8px;margin-bottom:10px;}
+.panel-h{padding:9px 12px;border-bottom:1px solid var(--line);font-weight:600;display:flex;align-items:center;gap:8px;font-size:13px;}
+.panel-b{padding:10px 12px;}
+
+/* 左栏 */
+.kv{display:flex;gap:8px;padding:3px 0;font-size:12.5px;}
+.kv .k{width:70px;color:var(--ink2);flex-shrink:0;}
+.kv .v{font-weight:500;word-break:break-all;}
+.tree-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:5px;cursor:pointer;color:var(--ink);font-size:12.5px;}
+.tree-item:hover{background:#f0f1f4;}
+.tree-item.on{background:var(--red-bg);color:var(--red);font-weight:600;}
+.tree-sec{color:var(--ink2);font-size:11.5px;margin:10px 0 4px;font-weight:600;letter-spacing:.5px;}
+.tree-item .ic{width:15px;height:15px;flex-shrink:0;}
+
+/* 流程条 */
+.flow{display:flex;align-items:stretch;gap:0;}
+.flow-step{flex:1;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 14px;position:relative;}
+.flow-step h4{font-size:13px;margin-bottom:5px;display:flex;align-items:center;gap:8px;}
+.flow-step .sub{color:var(--ink2);font-size:12px;line-height:1.7;}
+.flow-arrow{display:flex;align-items:center;padding:0 8px;color:#b8bec8;font-size:20px;font-weight:700;}
+.flow-note{background:var(--card);border:1px dashed #f0c2c6;border-radius:8px;padding:8px 14px;margin-top:8px;color:var(--ink2);font-size:12.5px;display:flex;gap:8px;align-items:flex-start;}
+.flow-note b{color:var(--red);}
+.note-ic{color:var(--red);font-weight:700;flex-shrink:0;}
+
+/* 筛选 */
+.filters{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:10px;}
+.f-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+.f-row+.f-row{margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);}
+.f-label{color:var(--ink2);font-size:12px;margin-right:2px;}
+.ftab{border:1px solid var(--line);background:#fff;border-radius:14px;padding:3px 12px;cursor:pointer;font-size:12.5px;color:var(--ink2);user-select:none;}
+.ftab:hover{border-color:#c9cdd4;}
+.ftab.on{background:var(--ink);color:#fff;border-color:var(--ink);}
+.ftab.on.red{background:var(--red);border-color:var(--red);}
+.f-count{font-weight:700;}
+.f-right{margin-left:auto;}
+.batch-btn{color:var(--ink2);font-size:12px;cursor:pointer;text-decoration:underline;}
+.batch-btn:hover{color:var(--red);}
+
+/* 校验列表 */
+.chk{background:var(--card);border:1px solid var(--line);border-radius:7px;margin-bottom:7px;overflow:hidden;}
+.chk.done{opacity:.92;}
+.chk-row{display:flex;align-items:center;gap:9px;padding:8px 12px;cursor:pointer;}
+.chk-row:hover{background:#fafafa;}
+.chk-rule{font-weight:700;font-size:12px;color:var(--ink2);background:#f3f4f6;border-radius:4px;padding:1px 6px;flex-shrink:0;}
+.chk-title{flex:1;font-size:12.8px;line-height:1.45;}
+.chk-state{font-size:11.5px;border-radius:4px;padding:1px 7px;flex-shrink:0;}
+.chk-state.pend{background:var(--amber-bg);color:var(--amber);}
+.chk-state.auto{background:var(--green-bg);color:var(--green);}
+.chk-state.done{background:#eef4ff;color:#2b5fd9;}
+.chk-flash{animation:flash 1.6s ease 2;}
+@keyframes flash{0%,100%{box-shadow:0 0 0 0 rgba(219,0,17,0);}40%{box-shadow:0 0 0 3px rgba(219,0,17,.45);border-color:var(--red);}}
+.chk-detail{border-top:1px solid var(--line);background:#fbfcfd;padding:11px 14px;display:none;}
+.chk.open .chk-detail{display:block;}
+.ai-line{display:flex;gap:8px;font-size:12.5px;color:var(--ink2);line-height:1.65;margin-bottom:8px;}
+.ai-ic{flex-shrink:0;width:17px;height:17px;border-radius:4px;background:linear-gradient(135deg,#7c3aed,#2563eb);color:#fff;font-size:10.5px;display:flex;align-items:center;justify-content:center;font-weight:700;}
+.loc-line{font-size:12px;color:var(--ink2);margin-bottom:10px;}
+.loc-line b{color:var(--ink);}
+.loc-btn{margin-bottom:10px;}
+.dispose{background:#fff;border:1px solid var(--line);border-radius:6px;padding:10px;}
+.dispose-t{font-size:12px;font-weight:600;margin-bottom:7px;}
+.dispose .hint{font-size:11.5px;color:var(--ink2);margin-bottom:7px;line-height:1.6;}
+textarea{width:100%;border:1px solid var(--line);border-radius:5px;padding:6px 8px;font-family:inherit;font-size:12.5px;resize:vertical;min-height:52px;outline:none;}
+textarea:focus{border-color:var(--red);}
+.d-btns{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;}
+.done-box{font-size:12.5px;line-height:1.7;}
+.done-box .undo{color:#2b5fd9;cursor:pointer;text-decoration:underline;margin-left:6px;}
+.chk-empty{color:var(--ink2);text-align:center;padding:26px 0;background:var(--card);border:1px dashed var(--line);border-radius:7px;}
+
+/* 文档查看器 */
+.doc-title{display:flex;align-items:center;gap:8px;}
+.doc-badge{background:#f3f4f6;border-radius:4px;padding:1px 7px;font-size:11px;color:var(--ink2);font-weight:400;}
+.fld{display:flex;gap:12px;padding:7px 10px;border-left:3px solid transparent;border-radius:5px;font-size:12.8px;}
+.fld.ref{border-left-color:#f3c6c9;background:#fffafa;}
+.fld .fk{width:150px;flex-shrink:0;color:var(--ink2);}
+.fld .fv{flex:1;line-height:1.6;word-break:break-all;}
+.fld.hl{background:var(--amber-bg);border-left-color:var(--red);animation:fldflash 1.5s ease 2;}
+@keyframes fldflash{0%,100%{background:var(--amber-bg);}50%{background:#fbe0b6;}}
+.fx-note{font-size:11.5px;color:var(--ink2);background:var(--gray-bg);border-radius:5px;padding:6px 10px;margin-bottom:8px;}
+.sup-tb{width:100%;border-collapse:collapse;font-size:12.3px;}
+.sup-tb th{background:#f7f8fa;color:var(--ink2);font-weight:600;text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);}
+.sup-tb td{padding:6px 8px;border-bottom:1px solid #f0f1f3;}
+.sup-ok{color:var(--green);}
+
+/* 右栏 AI 面板 */
+.risk{border:1px solid #f0d9a8;background:#fffaf0;border-radius:6px;padding:9px 11px;margin-bottom:8px;}
+.risk.red{border-color:#f0c2c6;background:var(--red-bg);}
+.risk-t{font-weight:600;font-size:12.5px;display:flex;gap:6px;align-items:center;margin-bottom:4px;}
+.risk-b{font-size:12px;color:var(--ink2);line-height:1.65;}
+.tpl-box{background:#fff;border:1px solid var(--line);border-radius:6px;padding:9px 11px;margin-top:8px;font-size:12.3px;line-height:1.75;white-space:pre-wrap;color:#3a4150;}
+.tpl-box .tpl-cap{font-weight:600;color:var(--ink);margin-bottom:4px;}
+.sel-info{background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:12.3px;margin-bottom:8px;line-height:1.6;}
+.sel-info .none{color:var(--ink2);}
+.quick-btns{display:flex;gap:8px;flex-wrap:wrap;}
+
+/* 支付指令表 */
+.pay-sec{border-top:1px solid var(--line);background:var(--bg);flex-shrink:0;max-height:265px;overflow-y:auto;padding:10px 14px 12px;}
+.pay-panel{background:var(--card);border:1px solid var(--line);border-radius:8px;}
+.pay-h{padding:9px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;font-weight:600;}
+.fx-tag{font-size:11.5px;color:var(--ink2);background:var(--gray-bg);border-radius:4px;padding:2px 8px;font-weight:400;}
+.pay-tb{width:100%;border-collapse:collapse;font-size:12.3px;}
+.pay-tb th{background:#f7f8fa;color:var(--ink2);font-weight:600;text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap;}
+.pay-tb td{padding:7px 10px;border-bottom:1px solid #f0f1f3;vertical-align:top;}
+.pay-tb tr.prow{cursor:pointer;}
+.pay-tb tr.prow:hover{background:#fafafa;}
+.badge-ai{display:inline-block;background:linear-gradient(135deg,#7c3aed,#2563eb);color:#fff;border-radius:3px;font-size:10px;padding:0 4px;margin-left:5px;font-weight:600;}
+.diff{color:var(--red);font-weight:600;background:var(--red-bg);border-radius:3px;padding:0 4px;}
+.pdet{background:#fbfcfd;}
+.pdet td{padding:0;}
+.pdet-in{padding:10px 14px;}
+.pdet-tb{width:100%;border-collapse:collapse;font-size:12.2px;}
+.pdet-tb th{background:#fff;color:var(--ink2);text-align:left;font-weight:600;padding:5px 8px;border-bottom:1px solid var(--line);}
+.pdet-tb td{padding:5px 8px;border-bottom:1px solid #f0f1f3;}
+.ok-t{color:var(--green);}
+.bad-t{color:var(--red);font-weight:600;}
+
+/* 状态条 */
+.status-bar{height:46px;flex-shrink:0;background:#fff;border-top:1px solid var(--line);display:flex;align-items:center;gap:18px;padding:0 20px;}
+.sb-lights{display:flex;gap:14px;font-size:12.5px;color:var(--ink2);}
+.sb-prog{font-size:12.5px;color:var(--ink2);}
+.sb-prog b{color:var(--red);font-size:14px;}
+.sb-btn{margin-left:auto;}
+
+/* ===== 规则库页 ===== */
+.mod-head{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:16px;}
+.mod-head h3{font-size:14px;}
+.mod-head .sub{color:var(--ink2);font-size:12.5px;}
+.rule-card{background:var(--card);border:1px solid var(--line);border-radius:8px;margin-bottom:10px;overflow:hidden;}
+.rc-h{display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;}
+.rc-h:hover{background:#fafafa;}
+.rc-no{background:var(--ink);color:#fff;border-radius:4px;font-size:11.5px;font-weight:700;padding:2px 7px;flex-shrink:0;}
+.rc-name{font-weight:600;font-size:13px;flex:1;}
+.rc-pair{color:var(--ink2);font-size:11.5px;background:#f3f4f6;border-radius:4px;padding:2px 8px;}
+.rc-b{border-top:1px solid var(--line);padding:11px 14px;background:#fbfcfd;display:none;}
+.rule-card.open .rc-b{display:block;}
+.rc-sec{margin-bottom:8px;}
+.rc-sec .cap{font-size:11.5px;color:var(--ink2);font-weight:600;margin-bottom:3px;}
+.rc-sec .txt{font-size:12.5px;line-height:1.7;}
+.rc-hits{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.rc-view{margin-left:auto;}
+
+/* ===== 审计页 ===== */
+.aud-filters{display:flex;gap:8px;margin-bottom:14px;}
+.tl{position:relative;padding-left:26px;}
+.tl::before{content:"";position:absolute;left:8px;top:6px;bottom:6px;width:2px;background:var(--line);}
+.tl-item{position:relative;margin-bottom:14px;}
+.tl-item::before{content:"";position:absolute;left:-22px;top:5px;width:10px;height:10px;border-radius:50%;background:#fff;border:2.5px solid #9ca3af;}
+.tl-item.sys::before{border-color:#2b5fd9;}
+.tl-item.user::before{border-color:var(--red);}
+.tl-card{background:var(--card);border:1px solid var(--line);border-radius:7px;padding:10px 14px;}
+.tl-time{font-size:11.5px;color:var(--ink2);margin-bottom:3px;display:flex;gap:10px;align-items:center;}
+.tl-type{border-radius:3px;padding:0 5px;font-size:10.5px;font-weight:600;}
+.tl-type.sys{background:#eef4ff;color:#2b5fd9;}
+.tl-type.user{background:var(--red-bg);color:var(--red);}
+.tl-text{font-size:12.8px;line-height:1.65;}
+
+/* toast / modal */
+#toast{position:fixed;top:64px;left:50%;transform:translateX(-50%) translateY(-8px);background:var(--ink);color:#fff;border-radius:6px;padding:9px 20px;font-size:13px;opacity:0;pointer-events:none;transition:all .25s;z-index:999;box-shadow:0 6px 20px rgba(0,0,0,.25);}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+#modal-mask{position:fixed;inset:0;background:rgba(20,22,26,.42);display:none;align-items:center;justify-content:center;z-index:998;}
+#modal-mask.show{display:flex;}
+#modal{background:#fff;border-radius:10px;width:460px;max-width:92vw;box-shadow:0 16px 50px rgba(0,0,0,.25);}
+#modal .m-h{padding:14px 18px;border-bottom:1px solid var(--line);font-weight:700;font-size:14px;}
+#modal .m-b{padding:16px 18px;font-size:12.8px;line-height:1.7;color:var(--ink2);}
+#modal .m-b textarea{margin-top:8px;min-height:70px;color:var(--ink);}
+#modal .m-f{padding:12px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:10px;}
+.req{color:var(--red);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-mark">汇</div>
+    <div class="logo-name">智汇跨境贷途 <em>·</em> 跨境贷款文件智能审核台</div>
+  </div>
+  <nav id="nav">
+    <a data-pg="todo" class="on">待办</a>
+    <a data-pg="case">案件工作台</a>
+    <a data-pg="rules">比对规则库</a>
+    <a data-pg="audit">审计留痕</a>
+  </nav>
+  <div class="hdr-right">
+    <div class="user"><div class="avatar">张</div>张敏 · 贷款运营专员</div>
+    <button class="btn" onclick="resetDemo()">重置演示</button>
+  </div>
+</header>
+
+<main>
+  <!-- 页1 待办 -->
+  <section class="page on" id="page-todo">
+    <div class="stats-row">
+      <div class="stat-card"><div class="n">1</div><div class="l">今日待办案件</div></div>
+      <div class="stat-card"><div class="n ly">2</div><div class="l">待复核</div></div>
+      <div class="stat-card hl"><div class="n lr">5</div><div class="l">违规拦截</div></div>
+      <div class="stat-card"><div class="n">3</div><div class="l">本月已完成</div></div>
+    </div>
+    <div class="case-card" onclick="goPage('case')">
+      <div class="cc-mid">
+        <div class="cc-no">CASE-2026-0312 · 上海恒钢贸易有限公司</div>
+        <div class="cc-bor">钢材采购流动资金贷款 · 提款人民币 2,000 万元 · 第一段（人民币循环贷款授信）</div>
+        <div class="cc-tags">
+          <span class="status-chip">两阶段预检完成 · 待人工处理</span>
+          <span class="tag">授信函 FOL-2026-SH-0188</span>
+          <span class="tag">申请书 1 份</span>
+          <span class="tag">支付指令 4 笔</span>
+          <span class="tag red">需人工处置 7 项</span>
+        </div>
+      </div>
+      <div class="cc-lights">
+        <div class="row"><span>模块一 · 授信申请核对</span><span class="lsum"><span class="dot g"></span>13 <span class="dot w"></span>1 <span class="dot r"></span>2</span></div>
+        <div class="row"><span>模块二 · 支付指令核对</span><span class="lsum"><span class="dot g"></span>10 <span class="dot y"></span>1 <span class="dot r"></span>3</span></div>
+        <div class="row"><span>AI 辅助识别</span><span class="lsum"><span class="dot g"></span>1 <span class="dot y"></span>1</span></div>
+      </div>
+      <button class="btn btn-primary" onclick="event.stopPropagation();goPage('case')">进入工作台</button>
+    </div>
+  </section>
+
+  <!-- 页2 案件工作台 -->
+  <section class="page" id="page-case">
+    <div class="case-wrap">
+      <div class="three-col">
+        <div class="col col-left" id="col-left"></div>
+        <div class="col col-mid" id="col-mid"></div>
+        <div class="col col-right" id="col-right"></div>
+      </div>
+      <div class="pay-sec" id="pay-sec"></div>
+    </div>
+    <div class="status-bar" id="status-bar"></div>
+  </section>
+
+  <!-- 页3 比对规则库 -->
+  <section class="page" id="page-rules"></section>
+
+  <!-- 页4 审计留痕 -->
+  <section class="page" id="page-audit">
+    <div class="aud-filters" id="aud-filters"></div>
+    <div class="tl" id="aud-tl"></div>
+  </section>
+</main>
+
+<div id="toast"></div>
+<div id="modal-mask"><div id="modal"></div></div>
+
+<script>
+/* =====================================================
+   演示数据（全部内置，运行时内存态）
+   ===================================================== */
+
+/* 文档数据 */
+var DOCS = {
+  fol: { name:"授信函 FOL-2026-SH-0188", fields:[
+    {id:"fol-borrower", k:"借款人", v:"上海恒钢贸易有限公司"},
+    {id:"fol-lender", k:"贷款人", v:"汇丰银行（中国）有限公司上海分行"},
+    {id:"fol-date", k:"订立日期", v:"2026 年 1 月 15 日"},
+    {id:"fol-total", k:"授信总金额", v:"人民币 5,000 万元，分三段"},
+    {id:"fol-t1", k:"第一段", v:"人民币循环贷款授信，人民币 3,000 万元"},
+    {id:"fol-t2", k:"第二段", v:"多币种进口贸易融资授信，等值人民币 1,500 万元，授信使用的货币可为贷款人同意的任何币种"},
+    {id:"fol-t3", k:"第三段", v:"人民币透支授信，人民币 500 万元"},
+    {id:"fol-use", k:"用途（第一段特别授信条款）", v:"满足借款人流动资金需求，包括购买货物、原材料、生产资料（含钢材等大宗商品采购）"},
+    {id:"fol-cond", k:"授信使用条件（第一段）", v:"授信使用的货币为人民币；每笔贷款（含续借）的期限不得超过 12 个月"},
+    {id:"fol-rate", k:"利息（第一段）", v:"适用利率为 1 年期贷款市场报价利率（LPR）加 1.50%（当前 4.50%，演示利率）"},
+    {id:"fol-ip", k:"利息期（第一段）", v:"1 个月、3 个月或 6 个月"},
+    {id:"fol-repay", k:"还款（第一段）", v:"每笔贷款于到期日一次性归还本金（无分期还款计划）"},
+    {id:"fol-paylimit", k:"贷款资金发放（第一段）", v:"银行受托支付的支付限额为人民币 500 万元或其等值币种；超过该限额的授信使用应采用银行受托支付"}
+  ]},
+  app: { name:"授信使用申请书", fields:[
+    {id:"app-date", k:"日期", v:"（空白，未填写）"},
+    {id:"app-to", k:"致", v:"汇丰银行（中国）有限公司上海分行"},
+    {id:"app-folref", k:"授信函引用", v:"于 2026 年 1 月 15 日订立的银行授信函"},
+    {id:"app-a", k:"(a) 拟授信使用日", v:"2026 年 3 月 16 日"},
+    {id:"app-b", k:"(b) 拟使用的授信段", v:"第一段（人民币循环贷款授信）"},
+    {id:"app-c", k:"(c) 拟使用的授信", v:"人民币循环贷款授信"},
+    {id:"app-d", k:"(d) 币种", v:"人民币"},
+    {id:"app-e", k:"(e) 金额", v:"人民币 20,000,000 元（2,000 万元）"},
+    {id:"app-f", k:"(f) 利息期", v:"3 个月"},
+    {id:"app-g", k:"(g) 利率", v:"1 年期 LPR + 1.50%（当前 4.50%）"},
+    {id:"app-h", k:"(h) 到期日", v:"2027 年 4 月 16 日"},
+    {id:"app-i", k:"(i) 用途", v:"勾选「流动资金」，附文字：购买钢材（热轧卷板、冷轧不锈钢卷、螺纹钢、钢坯）并支付货款"},
+    {id:"app-j", k:"(j) 放款指示", v:"户名上海恒钢贸易有限公司，账号 100-200030-018，开户行汇丰银行（中国）有限公司上海分行"},
+    {id:"app-k", k:"(k) 支付方式", v:"勾选「借款人自主支付」"},
+    {id:"app-p2", k:"第 2 条 确认与承诺", v:"与标准条款一致"}
+  ]},
+  p1: { name:"支付指令 P1 · 境外汇款申请书", fields:[
+    {id:"p1-rem", k:"汇款人", v:"上海恒钢贸易有限公司"},
+    {id:"p1-acct", k:"汇款人账号", v:"100-200030-018"},
+    {id:"p1-ben", k:"收款人", v:"Nippon Steel Corporation（日本制铁株式会社）"},
+    {id:"p1-ctry", k:"收款人所在国家/地区", v:"日本"},
+    {id:"p1-amt", k:"汇款币种及金额", v:"USD 1,120,000"},
+    {id:"p1-words", k:"金额大写", v:"US DOLLARS ONE MILLION ONE HUNDRED TWENTY THOUSAND ONLY"},
+    {id:"p1-memo", k:"交易附言", v:"货物：热轧卷板 2,000 吨"}
+  ]},
+  p2: { name:"支付指令 P2 · 境外汇款申请书", fields:[
+    {id:"p2-rem", k:"汇款人", v:"上海恒钢贸易有限公司"},
+    {id:"p2-acct", k:"汇款人账号", v:"100-200030-019"},
+    {id:"p2-ben", k:"收款人", v:"POSCO（浦项制铁）"},
+    {id:"p2-ctry", k:"收款人所在国家/地区", v:"韩国"},
+    {id:"p2-amt", k:"汇款币种及金额", v:"USD 850,000"},
+    {id:"p2-words", k:"金额大写", v:"US DOLLARS EIGHT HUNDRED FIFTY THOUSAND ONLY"},
+    {id:"p2-memo", k:"交易附言", v:"货物：冷轧不锈钢卷 500 吨"}
+  ]},
+  p3: { name:"支付指令 P3 · 境外汇款申请书", fields:[
+    {id:"p3-rem", k:"汇款人", v:"上海恒钢贸易有限公司"},
+    {id:"p3-acct", k:"汇款人账号", v:"100-200030-018"},
+    {id:"p3-ben", k:"收款人", v:"Tata Steel Limited（塔塔钢铁）"},
+    {id:"p3-ctry", k:"收款人所在国家/地区", v:"印度"},
+    {id:"p3-amt", k:"汇款币种及金额", v:"USD 680,000"},
+    {id:"p3-words", k:"金额大写", v:"US DOLLARS EIGHT HUNDRED SIXTY THOUSAND ONLY"},
+    {id:"p3-memo", k:"交易附言", v:"货物：螺纹钢 1,200 吨"}
+  ]},
+  p4: { name:"支付指令 P4 · 境外汇款申请书", fields:[
+    {id:"p4-rem", k:"汇款人", v:"上海恒钢贸易（集团）有限公司"},
+    {id:"p4-acct", k:"汇款人账号", v:"100-200030-018"},
+    {id:"p4-ben", k:"收款人", v:"Skyline Metal Trading Co., Ltd."},
+    {id:"p4-ctry", k:"收款人所在国家/地区", v:"开曼群岛 乔治敦"},
+    {id:"p4-amt", k:"汇款币种及金额", v:"USD 150,000"},
+    {id:"p4-words", k:"金额大写", v:"US DOLLARS ONE HUNDRED FIFTY THOUSAND ONLY"},
+    {id:"p4-memo", k:"交易附言", v:"货物：钢坯 800 吨"}
+  ]},
+  sup: { name:"支持文件（12 份）", fields:[
+    {id:"sup-list", k:"文件清单", v:"采购合同 4 份、商业发票 4 份、提单 4 份（对应 P1–P4），发票金额与支付指令一致，货物描述与合同一致"}
+  ]}
+};
+
+var FILE_TREE = [
+  {sec:"主文件"},
+  {f:"fol", n:"授信函 FOL-2026-SH-0188"},
+  {f:"app", n:"授信使用申请书"},
+  {f:"p1", n:"支付指令 P1 · 境外汇款申请书"},
+  {f:"p2", n:"支付指令 P2 · 境外汇款申请书"},
+  {f:"p3", n:"支付指令 P3 · 境外汇款申请书"},
+  {f:"p4", n:"支付指令 P4 · 境外汇款申请书"},
+  {sec:"支持文件"},
+  {f:"sup", n:"支持文件清单（合同 / 发票 / 提单）"}
+];
+
+/* 支付指令汇总 */
+var PAYS = [
+  {id:"P1", ben:"Nippon Steel Corporation（日本制铁株式会社）", ctry:"日本", cur:"USD", amt:1120000, words:"对应 1,120,000", goods:"热轧卷板 2,000 吨", acct:"100-200030-018", acctOk:true, rem:"上海恒钢贸易有限公司", remOk:true, wordsOk:true, ai:false},
+  {id:"P2", ben:"POSCO（浦项制铁）", ctry:"韩国", cur:"USD", amt:850000, words:"对应 850,000", goods:"冷轧不锈钢卷 500 吨", acct:"100-200030-019", acctOk:false, rem:"上海恒钢贸易有限公司", remOk:true, wordsOk:true, ai:false},
+  {id:"P3", ben:"Tata Steel Limited（塔塔钢铁）", ctry:"印度", cur:"USD", amt:680000, words:"大写对应 860,000（EIGHT HUNDRED SIXTY THOUSAND）", goods:"螺纹钢 1,200 吨", acct:"100-200030-018", acctOk:true, rem:"上海恒钢贸易有限公司", remOk:true, wordsOk:false, ai:false},
+  {id:"P4", ben:"Skyline Metal Trading Co., Ltd.", ctry:"开曼群岛 乔治敦", cur:"USD", amt:150000, words:"对应 150,000", goods:"钢坯 800 吨", acct:"100-200030-018", acctOk:true, rem:"上海恒钢贸易（集团）有限公司", remOk:false, wordsOk:true, ai:true}
+];
+
+var RULES_M1 = [
+  {no:"R01", name:"日期", pair:"申请书-日期 ↔ FOL-订立日 / 申请书-拟授信使用日", std:"申请书日期若有值，须不早于授信函订立日（第一段），也不早于拟授信使用日；若为空则忽略"},
+  {no:"R02", name:"分支行", pair:"申请书-致 ↔ FOL-贷款人", std:"必填；FOL 有具体分支行时须与其一致；FOL 表述为「汇丰银行(中国)有限公司(通过任一或多个分支行行事)」时提示人工检查"},
+  {no:"R03", name:"授信函日期", pair:"申请书-授信函引用 ↔ FOL-订立日期", std:"申请书引用的授信函日期须等于 FOL 最初或最新的日期"},
+  {no:"R04", name:"拟授信使用日", pair:"申请书-(a)", std:"必填；不应为中国及对应币种节假日；应不早于当前日期"},
+  {no:"R05", name:"授信段", pair:"申请书-(b) ↔ FOL-授信段", std:"可为空；有值时须与 FOL 中该授信段表述一致（不考虑中英文差异）"},
+  {no:"R06", name:"授信", pair:"申请书-(c) ↔ FOL-对应段落", std:"必填；所填内容须在 FOL 对应段落有相同表述"},
+  {no:"R07", name:"提款币种", pair:"申请书-(d) ↔ FOL-使用条件", std:"必填；须在 FOL 对应授信条款表述的币种范围内；若 FOL 表述为「授信使用的货币可为贷款人同意的任何币种」则忽略比对"},
+  {no:"R08", name:"提款金额", pair:"申请书-(e) ↔ FOL-金额", std:"必填；须小于等于 FOL 对应授信的金额"},
+  {no:"R09", name:"利息期", pair:"申请书-(f) ↔ FOL-利息期", std:"可为空；有值时须与 FOL 表述一致，FOL 有多个值时符合其一即可；若 FOL 有「贷款人同意的」类表述则忽略比较"},
+  {no:"R10", name:"利率", pair:"申请书-(g) ↔ FOL-利息", std:"必填；须与 FOL 对应利率一致；若 FOL 表述为「适用利率由贷款人和借款人在授信使用日确定」则忽略比较"},
+  {no:"R11", name:"到期日 · 有效性", pair:"申请书-(h)", std:"必填；到期日不应为本地和币种节假日"},
+  {no:"R12", name:"到期日 · 期限与还款计划", pair:"申请书-(h) ↔ FOL-使用条件", std:"到期日减提款日所得期限不得长于 FOL 要求期限（特别授信条款的期限上限，或 FOL 期限条款）；若 FOL 条款为「自首个授信使用日/借款人签署本授信函之日起[**]年/月」式，需用户输入相关日期；并需结合特别授信条款中的还款计划（如有）与累计提款金额，按计划的金额/比例核对到期日，需用户输入历史提款总额；AI 可辅助生成还款计划用于勾稽。本案 FOL 无还款计划、期限上限 12 个月，只需核对期限上限"},
+  {no:"R13", name:"用途", pair:"申请书-(i) ↔ FOL-用途", std:"必填（勾选部分可不填）；须在 FOL 用途范围内，且不得用于以下用途：股东分红，金融资产、固定资产（固定资产贷款不适用）、股权等投资，证券市场、期货市场、房地产市场（房地产开发贷不适用），转贷，票据解付，支付奖金（含管理人员绩效工资）或缴纳罚款，虚增财政收入，新增地方政府隐性债务（如用于政府项目或其相关债务等），国家禁止生产、经营的领域和用途"},
+  {no:"R14", name:"放款指示账号", pair:"申请书-(j)", std:"必填；我行账号为 12 位数字，格式 xxx-xxxxxx-xxx 或 xxxxxxxxxxxx"},
+  {no:"R15", name:"支付方式", pair:"申请书-(k) ↔ FOL-贷款资金发放", std:"必填；当提款金额大于 FOL 中「银行受托支付」的支付限额时，应勾选「银行受托支付」"},
+  {no:"R16", name:"承诺内容", pair:"申请书-第 2 条 ↔ 标准条款", std:"应和标准内容一致"}
+];
+var RULES_M2 = [
+  {no:"R17", name:"币种", pair:"申请书-(d) ↔ 各支付指令-汇款币种", std:"提款指令币种与支付指令汇款币种可以不相等（信息性规则）"},
+  {no:"R18", name:"金额", pair:"申请书-(e) ↔ 各支付指令-金额汇总", std:"若币种相等，支付指令加总金额应大于等于提款金额；若币种不相等，按提款指令币种汇率折算后，支付指令加总金额应大于等于提款金额"},
+  {no:"R19", name:"金额大写", pair:"各支付指令-金额大写 ↔ 汇款金额", std:"每笔支付指令的大写金额应和其汇款金额表示一致"},
+  {no:"R20", name:"支付账号", pair:"各支付指令-账号 ↔ 申请书-(j) 放款指示账号", std:"每笔支付指令的账号应等于申请书的放款指示账号"},
+  {no:"R21", name:"汇款人名称", pair:"各支付指令-汇款人 ↔ FOL-借款人", std:"每笔支付指令的汇款人名称应等于 FOL 借款人名称"}
+];
+var ALL_RULES = RULES_M1.concat(RULES_M2);
+function ruleOf(no){ for(var i=0;i<ALL_RULES.length;i++) if(ALL_RULES[i].no===no) return ALL_RULES[i]; return null; }
+function ruleModule(no){ return parseInt(no.substring(1),10)<=16 ? "m1" : "m2"; }
+
+/* 32 项校验结果（不可增删改） */
+var CHECKS_DEF = [
+  {id:"c01", m:"m1", rule:"R01", l:"w", t:"申请书「日期」栏空白，规则规定为空则忽略", ai:"规则明确约定日期为空则忽略比对，无需人工处理，不计入待处理数。", f:"app", fld:"app-date", loc:"申请书-日期"},
+  {id:"c02", m:"m1", rule:"R02", l:"g", t:"上海分行与 FOL 贷款人一致", ai:"申请书抬头「汇丰银行（中国）有限公司上海分行」与授信函贷款人完全一致。", f:"app", fld:"app-to", loc:"申请书-抬头 / FOL-贷款人"},
+  {id:"c03", m:"m1", rule:"R03", l:"g", t:"引用 2026-01-15，等于 FOL 订立日", ai:"申请书引用的授信函订立日与 FOL-2026-SH-0188 订立日期一致。", f:"app", fld:"app-folref", loc:"申请书-授信函引用"},
+  {id:"c04", m:"m1", rule:"R04", l:"g", t:"2026-03-16 为周一，非节假日，晚于当前日期 2026-03-12", ai:"拟授信使用日为工作日且晚于系统当前日期，符合规则。", f:"app", fld:"app-a", loc:"申请书-(a)"},
+  {id:"c05", m:"m1", rule:"R05", l:"g", t:"第一段与 FOL 授信段表述一致", ai:"申请书所选「第一段（人民币循环贷款授信）」与 FOL 授信段表述一致。", f:"app", fld:"app-b", loc:"申请书-(b) / FOL-授信段"},
+  {id:"c06", m:"m1", rule:"R06", l:"g", t:"「人民币循环贷款授信」在 FOL 有相同表述", ai:"申请书 (c) 项内容在 FOL 第一段表述中原样出现。", f:"app", fld:"app-c", loc:"申请书-(c)"},
+  {id:"c07", m:"m1", rule:"R07", l:"g", t:"人民币在第一段授信使用币种范围内", ai:"FOL 第一段约定授信使用货币为人民币，申请币种为人民币，符合。", f:"app", fld:"app-d", loc:"申请书-(d) / FOL-使用条件"},
+  {id:"c08", m:"m1", rule:"R08", l:"g", t:"2,000 万元 ≤ 3,000 万元", ai:"提款金额未超过第一段授信额度上限。", f:"app", fld:"app-e", loc:"申请书-(e) / FOL-金额"},
+  {id:"c09", m:"m1", rule:"R09", l:"g", t:"3 个月属于 FOL 的 1/3/6 个月之一", ai:"FOL 约定利息期可为 1、3 或 6 个月，申请勾选 3 个月符合其一。", f:"app", fld:"app-f", loc:"申请书-(f) / FOL-利息期"},
+  {id:"c10", m:"m1", rule:"R10", l:"g", t:"1 年期 LPR+1.50% 与 FOL 一致", ai:"申请书利率条款与 FOL 第一段利息条款一致，当前执行利率 4.50%（演示利率）。", f:"app", fld:"app-g", loc:"申请书-(g) / FOL-利息"},
+  {id:"c11", m:"m1", rule:"R11", l:"g", t:"到期日 2027-04-16 已填写，为周四，非本地及币种节假日", ai:"到期日为有效工作日，非人民币节假日。", f:"app", fld:"app-h", loc:"申请书-(h)"},
+  {id:"c12", m:"m1", rule:"R12", l:"r", t:"2027-04-16 减 2026-03-16 为 13 个月，超过 FOL 12 个月期限上限；FOL 无还款计划，无需勾稽", ai:"拟授信使用日至到期日跨度 13 个月，超出 FOL 第一段「每笔贷款期限不得超过 12 个月」的硬性上限，属规则违规，默认拦截；到期日最早应为 2027-03-16。", f:"app", fld:"app-h", loc:"申请书-(h) / FOL-使用条件"},
+  {id:"c13", m:"m1", rule:"R13", l:"g", t:"钢材采购属 FOL 流动资金用途范围，且不在禁止用途清单内", ai:"购买钢材属 FOL「流动资金（含钢材等大宗商品采购）」范围，亦不落入监管禁止用途清单。", f:"app", fld:"app-i", loc:"申请书-(i) / FOL-用途"},
+  {id:"c14", m:"m1", rule:"R14", l:"g", t:"100-200030-018 符合 xxx-xxxxxx-xxx 格式", ai:"放款指示账号为我行 12 位账号，格式校验通过。", f:"app", fld:"app-j", loc:"申请书-(j)"},
+  {id:"c15", m:"m1", rule:"R15", l:"r", t:"提款 2,000 万元大于受托支付限额 500 万元，应勾选「银行受托支付」，实际勾选「借款人自主支付」", ai:"提款金额远超 FOL 约定的 500 万元受托支付限额，按约定必须采用银行受托支付；申请书勾选「借款人自主支付」，属规则违规，默认拦截。", f:"app", fld:"app-k", loc:"申请书-(k) / FOL-贷款资金发放"},
+  {id:"c16", m:"m1", rule:"R16", l:"g", t:"与标准条款一致", ai:"第 2 条确认与承诺内容与标准条款一致，无删改痕迹。", f:"app", fld:"app-p2", loc:"申请书-第 2 条"},
+
+  {id:"c17", m:"m2", rule:"R17", l:"g", t:"提款币种人民币、支付币种美元，规则允许币种不相等", ai:"R17 为信息性规则，提款币种与汇款币种可以不相等，本案人民币提款、美元支付，符合。", f:"app", fld:"app-d", loc:"申请书-(d) / 各支付指令-汇款币种"},
+  {id:"c18", m:"m2", rule:"R18", l:"y", t:"币种不相等，走折算分支：USD 2,800,000 × 7.20 = 20,160,000 元 ≥ 提款 20,000,000 元，规则符合；但折算后超出提款金额 16 万元，超出部分资金来源需借款人补充说明", ai:"规则层面金额勾稽通过；但折算后支付总额超出提款金额 16 万元，超出部分资金来源不明，属 AI 提示疑点，需人工复核并请借款人补充说明后方可放行。", f:"p1", fld:"p1-amt", loc:"各支付指令-金额汇总"},
+  {id:"c19", m:"m2", rule:"R19", l:"g", t:"P1 大写对应 1,120,000，与金额一致", ai:"P1 大写金额与小写金额一致。", f:"p1", fld:"p1-words", loc:"P1-金额大写"},
+  {id:"c20", m:"m2", rule:"R19", l:"g", t:"P2 大写对应 850,000，与金额一致", ai:"P2 大写金额与小写金额一致。", f:"p2", fld:"p2-words", loc:"P2-金额大写"},
+  {id:"c21", m:"m2", rule:"R19", l:"r", t:"P3 大写 EIGHT HUNDRED SIXTY THOUSAND 对应 860,000，与汇款金额 680,000 不一致", ai:"P3 大写金额对应 860,000 美元，与汇款金额 680,000 美元不一致，疑似缮打笔误，须退回借款人更正后方可支付。", f:"p3", fld:"p3-words", loc:"P3-金额大写"},
+  {id:"c22", m:"m2", rule:"R19", l:"g", t:"P4 大写对应 150,000，与金额一致", ai:"P4 大写金额与小写金额一致。", f:"p4", fld:"p4-words", loc:"P4-金额大写"},
+  {id:"c23", m:"m2", rule:"R20", l:"g", t:"P1 账号 100-200030-018 与放款指示账号一致", ai:"P1 付款账号即贷款发放账户。", f:"p1", fld:"p1-acct", loc:"P1-账号"},
+  {id:"c24", m:"m2", rule:"R20", l:"r", t:"P2 账号 100-200030-019 不等于放款指示账号 100-200030-018，付款疑似未使用贷款发放账户", ai:"P2 从非贷款发放账户付款，资金可能未按受托路径使用，存在挪用风险，属规则违规，默认拦截。", f:"p2", fld:"p2-acct", loc:"P2-账号"},
+  {id:"c25", m:"m2", rule:"R20", l:"g", t:"P3 账号一致", ai:"P3 付款账号即贷款发放账户。", f:"p3", fld:"p3-acct", loc:"P3-账号"},
+  {id:"c26", m:"m2", rule:"R20", l:"g", t:"P4 账号一致", ai:"P4 付款账号即贷款发放账户。", f:"p4", fld:"p4-acct", loc:"P4-账号"},
+  {id:"c27", m:"m2", rule:"R21", l:"g", t:"P1 汇款人上海恒钢贸易有限公司，等于 FOL 借款人", ai:"P1 汇款人为借款人本人。", f:"p1", fld:"p1-rem", loc:"P1-汇款人"},
+  {id:"c28", m:"m2", rule:"R21", l:"g", t:"P2 汇款人一致", ai:"P2 汇款人为借款人本人。", f:"p2", fld:"p2-rem", loc:"P2-汇款人"},
+  {id:"c29", m:"m2", rule:"R21", l:"g", t:"P3 汇款人一致", ai:"P3 汇款人为借款人本人。", f:"p3", fld:"p3-rem", loc:"P3-汇款人"},
+  {id:"c30", m:"m2", rule:"R21", l:"r", t:"P4 汇款人「上海恒钢贸易（集团）有限公司」不等于 FOL 借款人「上海恒钢贸易有限公司」", ai:"P4 汇款人名称多出「（集团）」二字，与 FOL 借款人主体不一致，疑似由关联主体代付，属规则违规，默认拦截，须核实付款主体。", f:"p4", fld:"p4-rem", loc:"P4-汇款人 / FOL-借款人"},
+
+  {id:"a01", m:"ai", rule:"AI-01", l:"y", t:"关联方识别：P4 收款方注册于开曼群岛，公开工商信息显示其股东与借款人主要股东高度重合，疑似关联方交易，商业实质待核实（AI 辅助项，非规则比对）", ai:"AI 通过公开工商信息交叉比对发现 Skyline Metal Trading Co., Ltd. 与借款人股东高度重合，且注册于离岸地，交易商业实质存疑，需人工复核并请借款人说明后再放行。", f:"p4", fld:"p4-ben", loc:"P4-收款人"},
+  {id:"a02", m:"ai", rule:"AI-02", l:"g", t:"文件完整性：4 份采购合同、4 份商业发票、4 份提单齐备，发票金额与支付指令一致（AI 辅助项）", ai:"支持文件与 4 笔支付指令一一对应，发票金额、货物描述与合同及提单一致，完整性核查通过。", f:"sup", fld:"sup-list", loc:"支持文件清单"}
+];
+
+/* 审计预置系统事件 */
+var AUDIT_PRESET = [
+  {time:"2026-03-12 09:12", type:"sys", text:"案件创建与文件上传（6 份主文件 + 12 份支持文件）"},
+  {time:"2026-03-12 09:15", type:"sys", text:"文件解析完成"},
+  {time:"2026-03-12 09:16", type:"sys", text:"模块一「授信申请阶段核对」完成（16 条规则，16 项结果：🔴2 ⚪1）"},
+  {time:"2026-03-12 09:16", type:"sys", text:"模块二「支付指令阶段核对」完成（5 条规则，14 项结果：🔴3 🟡1）"},
+  {time:"2026-03-12 09:16", type:"sys", text:"AI 辅助分析完成（关联方提示 1 条、完整性核查 1 条）"},
+  {time:"2026-03-12 09:17", type:"sys", text:"生成一次性退回建议清单（7 处问题）"}
+];
+
+/* =====================================================
+   状态
+   ===================================================== */
+var state = null;
+var ui = { pg:"todo", file:"fol", module:"all", light:"all", openChk:null, selChk:null, payOpen:{}, audFilter:"all", tpl1:false, tpl2:false, userClock:0 };
+
+function initState(){
+  state = {
+    checks: CHECKS_DEF.map(function(c){
+      return { id:c.id, st: c.l==="g" ? "auto" : "pending", act:null };
+    }),
+    audit: AUDIT_PRESET.slice(),
+    submitted:false
+  };
+}
+function chkDef(id){ for(var i=0;i<CHECKS_DEF.length;i++) if(CHECKS_DEF[i].id===id) return CHECKS_DEF[i]; return null; }
+function chkState(id){ for(var i=0;i<state.checks.length;i++) if(state.checks[i].id===id) return state.checks[i]; return null; }
+function allDefs(){ return CHECKS_DEF; }
+
+function counts(filterM){
+  var c={g:0,y:0,r:0,w:0};
+  allDefs().forEach(function(d){
+    if(filterM && filterM!=="all" && d.m!==filterM) return;
+    c[d.l]++;
+  });
+  return c;
+}
+function pendingIds(){ return allDefs().filter(function(d){ return d.l==="y"||d.l==="r"; }).map(function(d){ return d.id; }); }
+function doneCount(){ var n=0; pendingIds().forEach(function(id){ if(chkState(id).st==="done") n++; }); return n; }
+function PENDING_TOTAL(){ return pendingIds().length; }
+
+/* =====================================================
+   工具
+   ===================================================== */
+function $(s){ return document.querySelector(s); }
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function fmt(n){ return n.toLocaleString("en-US"); }
+function dot(l){ return '<span class="dot '+l+'"></span>'; }
+function lightName(l){ return {g:"通过",y:"待复核",r:"违规",w:"忽略"}[l]; }
+function toast(msg){
+  var t=$("#toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(t._tm); t._tm=setTimeout(function(){ t.classList.remove("show"); },2200);
+}
+function userTime(){
+  ui.userClock++;
+  var m=5+(ui.userClock-1)*2, hh=10, mm=m;
+  while(mm>=60){ mm-=60; hh++; }
+  return "2026-03-12 "+String(hh).padStart(2,"0")+":"+String(mm).padStart(2,"0");
+}
+function addAudit(text){
+  state.audit.push({time:userTime(), type:"user", text:"张敏 "+text});
+  renderAudit();
+}
+
+/* 通用模态框 */
+function showModal(title, bodyHtml, onOk, okText, needInput, placeholder){
+  var m=$("#modal");
+  m.innerHTML = '<div class="m-h">'+esc(title)+'</div><div class="m-b">'+bodyHtml+(needInput?'<textarea id="modal-input" placeholder="'+esc(placeholder||"")+'"></textarea>':'')+'</div><div class="m-f"><button class="btn" id="modal-cancel">取消</button><button class="btn btn-primary" id="modal-ok">'+esc(okText||"确定")+'</button></div>';
+  $("#modal-mask").classList.add("show");
+  $("#modal-cancel").onclick=function(){ $("#modal-mask").classList.remove("show"); };
+  $("#modal-ok").onclick=function(){
+    var val = needInput ? (document.getElementById("modal-input").value||"").trim() : "";
+    if(needInput && !val){ document.getElementById("modal-input").style.borderColor="var(--red)"; toast("理由必填"); return; }
+    $("#modal-mask").classList.remove("show");
+    onOk(val);
+  };
+}
+
+/* =====================================================
+   导航
+   ===================================================== */
+function goPage(pg){
+  ui.pg=pg;
+  document.querySelectorAll("nav a").forEach(function(a){ a.classList.toggle("on", a.dataset.pg===pg); });
+  document.querySelectorAll(".page").forEach(function(p){ p.classList.toggle("on", p.id==="page-"+pg); });
+}
+document.querySelectorAll("nav a").forEach(function(a){ a.onclick=function(){ goPage(a.dataset.pg); }; });
+
+/* =====================================================
+   左栏：案件摘要 + 文件树
+   ===================================================== */
+var IC_DOC = '<svg class="ic" viewBox="0 0 16 16" fill="none"><path d="M3.5 1.5h6l3 3v10h-9z" stroke="#DB0011" stroke-width="1.3"/><path d="M9.5 1.5v3h3" stroke="#DB0011" stroke-width="1.3"/></svg>';
+var IC_FOL = '<svg class="ic" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="3.5" width="13" height="10" rx="1.2" stroke="#d97706" stroke-width="1.3"/><path d="M1.5 6.5h13" stroke="#d97706" stroke-width="1.3"/></svg>';
+function renderLeft(){
+  var h = '<div class="panel"><div class="panel-h">案件摘要</div><div class="panel-b">'
+    +'<div class="kv"><div class="k">案件编号</div><div class="v">CASE-2026-0312</div></div>'
+    +'<div class="kv"><div class="k">借款人</div><div class="v">上海恒钢贸易有限公司</div></div>'
+    +'<div class="kv"><div class="k">FOL 编号</div><div class="v">FOL-2026-SH-0188</div></div>'
+    +'<div class="kv"><div class="k">授信段</div><div class="v">第一段 · 人民币循环贷款授信</div></div>'
+    +'<div class="kv"><div class="k">提款金额</div><div class="v">人民币 20,000,000 元</div></div>'
+    +'<div class="kv"><div class="k">拟使用日</div><div class="v">2026-03-16</div></div>'
+    +'<div class="kv"><div class="k">当前状态</div><div class="v" style="color:var(--red)">两阶段预检完成 · 待人工处理</div></div>'
+    +'</div></div>'
+    +'<div class="panel"><div class="panel-h">文件（6 主 + 12 支持）</div><div class="panel-b" style="padding:6px;">';
+  FILE_TREE.forEach(function(n){
+    if(n.sec){ h+='<div class="tree-sec">'+esc(n.sec)+'</div>'; return; }
+    h+='<div class="tree-item'+(ui.file===n.f?" on":"")+'" onclick="openFile(\''+n.f+'\')">'+(n.f==="fol"?IC_FOL:IC_DOC)+'<span>'+esc(n.n)+'</span></div>';
+  });
+  h+='</div></div>';
+  $("#col-left").innerHTML=h;
+}
+function openFile(f){ ui.file=f; renderLeft(); renderViewer(); }
+
+/* 被校验项引用的字段集合 */
+function refFieldSet(){
+  var s={};
+  allDefs().forEach(function(d){ s[d.f+":"+d.fld]=1; });
+  return s;
+}
+
+/* 中栏文档查看器 */
+function renderViewer(){
+  var d=DOCS[ui.file], refs=refFieldSet();
+  var h='<div class="panel"><div class="panel-h"><span class="doc-title"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3.5 1.5h6l3 3v10h-9z" stroke="#DB0011" stroke-width="1.3"/></svg>'+esc(d.name)+'</span><span class="doc-badge">已解析 · 演示数据</span></div><div class="panel-b">';
+  if(ui.file==="sup"){
+    h+='<div class="fx-note">支持文件完整性由 AI 辅助核查（AI-02），下表为 12 份支持文件清单摘要。</div>'
+      +'<table class="sup-tb"><tr><th>类型</th><th>对应</th><th>摘要</th><th>核查</th></tr>';
+    [["采购合同","P1","热轧卷板 2,000 吨 · USD 1,120,000"],["采购合同","P2","冷轧不锈钢卷 500 吨 · USD 850,000"],["采购合同","P3","螺纹钢 1,200 吨 · USD 680,000"],["采购合同","P4","钢坯 800 吨 · USD 150,000"],
+     ["商业发票","P1","发票金额 USD 1,120,000"],["商业发票","P2","发票金额 USD 850,000"],["商业发票","P3","发票金额 USD 680,000"],["商业发票","P4","发票金额 USD 150,000"],
+     ["提单","P1","货物描述与合同一致"],["提单","P2","货物描述与合同一致"],["提单","P3","货物描述与合同一致"],["提单","P4","货物描述与合同一致"]]
+    .forEach(function(r){ h+='<tr><td>'+r[0]+'</td><td>'+r[1]+'</td><td>'+esc(r[2])+'</td><td class="sup-ok">✓ 一致</td></tr>'; });
+    h+='</table>';
+  } else {
+    d.fields.forEach(function(f){
+      h+='<div class="fld'+(refs[ui.file+":"+f.id]?" ref":"")+'" id="fld-'+f.id+'"><div class="fk">'+esc(f.k)+'</div><div class="fv">'+esc(f.v)+'</div></div>';
+    });
+  }
+  h+='</div></div>';
+  $("#viewer").innerHTML=h;
+}
+
+/* 定位原文 */
+function locate(id){
+  var d=chkDef(id);
+  ui.file=d.f; renderLeft(); renderViewer();
+  var el=document.getElementById("fld-"+d.fld);
+  if(el){
+    el.scrollIntoView({behavior:"smooth", block:"center"});
+    el.classList.remove("hl"); void el.offsetWidth; el.classList.add("hl");
+  }
+}
+
+/* =====================================================
+   中栏：流程条 + 筛选 + 校验列表 + 文档查看器
+   ===================================================== */
+var MOD_TABS=[["m1","模块一 · 授信申请核对",16],["m2","模块二 · 支付指令核对",14],["ai","AI 辅助识别",2],["all","全部",32]];
+var L_TABS=[["g","🟢"],["y","🟡"],["r","🔴"],["w","⚪"]];
+
+function renderMid(){
+  var c1=counts("m1"), c2=counts("m2"), ca=counts("ai");
+  var h='<div class="flow">'
+    +'<div class="flow-step"><h4><span class="lsum"><span class="dot g"></span>'+c1.g+' <span class="dot w"></span>'+c1.w+' <span class="dot r"></span>'+c1.r+'</span>阶段一 · 授信申请核对</h4><div class="sub">16 条规则 · 16 项结果：申请书 vs 授信函（FOL）逐项比对 + 申请书自检<br>🔴 R12 期限超限 · 🔴 R15 支付方式不符</div></div>'
+    +'<div class="flow-arrow">➜</div>'
+    +'<div class="flow-step"><h4><span class="lsum"><span class="dot g"></span>'+c2.g+' <span class="dot y"></span>'+c2.y+' <span class="dot r"></span>'+c2.r+'</span>阶段二 · 支付指令核对</h4><div class="sub">5 条规则 · 14 项结果：支付指令 vs 申请书 / FOL 逐笔比对<br>🔴 R19 大写不符 · 🔴 R20 账号不符 · 🔴 R21 主体不符</div></div>'
+    +'</div>'
+    +'<div class="flow-note"><span class="note-ic">!</span><span>传统流程需两轮退回（申请阶段一轮、放款后支付指令又一轮）；本系统<b>两模块同步全量预检</b>，借款人一次性提交整套文件包，系统<b>一次性退回全部 7 处问题</b>，一轮整改完成。</span></div>';
+
+  /* 筛选 */
+  var cm = ui.module==="all" ? null : ui.module;
+  var cl = counts(cm);
+  var total = cm ? counts(cm).g+counts(cm).y+counts(cm).r+counts(cm).w : 32;
+  h+='<div class="filters"><div class="f-row"><span class="f-label">模块</span>';
+  MOD_TABS.forEach(function(t){
+    var on = ui.module===t[0] ? " on red" : "";
+    h+='<span class="ftab'+on+'" onclick="setModule(\''+t[0]+'\')">'+t[1]+' <span class="f-count">'+t[2]+'</span></span>';
+  });
+  h+='<span class="f-right batch-btn" onclick="batchRestore()">批量恢复待处理（演示回退）</span></div>';
+  h+='<div class="f-row"><span class="f-label">灯色</span>';
+  [["all","全部", total],["g","🟢 通过",cl.g],["y","🟡 待复核",cl.y],["r","🔴 违规",cl.r],["w","⚪ 忽略",cl.w]].forEach(function(t){
+    var on = ui.light===t[0] ? " on red" : "";
+    h+='<span class="ftab'+on+'" onclick="setLight(\''+t[0]+'\')">'+t[1]+' <span class="f-count">'+t[2]+'</span></span>';
+  });
+  h+='</div></div>';
+
+  /* 列表 */
+  var list = allDefs().filter(function(d){
+    if(ui.module!=="all" && d.m!==ui.module) return false;
+    if(ui.light!=="all" && d.l!==ui.light) return false;
+    return true;
+  });
+  if(list.length===0){
+    h+='<div class="chk-empty">当前筛选条件下无校验项</div>';
+  } else {
+    list.forEach(function(d){
+      var st=chkState(d.id);
+      h+='<div class="chk'+(ui.openChk===d.id?" open":"")+(st.st==="done"?" done":"")+'" id="chk-'+d.id+'">'
+        +'<div class="chk-row" onclick="toggleChk(\''+d.id+'\')">'
+        +dot(d.l)+'<span class="chk-rule">'+d.rule+'</span><span class="chk-title">'+esc(d.t)+'</span>'
+        +(st.st==="auto"?'<span class="chk-state auto">已放行 · 自动</span>':(st.st==="done"?'<span class="chk-state done">已处置</span>':'<span class="chk-state pend">待处理</span>'))
+        +'</div><div class="chk-detail">'
+        +'<div class="ai-line"><span class="ai-ic">AI</span><span>'+esc(d.ai)+'</span></div>'
+        +'<div class="loc-line">定位：<b>'+esc(d.loc)+'</b>　<span class="lg">'+lightName(d.l)+'</span>'+(d.m==="ai"?' · AI 辅助项（非规则比对）':'')+'</div>'
+        +'<button class="btn btn-sm btn-ghost-red loc-btn" onclick="event.stopPropagation();locate(\''+d.id+'\')">定位原文</button>'
+        +disposeHtml(d, st)
+        +'</div></div>';
+    });
+  }
+
+  h+='<div id="viewer"></div>';
+  $("#col-mid").innerHTML=h;
+  renderViewer();
+  renderStatus();
+  renderRight();
+}
+function setModule(m){ ui.module=m; renderMid(); }
+function setLight(l){ ui.light=l; renderMid(); }
+function toggleChk(id){
+  ui.openChk = ui.openChk===id ? null : id;
+  if(ui.openChk) ui.selChk=id;
+  renderMid();
+}
+
+/* 处置操作区（校验项内） */
+function disposeHtml(d, st){
+  if(st.st==="auto"){
+    return '<div class="dispose"><div class="dispose-t">处置</div><div class="hint">🟢 规则校验符合，系统已自动放行，无需人工处理。</div></div>';
+  }
+  if(st.st==="done"){
+    var act=st.act;
+    return '<div class="dispose"><div class="dispose-t">处置结果</div><div class="done-box">'
+      +'<span class="chk-state done">已处置 · '+esc(act.type)+'</span>　'+esc(act.time)
+      +(act.note?'<br>说明/理由：'+esc(act.note):'')
+      +'<br><span class="undo" onclick="undoChk(\''+d.id+'\')">撤销处置</span></div></div>';
+  }
+  if(d.l==="y"){
+    return '<div class="dispose"><div class="dispose-t">处置 · 待复核</div><div class="hint">🟡 需填写复核说明后放行，或直接打回借款人。</div>'
+      +'<textarea id="note-'+d.id+'" placeholder="复核说明（放行时必填），如：已联系借款人补充资金来源说明……"></textarea>'
+      +'<div class="d-btns"><button class="btn btn-sm btn-primary" onclick="doPass(\''+d.id+'\')">复核后放行</button>'
+      +'<button class="btn btn-sm btn-ghost-red" onclick="doReject(\''+d.id+'\')">打回借款人</button></div></div>';
+  }
+  return '<div class="dispose"><div class="dispose-t">处置 · 违规</div><div class="hint">🔴 默认拦截：只能「打回借款人」，或经授权「例外处理」（理由必填）。</div>'
+    +'<div class="d-btns"><button class="btn btn-sm btn-ghost-red" onclick="doReject(\''+d.id+'\')">打回借款人</button>'
+    +'<button class="btn btn-sm" onclick="doException(\''+d.id+'\')">授权例外（理由必填）</button></div></div>';
+}
+function requireNote(id){
+  var el=document.getElementById("note-"+id);
+  return el ? (el.value||"").trim() : "";
+}
+function doPass(id){
+  var d=chkDef(id), note=requireNote(id);
+  if(!note){ toast("请先填写复核说明"); document.getElementById("note-"+id).style.borderColor="var(--red)"; return; }
+  var t=userTime();
+  chkState(id).st="done"; chkState(id).act={type:"复核后放行", note:note, time:t};
+  addAudit("对 "+d.rule+" 执行「复核后放行」，复核说明："+note);
+  toast(d.rule+" 已放行");
+  renderMid(); renderPay();
+}
+function doReject(id){
+  var d=chkDef(id);
+  var t=userTime();
+  showModal("打回借款人","确认将 <b>"+esc(d.rule)+" · "+esc(d.t)+"</b> 打回借款人整改？<textarea id='modal-note' placeholder='打回说明（选填）'></textarea>",function(){
+    var note=((document.getElementById("modal-note")||{}).value||"").trim();
+    chkState(id).st="done"; chkState(id).act={type:"打回借款人", note:note, time:t};
+    addAudit("对 "+d.rule+" 执行「打回借款人」");
+    toast(d.rule+" 已打回");
+    renderMid(); renderPay();
+  },"确认打回");
+}
+function doException(id){
+  var d=chkDef(id);
+  showModal("授权例外","对 <b>"+esc(d.rule)+" · "+esc(d.t)+"</b> 进行授权例外处理，例外理由<span class=\"req\">必填</span>：",function(reason){
+    var t=userTime();
+    chkState(id).st="done"; chkState(id).act={type:"授权例外", note:reason, time:t};
+    addAudit("对 "+d.rule+" 执行「授权例外」，理由："+reason);
+    toast(d.rule+" 已授权例外");
+    renderMid(); renderPay();
+  },"确认例外",true,"请输入例外理由（必填）");
+}
+function undoChk(id){
+  var d=chkDef(id);
+  chkState(id).st="pending"; chkState(id).act=null;
+  addAudit("撤销了对 "+d.rule+" 的处置，恢复待处理");
+  renderMid(); renderPay();
+}
+function batchRestore(){
+  showModal("批量恢复待处理","确认将全部校验项恢复为初始状态（🟢 自动放行、🟡/🔴 待处理，进度归零）？此操作用于演示回退。",function(){
+    state.checks.forEach(function(c){
+      var d=chkDef(c.id);
+      c.st = d.l==="g" ? "auto" : "pending";
+      c.act=null;
+    });
+    state.submitted=false;
+    addAudit("执行「批量恢复待处理」演示回退");
+    toast("已恢复待处理");
+    renderMid(); renderPay();
+  },"确认恢复");
+}
+
+/* =====================================================
+   右栏：AI 助手面板
+   ===================================================== */
+function renderRight(){
+  var sel = ui.selChk ? chkDef(ui.selChk) : null;
+  var h='<div class="panel"><div class="panel-h"><span class="ai-ic" style="width:18px;height:18px;">AI</span>AI 助手 · 风险提示</div><div class="panel-b">'
+    +'<div class="risk red"><div class="risk-t">'+dot('y')+' P4 疑似关联方交易</div><div class="risk-b">P4 收款方 Skyline Metal Trading Co., Ltd. 注册于开曼群岛，公开工商信息显示其股东与借款人主要股东高度重合，商业实质待核实。</div>'
+    +(ui.tpl1?'<div class="tpl-box"><div class="tpl-cap">补充说明模板（可发送借款人）：</div>致上海恒钢贸易有限公司：\n贵司提交的 CASE-2026-0312 文件包中，支付指令 P4（USD 150,000，收款人 Skyline Metal Trading Co., Ltd.）经我行关联方识别，收款方股东与贵司主要股东高度重合，疑似关联方交易。请贵司于 3 个工作日内补充提供：① 该笔交易的商业实质说明；② 与同类第三方采购的价格比较；③ 关联关系披露文件。逾期未补充的，该笔支付指令将不予执行。</div>':'<button class="btn btn-sm" onclick="ui.tpl1=true;renderRight()">生成说明模板</button>')
+    +'</div>'
+    +'<div class="risk"><div class="risk-t">'+dot('y')+' 折算金额超出提款金额 16 万元</div><div class="risk-b">4 笔支付指令合计 USD 2,800,000 × 7.20（演示汇率）= 20,160,000 元，超出提款金额 20,000,000 元达 16 万元，超出部分资金来源需借款人补充说明。</div>'
+    +(ui.tpl2?'<div class="tpl-box"><div class="tpl-cap">补充说明模板（可发送借款人）：</div>致上海恒钢贸易有限公司：\n贵司 CASE-2026-0312 授信使用项下 4 笔支付指令合计 USD 2,800,000，按演示汇率 7.20 折合人民币 20,160,000 元，超出本次提款金额人民币 20,000,000 元共 160,000 元。请贵司于 3 个工作日内补充说明超出部分资金的来源及用途，或调整支付指令金额，以便我行继续处理。</div>':'<button class="btn btn-sm" onclick="ui.tpl2=true;renderRight()">生成说明模板</button>')
+    +'</div>'
+    +'</div></div>';
+
+  h+='<div class="panel"><div class="panel-h">处置操作区</div><div class="panel-b">';
+  if(sel){
+    var st=chkState(sel.id);
+    h+='<div class="sel-info">当前选中：<b>'+sel.rule+'</b> · '+esc(sel.t.slice(0,42))+(sel.t.length>42?"…":"")+'<br>状态：'+(st.st==="auto"?"🟢 已自动放行":(st.st==="done"?"已处置":"待处理"))+'</div>';
+  } else {
+    h+='<div class="sel-info"><span class="none">请在中栏点击展开校验项后再使用快捷处置；以下「请求补充说明 / 添加备注」为案件级操作。</span></div>';
+  }
+  h+='<div class="quick-btns">'
+    +'<button class="btn btn-sm btn-primary" onclick="quickPass()">放行（当前项）</button>'
+    +'<button class="btn btn-sm btn-ghost-red" onclick="quickReject()">打回（当前项）</button>'
+    +'<button class="btn btn-sm" onclick="quickRequest()">请求补充说明</button>'
+    +'</div>'
+    +'<div style="margin-top:9px;"><textarea id="case-note" placeholder="案件级备注……"></textarea>'
+    +'<div class="d-btns"><button class="btn btn-sm" onclick="quickNote()">添加备注</button></div></div>'
+    +'</div></div>';
+  $("#col-right").innerHTML=h;
+}
+function quickPass(){
+  var sel=ui.selChk?chkDef(ui.selChk):null;
+  if(!sel){ toast("请先在中栏选择校验项"); return; }
+  if(sel.l==="g"){ toast("绿项已自动放行，无需处置"); return; }
+  if(sel.l==="r"){ toast("违规项不能直接放行，请打回或授权例外"); return; }
+  doPass(sel.id);
+}
+function quickReject(){
+  var sel=ui.selChk?chkDef(ui.selChk):null;
+  if(!sel){ toast("请先在中栏选择校验项"); return; }
+  if(sel.l==="g"){ toast("绿项已自动放行，无需打回"); return; }
+  doReject(sel.id);
+}
+function quickRequest(){
+  addAudit("向借款人发送「补充说明请求」（含 7 处问题一次性退回清单）");
+  toast("已发送补充说明请求（演示）");
+}
+function quickNote(){
+  var v=(document.getElementById("case-note").value||"").trim();
+  if(!v){ toast("备注内容不能为空"); return; }
+  addAudit("添加案件备注："+v);
+  document.getElementById("case-note").value="";
+  toast("备注已添加并写入审计");
+}
+
+/* =====================================================
+   支付指令拆分表
+   ===================================================== */
+function payLight(p){ return p.acctOk&&p.remOk&&p.wordsOk ? "g" : "r"; }
+function renderPay(){
+  var h='<div class="pay-panel"><div class="pay-h">支付指令拆分表（4 笔 · 境外汇款申请书）<span class="fx-tag">演示汇率 1 USD = 7.20 CNY</span><span class="fx-tag">合计 USD 2,800,000 = CNY 20,160,000</span><span style="margin-left:auto;font-weight:400;color:var(--ink2);font-size:12px;">点击行展开字段级比对明细</span></div>'
+    +'<table class="pay-tb"><tr><th>编号</th><th>收款人</th><th>国家/地区</th><th>币种金额</th><th>折算人民币（演示汇率）</th><th>货物</th><th>账号</th><th>汇款人</th><th>灯态</th></tr>';
+  PAYS.forEach(function(p){
+    var l=payLight(p);
+    h+='<tr class="prow" onclick="togglePay(\''+p.id+'\')"><td><b>'+p.id+'</b></td><td>'+esc(p.ben)+(p.ai?'<span class="badge-ai">AI</span>':'')+'</td><td>'+esc(p.ctry)+'</td><td>USD '+fmt(p.amt)+'</td><td>'+fmt(Math.round(p.amt*7.2))+'</td><td>'+esc(p.goods)+'</td><td'+(p.acctOk?'':' class="diff"')+'>'+p.acct+'</td><td'+(p.remOk?'':' class="diff"')+'>'+esc(p.rem)+'</td><td>'+dot(l)+' <span class="'+(l==="g"?"lg":"lr")+'">'+(l==="g"?"通过":"违规")+'</span></td></tr>';
+    if(ui.payOpen[p.id]){
+      h+='<tr class="pdet"><td colspan="9"><div class="pdet-in"><table class="pdet-tb"><tr><th>字段</th><th>支付指令内容</th><th>比对基准</th><th>结果</th></tr>'
+        +'<tr><td>汇款人</td><td'+(p.remOk?'':' class="bad-t"')+'>'+esc(p.rem)+'</td><td>FOL 借款人：上海恒钢贸易有限公司</td><td>'+(p.remOk?'<span class="ok-t">✓ 一致（R21）</span>':'<span class="bad-t">✗ 不一致（R21）</span>')+'</td></tr>'
+        +'<tr><td>汇款人账号</td><td'+(p.acctOk?'':' class="bad-t"')+'>'+p.acct+'</td><td>放款指示账号：100-200030-018</td><td>'+(p.acctOk?'<span class="ok-t">✓ 一致（R20）</span>':'<span class="bad-t">✗ 不一致（R20）</span>')+'</td></tr>'
+        +'<tr><td>金额大写</td><td'+(p.wordsOk?'':' class="bad-t"')+'>'+esc(p.words)+'</td><td>汇款金额 USD '+fmt(p.amt)+'</td><td>'+(p.wordsOk?'<span class="ok-t">✓ 一致（R19）</span>':'<span class="bad-t">✗ 不一致（R19）</span>')+'</td></tr>'
+        +'<tr><td>收款人</td><td>'+esc(p.ben)+'</td><td>AI 关联方识别</td><td>'+(p.ai?'<span class="ly">⚠ 疑似关联方（AI-01）</span>':'<span class="ok-t">未发现风险</span>')+'</td></tr>'
+        +'</table></div></td></tr>';
+    }
+  });
+  h+='</table></div>';
+  $("#pay-sec").innerHTML=h;
+}
+function togglePay(id){ ui.payOpen[id]=!ui.payOpen[id]; renderPay(); }
+
+/* =====================================================
+   状态条
+   ===================================================== */
+function renderStatus(){
+  var c=counts(null);
+  var done=doneCount(), total=PENDING_TOTAL();
+  var btn = state.submitted
+    ? '<button class="btn btn-primary sb-btn" disabled>已提交审批</button>'
+    : '<button class="btn btn-primary sb-btn" '+(done===total?'':'disabled')+' onclick="submitAll()">提交审批</button>';
+  $("#status-bar").innerHTML='<div class="sb-lights">'
+    +'<span class="lsum"><span class="dot g"></span>通过 <b class="lg">'+c.g+'</b> 自动放行</span>'
+    +'<span class="lsum"><span class="dot y"></span>待复核 <b class="ly">'+c.y+'</b></span>'
+    +'<span class="lsum"><span class="dot r"></span>违规拦截 <b class="lr">'+c.r+'</b></span>'
+    +'<span class="lsum"><span class="dot w"></span>忽略 <b class="lw">'+c.w+'</b></span>'
+    +'<span class="lsum">共 <b>'+ (c.g+c.y+c.r+c.w) +'</b> 项</span></div>'
+    +'<div class="sb-prog">人工处理进度 <b>'+done+'</b> / '+total+'（🟡'+c.y+' + 🔴'+c.r+'）</div>'
+    +btn;
+}
+function submitAll(){
+  var done=doneCount(), total=PENDING_TOTAL();
+  if(done<total){ toast("尚有 "+(total-done)+" 项待处理未处置"); return; }
+  showModal("提交审批","确认提交 CASE-2026-0312 审批？<br>7 项待处理已全部处置完毕（🟡2 已复核放行 / 🔴5 已打回或授权例外），提交后写入审计留痕。",function(){
+    state.submitted=true;
+    addAudit("提交审批（7 项待处理全部处置完毕）");
+    toast("已提交审批");
+    renderMid(); renderPay();
+  },"确认提交");
+}
+
+/* =====================================================
+   页3 规则库
+   ===================================================== */
+function renderRules(){
+  var h='<div class="mod-head"><h3>模块一 · 授信申请阶段核对</h3><span class="sub">16 条规则（申请书 vs 授信函/贷款合同 15 条 + 申请书自检 1 条） · 本案命中 16 项结果</span></div>';
+  h+=rulesHtml(RULES_M1);
+  h+='<div class="mod-head"><h3>模块二 · 支付指令阶段核对</h3><span class="sub">5 条规则（支付指令 vs 申请书 4 条 + 支付指令 vs 授信函 1 条） · 本案命中 14 项结果</span></div>';
+  h+=rulesHtml(RULES_M2);
+  $("#page-rules").innerHTML=h;
+}
+function rulesHtml(rules){
+  var h="";
+  rules.forEach(function(r){
+    var hits=allDefs().filter(function(d){ return d.rule===r.no; });
+    var hc={g:0,y:0,r:0,w:0};
+    hits.forEach(function(d){ hc[d.l]++; });
+    var hitStr = hits.length===0 ? "未命中" : ("命中 "+hits.length+" 项：");
+    var dots = (hc.g?'<span class="lsum"><span class="dot g"></span>'+hc.g+'</span>':'')+(hc.y?'<span class="lsum"><span class="dot y"></span>'+hc.y+'</span>':'')+(hc.r?'<span class="lsum"><span class="dot r"></span>'+hc.r+'</span>':'')+(hc.w?'<span class="lsum"><span class="dot w"></span>'+hc.w+'</span>':'');
+    h+='<div class="rule-card" id="rule-'+r.no+'"><div class="rc-h" onclick="this.parentNode.classList.toggle(\'open\')">'
+      +'<span class="rc-no">'+r.no+'</span><span class="rc-name">'+esc(r.name)+'</span>'
+      +'<span class="rc-pair">'+esc(r.pair)+'</span>'
+      +'<div class="rc-hits"><span style="color:var(--ink2);font-size:12px;">'+hitStr+'</span>'+dots+'</div>'
+      +'<button class="btn btn-sm rc-view" onclick="event.stopPropagation();viewRule(\''+r.no+'\')">查看本案校验项</button>'
+      +'</div><div class="rc-b">'
+      +'<div class="rc-sec"><div class="cap">比对标准</div><div class="txt">'+esc(r.std)+'</div></div>'
+      +'<div class="rc-sec"><div class="cap">本案命中情况</div><div class="txt">'+(hits.length? hits.map(function(d){ return '<span class="lsum">'+dot(d.l)+'</span> '+d.rule+'：'+esc(d.t); }).join('<br>') : '未命中')+'</div></div>'
+      +'</div></div>';
+  });
+  return h;
+}
+function viewRule(no){
+  goPage("case");
+  ui.module = ruleModule(no); ui.light="all"; ui.openChk=null;
+  renderMid();
+  var first=allDefs().filter(function(d){ return d.rule===no; })[0];
+  if(first){
+    ui.openChk=first.id; ui.selChk=first.id;
+    renderMid();
+    var el=document.getElementById("chk-"+first.id);
+    if(el){ el.scrollIntoView({behavior:"smooth", block:"center"}); el.classList.add("chk-flash"); setTimeout(function(){ el.classList.remove("chk-flash"); },3400); }
+  }
+}
+
+/* =====================================================
+   页4 审计留痕
+   ===================================================== */
+function renderAudit(){
+  var fs=[["all","全部"],["sys","系统事件"],["user","人工操作"]];
+  var h="";
+  fs.forEach(function(f){ h+='<span class="ftab'+(ui.audFilter===f[0]?" on red":"")+'" onclick="ui.audFilter=\''+f[0]+'\';renderAudit()">'+f[1]+'</span>'; });
+  $("#aud-filters").innerHTML=h;
+  var list=state.audit.filter(function(e){ return ui.audFilter==="all"||e.type===ui.audFilter; });
+  var t="";
+  list.forEach(function(e){
+    t+='<div class="tl-item '+e.type+'"><div class="tl-card"><div class="tl-time"><span>'+e.time+'</span><span class="tl-type '+e.type+'">'+(e.type==="sys"?"系统事件":"人工操作")+'</span></div><div class="tl-text">'+esc(e.text)+'</div></div></div>';
+  });
+  $("#aud-tl").innerHTML=t||'<div class="chk-empty">暂无事件</div>';
+}
+
+/* =====================================================
+   重置演示
+   ===================================================== */
+function resetDemo(){
+  initState();
+  ui.module="all"; ui.light="all"; ui.openChk=null; ui.selChk=null; ui.payOpen={}; ui.audFilter="all"; ui.tpl1=false; ui.tpl2=false; ui.userClock=0; ui.file="fol";
+  renderAll();
+  toast("已重置演示");
+}
+
+/* =====================================================
+   启动
+   ===================================================== */
+function renderAll(){
+  renderLeft(); renderMid(); renderPay(); renderStatus(); renderRules(); renderAudit();
+}
+initState();
+renderAll();
+goPage("todo");
+
+/* 自检（控制台输出，不影响界面） */
+(function(){
+  var c=counts(null);
+  var c1=counts("m1"), c2=counts("m2"), ca=counts("ai");
+  console.log("[自检] 总项="+(c.g+c.y+c.r+c.w)+" (g"+c.g+" y"+c.y+" r"+c.r+" w"+c.w+")；模块一="+(c1.g+c1.w+c1.r)+"；模块二="+(c2.g+c2.y+c2.r)+"；AI="+(ca.g+ca.y)+"；待处理="+PENDING_TOTAL());
+})();
+</script>
+</body>
+</html>
