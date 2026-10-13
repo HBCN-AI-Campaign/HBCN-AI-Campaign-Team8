@@ -1,0 +1,1683 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>智汇跨境贷途 · 跨境贷款单据智能审核原型 v3</title>
+<style>
+:root{
+  --bg:#f2f4f8; --surface:#ffffff; --surface-2:#fafbfd; --surface-3:#f5f7fa;
+  --border:#e3e7ee; --border-2:#d5dbe5;
+  --text:#141922; --text-2:#4b5567; --muted:#8b95a7;
+  --primary:#2f52d0; --primary-600:#2744b0; --primary-soft:#eef2fe; --primary-border:#ccd8fa;
+  --ok:#0e8f5b; --ok-soft:#e9f7f0; --ok-border:#bde5d1;
+  --warn:#a9701a; --warn-soft:#fdf4e4; --warn-border:#f0dcb4;
+  --err:#c8273a; --err-soft:#fdecee; --err-border:#f6cbd0;
+  --br-a:#2f52d0; --br-b:#7b45c9; --br-c:#0d8a63; --br-d:#b06a12; --br-e:#b8386b;
+  --radius:12px; --radius-sm:8px; --radius-xs:6px;
+  --shadow-1:0 1px 2px rgba(16,24,40,.05);
+  --shadow-2:0 2px 4px rgba(16,24,40,.04), 0 12px 28px -12px rgba(16,24,40,.18);
+  --mono:ui-monospace,SFMono-Regular,"Cascadia Mono",Consolas,"Courier New",monospace;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  font-size:13px;line-height:1.55;-webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;cursor:pointer;border:none;background:none}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:#cfd6e2;border-radius:9px;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:#b6c0d0;background-clip:padding-box}
+::-webkit-scrollbar-track{background:transparent}
+
+.app{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:248px;flex:0 0 248px;background:#fff;border-right:1px solid var(--border);display:flex;flex-direction:column}
+.brand{padding:18px 18px 14px;border-bottom:1px solid var(--border)}
+.brand-row{display:flex;align-items:center;gap:9px}
+.brand-logo{width:30px;height:30px;border-radius:9px;flex:0 0 30px;background:linear-gradient(140deg,#2f52d0,#5b7bf0);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;box-shadow:0 4px 10px -3px rgba(47,82,208,.5)}
+.brand-title{font-size:14px;font-weight:700;letter-spacing:.2px}
+.brand-sub{font-size:11px;color:var(--muted);margin-top:1px;letter-spacing:.3px}
+.nav{padding:12px 10px;flex:1;overflow:auto}
+.nav-label{font-size:10.5px;color:var(--muted);font-weight:600;letter-spacing:1px;padding:8px 8px 6px}
+.nav-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 10px;border-radius:var(--radius-sm);
+  color:var(--text-2);font-size:12.5px;margin-bottom:2px;transition:.15s}
+.nav-item:hover{background:var(--surface-3);color:var(--text)}
+.nav-item.active{background:var(--primary-soft);color:var(--primary-600);font-weight:600}
+.nav-item.active .nav-idx{background:var(--primary);color:#fff;border-color:var(--primary)}
+.nav-idx{width:19px;height:19px;flex:0 0 19px;border-radius:6px;border:1px solid var(--border-2);display:flex;align-items:center;
+  justify-content:center;font-size:10.5px;font-weight:700;color:var(--muted);background:#fff}
+.nav-badge{margin-left:auto;font-size:10px;font-weight:700;min-width:18px;height:18px;padding:0 5px;border-radius:9px;
+  background:var(--err-soft);color:var(--err);border:1px solid var(--err-border);display:flex;align-items:center;justify-content:center}
+.nav-badge.gray{background:var(--surface-3);color:var(--muted);border-color:var(--border)}
+.side-foot{padding:12px 16px;border-top:1px solid var(--border);font-size:10.5px;color:var(--muted);line-height:1.6}
+
+.main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.topbar{height:56px;flex:0 0 56px;background:#fff;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;padding:0 18px}
+.tb-title{font-size:14px;font-weight:650}
+.tb-sub{font-size:11.5px;color:var(--muted);margin-left:2px}
+.tb-spacer{flex:1}
+.chip{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:7px;font-size:11.5px;font-weight:600;
+  border:1px solid var(--border);background:var(--surface-2);color:var(--text-2);white-space:nowrap}
+.chip.ok{background:var(--ok-soft);border-color:var(--ok-border);color:var(--ok)}
+.chip.err{background:var(--err-soft);border-color:var(--err-border);color:var(--err)}
+.chip.warn{background:var(--warn-soft);border-color:var(--warn-border);color:var(--warn)}
+.chip.primary{background:var(--primary-soft);border-color:var(--primary-border);color:var(--primary-600)}
+.dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+select.mini{height:26px;border:1px solid var(--border);border-radius:7px;background:#fff;color:var(--text-2);font-size:11.5px;padding:0 6px;outline:none}
+.btn{height:30px;padding:0 13px;border-radius:8px;border:1px solid var(--border-2);background:#fff;font-size:12.5px;font-weight:600;
+  color:var(--text-2);transition:.15s;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn:hover{border-color:#b9c3d3;background:var(--surface-2)}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:0 2px 8px -3px rgba(47,82,208,.6)}
+.btn.primary:hover{background:var(--primary-600);border-color:var(--primary-600)}
+.btn.sm{height:26px;padding:0 10px;font-size:12px}
+.btn.ghost{border-color:transparent;background:transparent}
+.btn.ghost:hover{background:var(--surface-3)}
+
+/* ---------- 页面容器：页面一不滚动，内部三块各自滚动 ---------- */
+.scroll{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+.page{display:none;min-height:0;min-width:0}
+.page.active{display:block;flex:1;overflow:hidden}
+.page.pad.active{overflow:auto;padding:20px}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.page.active{animation:fade .25s ease}
+.card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow-1)}
+.card-h{padding:12px 15px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.card-t{font-size:13px;font-weight:650}
+.card-d{font-size:11.5px;color:var(--muted)}
+.card-b{padding:16px}
+.sec-title{font-size:12px;font-weight:700;color:var(--text-2);margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.sec-title::before{content:"";width:3px;height:13px;border-radius:2px;background:var(--primary)}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.muted{color:var(--muted)}
+.mono{font-family:var(--mono)}
+
+/* 页面一 三栏布局 */
+.p1grid{height:100%;display:grid;grid-template-columns:minmax(330px,1fr) minmax(380px,1.12fr);gap:14px;padding:16px;overflow:hidden}
+.p1col{display:flex;flex-direction:column;gap:14px;min-height:0;min-width:0}
+.card.pfill{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.card.pfill>.card-h{flex:0 0 auto}
+.card.pfill>.card-b{flex:1;min-height:0;overflow:auto}
+.upbar{display:flex;align-items:center;gap:9px;margin-bottom:10px;padding:8px 10px;background:var(--surface-2);
+  border:1px dashed var(--border-2);border-radius:8px;font-size:11.5px;color:var(--muted)}
+
+.bar{height:5px;border-radius:5px;background:var(--surface-3);overflow:hidden}
+.bar>i{display:block;height:100%;width:0;border-radius:5px;background:linear-gradient(90deg,#2f52d0,#6d8bf5);transition:width .35s ease}
+
+/* ---------- 关联树 ---------- */
+.tree{padding:2px 0}
+.tnode{position:relative;padding:6px 8px 6px 0;border-radius:8px;transition:.15s}
+.tnode:hover{background:var(--surface-2)}
+.tnode.parsing{background:var(--primary-soft)}
+.tnode .tline{display:flex;align-items:center;gap:7px;position:relative}
+.tnode .twire{position:absolute;left:-14px;top:14px;width:10px;height:1.5px;background:var(--border-2);border-radius:2px}
+.tnode::before{content:"";position:absolute;left:-14px;top:0;bottom:0;width:1.5px;background:var(--border-2);border-radius:2px}
+.tnode.last::before{bottom:calc(100% - 15px)}
+.tnode.root::before,.tnode.root .twire{display:none}
+.tbranch{color:#fff;font-size:9.5px;font-weight:800;padding:1px 6px;border-radius:5px;letter-spacing:.3px;flex:0 0 auto}
+.tnode.lv3.br-a{border-left:2px solid var(--br-a)}
+.tnode.lv3.br-b{border-left:2px solid var(--br-b)}
+.tnode.lv3.br-c{border-left:2px solid var(--br-c)}
+.tnode.lv3.br-d{border-left:2px solid var(--br-d)}
+.tnode.lv3.br-e{border-left:2px solid var(--br-e)}
+.tico{width:26px;height:28px;flex:0 0 26px;border-radius:5px;display:flex;align-items:center;justify-content:center;
+  font-size:8.5px;font-weight:800;letter-spacing:-.3px;background:var(--surface-3);border:1px solid var(--border);color:var(--muted)}
+.tico.loan{background:#eef2fe;border-color:#ccd8fa;color:#3b58c9}
+.tico.draw{background:#e9f7f0;border-color:#bde5d1;color:#0e8f5b}
+.tico.pay{background:#fdf4e4;border-color:#f0dcb4;color:#a9701a}
+.tico.doc{background:#f3eefe;border-color:#ddd0fa;color:#6b46c1}
+.tname{font-size:12.5px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tcode{font-family:var(--mono);font-size:10.5px;color:var(--muted);flex:0 0 auto}
+.tstate{margin-left:auto;font-size:10.5px;color:var(--muted);flex:0 0 auto;display:flex;align-items:center;gap:5px}
+.tsub{font-size:11px;color:var(--muted);margin:2px 0 0 33px;font-family:var(--mono)}
+.tnode.miss{border:1px dashed var(--warn-border);background:var(--warn-soft);border-left:2px dashed var(--warn)}
+.tnode.miss .tname{color:var(--warn)}
+
+/* ---------- 思考过程 ---------- */
+.think{flex:1;min-height:0;overflow:auto;padding:4px 14px 14px;font-size:12.5px;line-height:1.75}
+.th-line{display:flex;gap:9px;padding:8px 10px;border-radius:8px;margin-bottom:3px;animation:fade .3s ease}
+.th-line:hover{background:var(--surface-2)}
+.th-tag{flex:0 0 auto;font-size:10px;font-weight:800;letter-spacing:.3px;padding:2px 7px;height:19px;border-radius:5px;
+  background:var(--surface-3);color:var(--muted);border:1px solid var(--border);white-space:nowrap;margin-top:1px}
+.th-line.phase .th-tag{background:var(--primary-soft);color:var(--primary-600);border-color:var(--primary-border)}
+.th-line.hit .th-tag{background:var(--err-soft);color:var(--err);border-color:var(--err-border)}
+.th-line.warn .th-tag{background:var(--warn-soft);color:var(--warn);border-color:var(--warn-border)}
+.th-line.ok .th-tag{background:var(--ok-soft);color:var(--ok);border-color:var(--ok-border)}
+.th-tx{flex:1;min-width:0;color:var(--text-2)}
+.th-tx b{color:var(--text)}
+.th-tx .mono{font-size:11px;background:var(--surface-3);padding:1px 5px;border-radius:4px}
+.caret{display:inline-block;width:6px;height:13px;background:var(--primary);vertical-align:-2px;margin-left:2px;animation:blink .9s steps(2) infinite}
+@keyframes blink{0%,50%{opacity:1}51%,100%{opacity:0}}
+.think-empty{color:var(--muted);font-size:12px;padding:30px;text-align:center}
+
+/* ---------- 待处理项 ---------- */
+.pendbox{flex:1;min-height:0;overflow:auto;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.pend-empty{color:var(--muted);font-size:12px;text-align:center;padding:26px 8px;line-height:1.8}
+.pend-item{border:1px solid var(--border);border-left:3px solid var(--err);border-radius:8px;padding:9px 11px;background:var(--err-soft);flex:0 0 auto}
+.pend-item.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+.pend-item.done{border-left-color:var(--ok);background:var(--ok-soft)}
+.pend-item.wait{box-shadow:0 0 0 2px rgba(200,39,58,.28)}
+.pi-top{display:flex;align-items:center;gap:7px}
+.pi-t{font-size:12.5px;font-weight:650;flex:1;min-width:0}
+.pi-id{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.pi-d{font-size:11.5px;color:var(--text-2);margin-top:5px;line-height:1.7}
+.pi-act{display:flex;gap:7px;margin-top:9px;flex-wrap:wrap;align-items:center}
+.pi-done{font-size:11.5px;font-weight:700;margin-top:7px;display:flex;align-items:center;gap:6px}
+
+/* ---------- 规则卡 ---------- */
+.chk{display:flex;gap:9px;padding:9px 11px;border-radius:var(--radius-sm);border:1px solid var(--border);background:#fff;
+  transition:.15s;cursor:pointer;align-items:flex-start}
+.chk-mark{width:17px;height:17px;flex:0 0 17px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:800;color:#fff;margin-top:1px;background:#cbd3e0}
+.spin{width:11px;height:11px;border:2px solid var(--primary-border);border-top-color:var(--primary);border-radius:50%;animation:rot .7s linear infinite;display:inline-block}
+@keyframes rot{to{transform:rotate(360deg)}}
+.pulse{width:7px;height:7px;border-radius:50%;background:var(--primary);animation:pl 1s infinite;display:inline-block}
+@keyframes pl{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* ---------- stat ---------- */
+.stat{padding:14px 16px;border-radius:var(--radius);border:1px solid var(--border);background:#fff}
+.stat-n{font-size:24px;font-weight:750;line-height:1.1;letter-spacing:-.5px}
+.stat-l{font-size:11.5px;color:var(--muted);margin-top:3px}
+.stat.err .stat-n{color:var(--err)} .stat.warn .stat-n{color:var(--warn)}
+.stat.ok .stat-n{color:var(--ok)} .stat.pri .stat-n{color:var(--primary)}
+
+/* ---------- split ---------- */
+.split{display:grid;grid-template-columns:300px 1fr;min-height:560px}
+.split-l{border-right:1px solid var(--border);padding:12px;overflow:auto;background:var(--surface-2);max-height:calc(100vh - 262px)}
+.split-r{padding:16px;overflow:auto;max-height:calc(100vh - 262px)}
+.fcard{padding:10px 12px;border-radius:var(--radius-sm);border:1px solid var(--border);background:#fff;cursor:pointer;transition:.15s;margin-bottom:6px}
+.fcard:hover{border-color:#b9c3d3}
+.fcard.active{border-color:var(--primary);background:var(--primary-soft)}
+.fcard-top{display:flex;align-items:center;gap:7px}
+.fcard-name{font-size:12.5px;font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sev{width:6px;height:6px;border-radius:50%;flex:0 0 6px}
+.sev.f{background:var(--err)} .sev.w{background:var(--warn)} .sev.p{background:var(--ok)}
+.fcard-sub{font-size:10.5px;color:var(--muted);margin-top:3px;font-family:var(--mono)}
+
+/* ---------- kv ---------- */
+.kv{width:100%;border-collapse:collapse}
+.kv tr{border-bottom:1px dashed var(--border)}
+.kv tr:last-child{border-bottom:none}
+.kv td{padding:7px 10px;vertical-align:top;font-size:12.5px}
+.kv td.k{width:38%;color:var(--muted);font-size:11.5px}
+.kv td.v{font-family:var(--mono);font-size:12px;word-break:break-word}
+.kv tr.hit{background:var(--err-soft)}
+.kv tr.hit td.k{color:var(--err);font-weight:700}
+.kv tr.hit td.v{color:var(--err);font-weight:700}
+.kv tr.hitw{background:var(--warn-soft)}
+.kv tr.hitw td.k{color:var(--warn);font-weight:700}
+.kv tr.hitw td.v{color:var(--warn);font-weight:700}
+
+/* ---------- tooltip ---------- */
+.tipable{border-bottom:1px dashed #9fb0d0;cursor:help}
+.tipable.t-legal{border-bottom-color:#d3a24e}
+.tipable.t-tr{border-bottom-color:#8fb8e8}
+#tip{position:fixed;z-index:9999;max-width:320px;pointer-events:none;opacity:0;transform:translateY(4px);
+  transition:opacity .13s ease,transform .13s ease;background:#1c2333;color:#eef1f7;border-radius:9px;padding:10px 12px;
+  font-size:11.5px;line-height:1.6;box-shadow:0 10px 30px -8px rgba(10,16,30,.45)}
+#tip.show{opacity:1;transform:none}
+#tip .tt-tag{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.6px;padding:1px 6px;border-radius:5px;
+  margin-bottom:6px;background:#39415c;color:#c3ccea}
+#tip .tt-title{font-weight:700;font-size:12px;color:#fff;margin-bottom:4px}
+#tip .tt-body{color:#c6cddf}
+
+/* ---------- paper ---------- */
+.paper{background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);padding:20px 20px 24px;position:relative;
+  box-shadow:0 1px 3px rgba(16,24,40,.06);overflow:hidden;font-family:"Songti SC","SimSun",Georgia,serif}
+.paper-h{border-bottom:2px solid #dfe4ee;padding-bottom:9px;margin-bottom:14px}
+.paper-co{font-size:10.5px;color:var(--muted);letter-spacing:1.6px;font-family:-apple-system,"Microsoft YaHei",sans-serif}
+.paper-t{font-size:16px;font-weight:700;text-align:center;margin:8px 0 3px;letter-spacing:2px}
+.paper-s{font-size:10px;color:var(--muted);text-align:center;font-family:var(--mono);letter-spacing:.5px}
+.paper-p{font-size:12px;color:#3f495e;line-height:2.05;margin:0 0 9px}
+.paper-p b{color:#1b2333}
+.paper-note{font-size:11px;color:#6b7688;background:#f7f9fc;border-left:3px solid #ccd8fa;padding:8px 11px;margin:10px 0;line-height:1.8;border-radius:0 6px 6px 0}
+.paper-tb{width:100%;border-collapse:collapse;margin:11px 0}
+.paper-tb th,.paper-tb td{border:1px solid #d9dfe9;padding:6px 9px;text-align:left;color:#3f495e;font-size:11.5px}
+.paper-tb th{background:#f4f7fb;font-weight:700;color:#2a3448;text-align:center;font-size:11px}
+.paper-tb td.num{text-align:right;font-family:var(--mono)}
+.paper-kv{width:100%;border-collapse:collapse;margin:9px 0}
+.paper-kv td{border:1px solid #e3e8f0;padding:6px 9px;font-size:11.5px;color:#3f495e;vertical-align:top}
+.paper-kv td.lbl{background:#fafbfd;color:#6b7688;width:118px;font-weight:600}
+.paper-sign{display:flex;justify-content:space-between;margin-top:26px;font-size:11.5px;color:#4b5567;gap:20px}
+.paper-sign div{flex:1;border-top:1px solid #dfe4ee;padding-top:6px}
+.paper-stamp{position:absolute;right:22px;bottom:20px;width:82px;height:82px;border:2.5px solid rgba(200,39,58,.32);border-radius:50%;
+  display:flex;align-items:center;justify-content:center;color:rgba(200,39,58,.48);font-size:9px;font-weight:800;text-align:center;
+  line-height:1.3;transform:rotate(-12deg);letter-spacing:.5px;font-family:sans-serif}
+.paper-page{position:absolute;right:14px;top:12px;font-size:9.5px;color:#b3bccb;font-family:var(--mono)}
+.paper-en{font-family:"Times New Roman",Georgia,serif}
+
+.txt{font-size:12.5px;line-height:1.85;color:var(--text-2)}
+.txt p{margin:0 0 10px}
+.txt b{color:var(--text)}
+.summary-box{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px}
+.email{border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:#fff}
+.email-h{padding:11px 15px;background:var(--surface-2);border-bottom:1px solid var(--border);font-size:12px}
+.email-row{display:flex;gap:8px;font-size:12px;padding:5px 0}
+.email-row .lbl{width:52px;color:var(--muted);flex:0 0 52px}
+.email-b{padding:16px 18px;font-size:12.5px;line-height:1.9;color:var(--text-2);white-space:pre-wrap}
+
+.grp{border:1px solid var(--border);border-radius:var(--radius);background:#fff;margin-bottom:10px;overflow:hidden}
+.grp-h{padding:13px 16px;display:flex;align-items:center;gap:11px;cursor:pointer;transition:.15s}
+.grp-h:hover{background:var(--surface-2)}
+.grp.open .grp-h{border-bottom:1px solid var(--border)}
+.grp-ico{width:30px;height:26px;flex:0 0 30px;border-radius:8px;background:var(--primary-soft);color:var(--primary-600);
+  display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:800;font-family:var(--mono)}
+.grp-t{font-size:12.5px;font-weight:650}
+.grp-d{font-size:11px;color:var(--muted);margin-top:1px}
+.grp-arrow{margin-left:auto;color:var(--muted);font-size:11px;transition:.2s}
+.grp.open .grp-arrow{transform:rotate(90deg)}
+.grp-b{display:none;padding:16px}
+.grp.open .grp-b{display:block}
+
+.mini-chips{display:flex;flex-wrap:wrap;gap:5px}
+.mini-chip{font-size:10.5px;padding:2px 7px;border-radius:6px;border:1px solid var(--border);background:var(--surface-2);
+  color:var(--text-2);font-family:var(--mono)}
+.mini-chip.ok{background:var(--ok-soft);border-color:var(--ok-border);color:var(--ok)}
+.mini-chip.err{background:var(--err-soft);border-color:var(--err-border);color:var(--err)}
+.mini-chip.warn{background:var(--warn-soft);border-color:var(--warn-border);color:var(--warn)}
+
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:14px;flex-wrap:wrap}
+.tab{padding:8px 13px;font-size:12px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--primary-600);border-bottom-color:var(--primary)}
+.tab-panel{display:none} .tab-panel.active{display:block}
+
+.note{display:flex;gap:9px;padding:11px 13px;border-radius:var(--radius-sm);background:var(--primary-soft);
+  border:1px solid var(--primary-border);font-size:11.5px;color:#33447e;line-height:1.7}
+.note.warn{background:var(--warn-soft);border-color:var(--warn-border);color:#7a5514}
+.note.err{background:var(--err-soft);border-color:var(--err-border);color:#8a2029}
+.note.ok{background:var(--ok-soft);border-color:var(--ok-border);color:#0b6b46}
+
+.diff-h{padding:8px 11px;background:var(--surface-2);border-bottom:1px solid var(--border);font-size:11.5px;font-weight:700;display:flex;align-items:center;gap:6px}
+.diff-b{padding:7px 11px}
+.diff-r{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;padding:4px 0;border-bottom:1px dashed var(--border)}
+.diff-r:last-child{border-bottom:none}
+.diff-r .k{color:var(--muted);flex:0 0 auto}
+.diff-r .v{font-family:var(--mono);text-align:right;word-break:break-all}
+.diff-r.bad .v{color:var(--err);font-weight:700}
+.diff-r.bad{background:var(--err-soft);margin:0 -11px;padding:4px 11px;border-radius:4px}
+
+/* ---------- 检查项行 ---------- */
+.ckrow{border:1px solid var(--border);border-radius:var(--radius-sm);background:#fff;margin-bottom:8px;overflow:hidden;
+  border-left:3px solid #cbd3e0}
+.ckrow.pass{border-left-color:var(--ok)}
+.ckrow.fail{border-left-color:var(--err)}
+.ckrow.warn{border-left-color:var(--warn)}
+.ckrow-h{display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer}
+.ckrow-h:hover{background:var(--surface-2)}
+.ckrow-n{font-size:12.5px;font-weight:650;flex:1;min-width:0}
+.ckrow-id{font-family:var(--mono);font-size:10.5px;color:var(--muted);flex:0 0 auto}
+.ckrow-b{display:none;padding:0 14px 14px}
+.ckrow.open .ckrow-b{display:block}
+.ckfield{display:flex;gap:12px;padding:9px 0;border-top:1px dashed var(--border);font-size:12px;line-height:1.75}
+.ckfield .fk{flex:0 0 92px;color:var(--muted);font-weight:600;font-size:11.5px;padding-top:1px}
+.ckfield .fv{flex:1;min-width:0;color:var(--text-2)}
+.ckfield .fv b{color:var(--text)}
+.ckfield .fv.mono{font-family:var(--mono);font-size:11.5px;color:#43506b;word-break:break-all}
+.pill{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:6px;font-size:10.5px;font-weight:700;flex:0 0 auto}
+.pill.pass{background:var(--ok-soft);color:var(--ok);border:1px solid var(--ok-border)}
+.pill.fail{background:var(--err-soft);color:var(--err);border:1px solid var(--err-border)}
+.pill.warn{background:var(--warn-soft);color:var(--warn);border:1px solid var(--warn-border)}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-row">
+        <div class="brand-logo">慧</div>
+        <div>
+          <div class="brand-title">智汇跨境贷途</div>
+          <div class="brand-sub">慧眼识险无忧 · Team 08</div>
+        </div>
+      </div>
+    </div>
+    <nav class="nav">
+      <div class="nav-label">审核流程</div>
+      <button class="nav-item active" data-page="1"><span class="nav-idx">1</span><span>上传 · 归集 · 思考</span></button>
+      <button class="nav-item" data-page="2"><span class="nav-idx">2</span><span>检查结果概览</span><span class="nav-badge">7</span></button>
+      <button class="nav-item" data-page="3"><span class="nav-idx">3</span><span>解析结果概览</span><span class="nav-badge gray">7</span></button>
+      <button class="nav-item" data-page="4"><span class="nav-idx">4</span><span>总结与反馈</span></button>
+      <div class="nav-label" style="margin-top:10px">规则库</div>
+      <button class="nav-item" data-page="3"><span class="nav-idx">§</span><span>16 条检查规则</span></button>
+      <button class="nav-item" data-page="3"><span class="nav-idx">§</span><span>术语与翻译库</span></button>
+      <button class="nav-item" data-page="3"><span class="nav-idx">§</span><span>境内外法规库</span></button>
+    </nav>
+    <div class="side-foot">业务编号 <span class="mono">TF-2026-0417</span><br>审核分行 中国香港分行</div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div>
+        <span class="tb-title">跨境贷款支持性文件智能审核</span>
+        <span class="tb-sub" id="tbSub">页面一 · 上传归集与思考过程</span>
+      </div>
+      <div class="tb-spacer"></div>
+      <span class="chip primary" id="chipFiles">18 份文件 · 5 笔支付指令</span>
+      <span class="chip" id="chipProgress">已解析 0 / 18</span>
+      <span class="chip err">4 项不通过 · 3 项提示</span>
+      <select class="mini" title="不同分行材料要求不同">
+        <option>中国香港分行 · 规则集 v2.3</option>
+        <option>新加坡分行 · 规则集 v1.8</option>
+        <option>上海自贸区分行 · 规则集 v3.1</option>
+      </select>
+      <button class="btn sm" onclick="restart()">↻ 重置演示</button>
+      <button class="btn sm primary" onclick="go(4)">生成反馈 →</button>
+    </header>
+
+    <div class="scroll" id="scrollBox">
+      <!-- ================= PAGE 1 ================= -->
+      <section class="page active" id="page1">
+        <div class="p1grid">
+          <!-- 左：上传 + 关联归集 -->
+          <div class="p1col">
+            <div class="card pfill" style="flex:1">
+              <div class="card-h">
+                <div style="flex:1">
+                  <div class="card-t">① 材料上传与解析 · 关联归集</div>
+                  <div class="card-d">贷款合同 → 提款指令 → 5 笔支付指令 → 各笔专属外部单据</div>
+                </div>
+                <span class="chip ok" id="chipParsed">0 / 18 已解析</span>
+              </div>
+              <div class="card-b">
+                <div class="upbar">
+                  <span style="font-size:15px">⤒</span>
+                  <span style="flex:1">已接收 18 份文件 · 按「收款人 + 合同编号 + 金额」三重指纹归集，5 笔支付各自成组</span>
+                  <button class="btn sm" onclick="restart()">重新上传</button>
+                </div>
+                <div class="bar" style="margin-bottom:12px"><i id="fileBar"></i></div>
+                <div class="tree" id="tree"></div>
+                <div class="note warn" style="margin-top:12px">
+                  <span>⚠️</span>
+                  <div><b>归集规则：</b>每份外部单据通过「收款人名称 + 合同编号 + 金额」三重指纹绑定到唯一支付指令。上海XX纸业的合同/订单/发票只挂在 <span class="mono">PI-01</span>、上海YY包装的只挂在 <span class="mono">PI-03</span>，两家同名类单据互不串档；Supplier B 的服务协议与发票只挂在 <span class="mono">PI-02</span>。</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 右：思考过程（大） + 待处理项（小） -->
+          <div class="p1col">
+            <div class="card pfill" style="flex:1.62">
+              <div class="card-h">
+                <div style="flex:1">
+                  <div class="card-t">② Agent 思考过程</div>
+                  <div class="card-d">目标理解 → 字段抽取 → 关联归集 → 逐笔业务推理</div>
+                </div>
+                <span class="chip" id="chipThink">待启动</span>
+              </div>
+              <div class="think" id="think"><div class="think-empty">等待解析启动…</div></div>
+            </div>
+
+            <div class="card pfill" style="flex:1">
+              <div class="card-h">
+                <div style="flex:1">
+                  <div class="card-t">③ 需业务人员处理项</div>
+                  <div class="card-d">异常命中后自动挂起，处置后继续执行</div>
+                </div>
+                <span class="chip warn" id="pendCount">0 项</span>
+                <button class="btn sm ghost" onclick="autoKeepRest()">自动保留后续异常</button>
+              </div>
+              <div class="pendbox" id="pendBox"><div class="pend-empty">暂无待处理项<br>解析过程中命中的异常将在此排队</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= PAGE 2 ================= -->
+      <section class="page pad" id="page2">
+        <div class="grid-3" style="margin-bottom:16px">
+          <div class="stat err"><div class="stat-n">4</div><div class="stat-l">严重不通过 · 阻断放款</div></div>
+          <div class="stat warn"><div class="stat-n">3</div><div class="stat-l">提示项 · 需人工确认</div></div>
+          <div class="stat ok"><div class="stat-n">9</div><div class="stat-l">已通过检查项</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-h">
+            <div style="flex:1">
+              <div class="card-t">检查结果明细</div>
+              <div class="card-d">点击任一失败项，右侧可切换查看相关文件的 <strong>原文</strong> 与识别到的结构化文本</div>
+            </div>
+            <div style="display:flex;gap:6px" id="filterBox">
+              <button class="btn sm primary" onclick="filterChecks('all',this)">全部</button>
+              <button class="btn sm" onclick="filterChecks('fail',this)">仅不通过</button>
+              <button class="btn sm" onclick="filterChecks('warn',this)">仅提示</button>
+            </div>
+          </div>
+          <div class="split">
+            <div class="split-l" id="failList"></div>
+            <div class="split-r" id="failDetail"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= PAGE 3 ================= -->
+      <section class="page pad" id="page3">
+        <div class="note" style="margin-bottom:14px">
+          <span>ℹ️</span>
+          <div><b>本页以文件为主线：</b>按关联归集结果分成 7 个文件组，每组内可切换查看<b>文件原本</b>、<b>识别的结构化文本</b>、<b>本组涉及的检查规则</b>（含怎么检查 / 规则表达式 / 检查结果 / 为什么通过 / 处理建议）。
+          结构化文本中的<b>虚线下划线</b>字段支持鼠标悬停查看术语解释，<span style="border-bottom:1px dashed #d3a24e">橙色</span>为法规条目、<span style="border-bottom:1px dashed #8fb8e8">蓝色</span>为外文原文翻译。</div>
+        </div>
+
+        <div class="grid-3" style="margin-bottom:16px">
+          <div class="stat pri"><div class="stat-n">18</div><div class="stat-l">份文件 · 归入 7 个文件组</div></div>
+          <div class="stat pri"><div class="stat-n">5</div><div class="stat-l">笔支付指令（各自独立成组）</div></div>
+          <div class="stat"><div class="stat-n" style="font-size:18px;line-height:1.35">9 通过 · 4 不通过 · 3 提示</div><div class="stat-l">16 条检查项执行结果</div></div>
+        </div>
+
+        <div class="sec-title" style="font-size:13px;margin:0 0 12px">文件组列表</div>
+        <div id="groupList"></div>
+      </section>
+
+      <!-- ================= PAGE 4 ================= -->
+      <section class="page pad" id="page4">
+        <div class="grid-2" style="align-items:start">
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div class="card">
+              <div class="card-h">
+                <div style="flex:1">
+                  <div class="card-t">AI 审核结论摘要</div>
+                  <div class="card-d">基于 16 条规则执行结果自动生成 · 建议：<b style="color:var(--err)">暂缓放款</b></div>
+                </div>
+                <button class="btn sm" onclick="this.textContent='✓ 已重新生成'">↻ 重新生成</button>
+              </div>
+              <div class="card-b"><div class="summary-box txt" id="summaryText"></div></div>
+            </div>
+            <div class="card">
+              <div class="card-h"><div class="card-t">处理建议（按优先级）</div></div>
+              <div class="card-b" style="padding:12px 16px"><div id="adviceList"></div></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-h">
+              <div style="flex:1">
+                <div class="card-t">客户反馈邮件模板</div>
+                <div class="card-d">依据缺陷清单与建议生成，可直接复制发送</div>
+              </div>
+              <button class="btn sm primary" onclick="copyMail(this)">复制正文</button>
+            </div>
+            <div class="card-b">
+              <div class="email">
+                <div class="email-h">
+                  <div class="email-row"><span class="lbl">收件人</span><span class="mono">ap.ops@example-client.com</span></div>
+                  <div class="email-row"><span class="lbl">抄送</span><span class="mono">tf.team@bank.com</span></div>
+                  <div class="email-row"><span class="lbl">主题</span><span>【贸易融资】业务编号 TF-2026-0417 贷款资料审核反馈 · 需补充材料 6 项</span></div>
+                </div>
+                <div class="email-b" id="mailBody"></div>
+              </div>
+              <div class="note" style="margin-top:12px">
+                <span>✉️</span>
+                <div>邮件正文中的每一处缺陷均携带<b>定位信息（文件 + 字段 + 差异值）</b>，客户回补材料后系统按同编号自动重跑规则并刷新结论。</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div id="tip"></div>
+
+<script>
+/* =========================================================
+   1. 基础数据
+   ========================================================= */
+const FILES = [
+  {id:'F1', zh:'贷款合同', code:'LN20260315-008', kind:'贷款合同', cls:'loan', pages:12, lang:'中文', size:'2.4 MB'},
+  {id:'F2', zh:'提款指令', code:'DD20260401-002', kind:'提款指令', cls:'draw', pages:3, lang:'中文', size:'0.6 MB'},
+  {id:'F3', zh:'支付指令', code:'PI-01', kind:'支付指令', cls:'pay', pages:2, lang:'中文', size:'0.4 MB'},
+  {id:'F4', zh:'支付指令', code:'PI-02', kind:'支付指令', cls:'pay', pages:2, lang:'中英', size:'0.4 MB'},
+  {id:'F5', zh:'支付指令', code:'PI-03', kind:'支付指令', cls:'pay', pages:2, lang:'中文', size:'0.4 MB'},
+  {id:'F6', zh:'支付指令', code:'PI-04', kind:'支付指令', cls:'pay', pages:2, lang:'中文', size:'0.4 MB'},
+  {id:'F7', zh:'支付指令', code:'PI-05', kind:'支付指令', cls:'pay', pages:2, lang:'中文', size:'0.3 MB'},
+  {id:'F8', zh:'采购合同', code:'PC-2026-0311', kind:'商务合同', cls:'doc', pages:8, lang:'中文', size:'1.8 MB'},
+  {id:'F9', zh:'采购订单', code:'PO-2026-0330', kind:'订单', cls:'doc', pages:2, lang:'中文', size:'0.5 MB'},
+  {id:'F10', zh:'增值税专用发票', code:'No.03827451', kind:'发票', cls:'doc', pages:1, lang:'中文', size:'0.7 MB'},
+  {id:'F11', zh:'服务协议', code:'SA-2026-028', kind:'商务合同', cls:'doc', pages:14, lang:'英文', size:'3.1 MB'},
+  {id:'F12', zh:'Invoice', code:'INV-2026-0417', kind:'发票', cls:'doc', pages:1, lang:'英文', size:'0.6 MB'},
+  {id:'F13', zh:'采购合同', code:'PC-2026-0318', kind:'商务合同', cls:'doc', pages:6, lang:'中文', size:'1.4 MB'},
+  {id:'F14', zh:'采购订单', code:'PO-2026-0402', kind:'订单', cls:'doc', pages:2, lang:'中文', size:'0.5 MB'},
+  {id:'F15', zh:'增值税专用发票', code:'No.03839670', kind:'发票', cls:'doc', pages:1, lang:'中文', size:'0.7 MB'},
+  {id:'F16', zh:'运输服务合同', code:'TC-2026-022', kind:'商务合同', cls:'doc', pages:5, lang:'中文', size:'1.1 MB'},
+  {id:'F17', zh:'货物运输业发票', code:'No.03841120', kind:'发票', cls:'doc', pages:1, lang:'中文', size:'0.6 MB'},
+  {id:'F18', zh:'付税通知', code:'TAX-2026Q2-118', kind:'付税通知', cls:'doc', pages:2, lang:'中文', size:'0.4 MB'}
+];
+const fileById = id => FILES.find(f=>f.id===id);
+
+/* 关联树：一笔提款 → 5 笔支付指令 → 各自的外部单据 */
+const TREE = [
+  {file:'F1', depth:0, note:'授信额度 CNY 30,000,000 · 用途 日常经营 · LPR+1.5% · 12 个月'},
+  {file:'F2', depth:1, note:'提款金额 CNY 10,000,000 · 放款日 2026-04-08 · 拆分为 5 笔支付'},
+  {file:'F3', depth:2, br:'a', payee:'上海XX纸业贸易有限公司', amt:'CNY 3,000,000'},
+  {file:'F8', depth:3, br:'a', belong:'PI-01'},
+  {file:'F9', depth:3, br:'a', belong:'PI-01'},
+  {file:'F10', depth:3, br:'a', belong:'PI-01'},
+  {file:'F4', depth:2, br:'b', payee:'XX Technology Co., Ltd.（境外）', amt:'CNY 2,000,000'},
+  {file:'F11', depth:3, br:'b', belong:'PI-02'},
+  {file:'F12', depth:3, br:'b', belong:'PI-02'},
+  {miss:'服务订单 / 交付确认单', depth:3, br:'b', belong:'PI-02'},
+  {file:'F5', depth:2, br:'c', payee:'上海YY包装材料有限公司', amt:'CNY 2,000,000'},
+  {file:'F13', depth:3, br:'c', belong:'PI-03'},
+  {file:'F14', depth:3, br:'c', belong:'PI-03'},
+  {file:'F15', depth:3, br:'c', belong:'PI-03'},
+  {file:'F6', depth:2, br:'d', payee:'深圳市ZZ物流有限公司', amt:'CNY 1,000,000'},
+  {file:'F16', depth:3, br:'d', belong:'PI-04'},
+  {file:'F17', depth:3, br:'d', belong:'PI-04'},
+  {file:'F7', depth:2, br:'e', payee:'税务专户 · 国家税务总局上海市XX区税务局', amt:'CNY 2,000,000'},
+  {file:'F18', depth:3, br:'e', belong:'PI-05'}
+];
+
+/* 结构化文本字段 */
+const STRUCT = {
+ F1:[
+  {k:'合同编号', v:'LN20260315-008'},
+  {k:'借款人', v:'XX铜版纸制造有限公司'},
+  {k:'签署日期', v:'2026-03-15'},
+  {k:'授信额度', v:'CNY 30,000,000.00'},
+  {k:'已提用额度', v:'CNY 0.00'},
+  {k:'本笔提款后剩余可用', v:'CNY 20,000,000.00'},
+  {k:'贷款用途', v:'日常经营（流动资金周转）', tip:{tag:'核心字段', t:'贷款用途', b:'决定后续所有商务合同与发票可否落地的“母集”。本笔为“日常经营”，属最宽口径，仍需逐笔穿透校验。'}},
+  {k:'利率', v:'LPR + 1.50%', tip:{tag:'术语', t:'LPR（贷款市场报价利率）', b:'Loan Prime Rate，由中国人民银行授权全国银行间同业拆借中心发布的贷款基准利率，每月 20 日更新。'}},
+  {k:'贷款期限', v:'12 个月（2026-03-15 至 2027-03-14）'},
+  {k:'担保方式', v:'信用'},
+  {k:'放款方式', v:'循环额度项下逐笔提款', tip:{tag:'术语', t:'循环额度', b:'在授信有效期内，还款后可恢复可用额度的授信安排；支持发票分批使用、分批付款与分批提款。'}}
+ ],
+ F2:[
+  {k:'对应贷款合同编号', v:'LN20260315-008'},
+  {k:'贷款合同日期', v:'2026-03-20', bad:1, tip:{tag:'差异', t:'与贷款合同不一致', b:'系统在贷款合同中识别到的签署日期为 2026-03-15，本字段填报 2026-03-20，相差 5 天。'}},
+  {k:'提款金额', v:'CNY 10,000,000.00'},
+  {k:'利率', v:'LPR + 1.50%', tip:{tag:'术语', t:'利率勾选组合', b:'提款指令中利率为组合勾选控件，需与贷款合同条款逐项比对：基准、加点、浮动周期。'}},
+  {k:'放款日', v:'2026-04-08'},
+  {k:'到期日', v:'2026-10-05', bad:1, tip:{tag:'差异', t:'落在法定节假日', b:'2026-10-05 处于国庆节法定假期（10/1–10/8）区间内，不满足“到期日不得为节假日”的规则。'}},
+  {k:'计算所得期限', v:'180 天（≤ 合同期限 365 天）'},
+  {k:'提款用途', v:'支付货款、服务费、运输费及税款'},
+  {k:'拆分收款人数量', v:'5 家', tip:{tag:'关键结构', t:'多笔支付指令', b:'一笔提款拆分为 5 份独立支付指令，每份支付指令再各自挂载其专属的商务合同 / 订单 / 发票，形成“提款 → 支付 → 外部单据”的三级归集，不同支付指令下的单据不得混用。'}}
+ ],
+ F3:[
+  {k:'支付指令编号', v:'PI-01'},
+  {k:'关联提款指令', v:'DD20260401-002'},
+  {k:'收款人名称', v:'上海XX纸业贸易有限公司'},
+  {k:'收款人账号', v:'6217 **** **** 3382'},
+  {k:'支付金额', v:'CNY 3,000,000.00'},
+  {k:'支付用途', v:'支付原材料货款'},
+  {k:'境内/跨境', v:'境内', tip:{tag:'法规', t:'境内支付', b:'境内人民币货款支付，无跨境付汇手续要求；需关注三流一致（合同流、发票流、资金流）。'}},
+  {k:'已挂载外部单据', v:'PC-2026-0311 / PO-2026-0330 / No.03827451'}
+ ],
+ F4:[
+  {k:'支付指令编号', v:'PI-02'},
+  {k:'关联提款指令', v:'DD20260401-002'},
+  {k:'收款人名称', v:'XX Technology Co., Ltd.（Supplier B）'},
+  {k:'收款人开户行', v:'Bank of Singapore, SWIFT: DBSSSGSG'},
+  {k:'支付金额', v:'CNY 2,000,000.00（折 USD 277,777.78）'},
+  {k:'支付用途', v:'支付 IT 系统实施服务费'},
+  {k:'境内/跨境', v:'跨境付汇', tip:{tag:'法规', t:'服务贸易对外支付税务备案', b:'境内机构向境外单笔支付等值 5 万美元以上的服务贸易款项，需先在税务机关办理对外支付备案，凭备案表到银行办理付汇。'}},
+  {k:'已挂载外部单据', v:'SA-2026-028 / INV-2026-0417'}
+ ],
+ F5:[
+  {k:'支付指令编号', v:'PI-03'},
+  {k:'关联提款指令', v:'DD20260401-002'},
+  {k:'收款人名称', v:'上海YY包装材料有限公司'},
+  {k:'收款人账号', v:'6214 **** **** 7719'},
+  {k:'支付金额', v:'CNY 2,000,000.00'},
+  {k:'支付用途', v:'支付包装材料货款'},
+  {k:'境内/跨境', v:'境内'},
+  {k:'已挂载外部单据', v:'PC-2026-0318 / PO-2026-0402 / No.03839670', tip:{tag:'归集校验', t:'与 PI-01 同类但不同组', b:'本笔同样是“采购合同 + 订单 + 发票”的组合，但供应商为上海YY包装材料，指纹（收款人 + 合同编号 + 金额）与 PI-01 完全不同，因此两组单据不会被互相误挂。'}}
+ ],
+ F6:[
+  {k:'支付指令编号', v:'PI-04'},
+  {k:'关联提款指令', v:'DD20260401-002'},
+  {k:'收款人名称', v:'深圳市ZZ物流有限公司'},
+  {k:'收款人账号', v:'6222 **** **** 1043'},
+  {k:'支付金额', v:'CNY 1,000,000.00'},
+  {k:'支付用途', v:'支付干线运输服务费'},
+  {k:'境内/跨境', v:'境内'},
+  {k:'已挂载外部单据', v:'TC-2026-022 / No.03841120'}
+ ],
+ F7:[
+  {k:'支付指令编号', v:'PI-05'},
+  {k:'关联提款指令', v:'DD20260401-002'},
+  {k:'收款人名称', v:'国家税务总局上海市XX区税务局（税款专户）'},
+  {k:'支付金额', v:'CNY 2,000,000.00'},
+  {k:'支付用途', v:'缴纳增值税及附加税费'},
+  {k:'境内/跨境', v:'境内'},
+  {k:'关联缴款书', v:'TAX-2026Q2-118'}
+ ],
+ F8:[
+  {k:'合同编号', v:'PC-2026-0311'},
+  {k:'买方', v:'XX铜版纸制造有限公司'},
+  {k:'卖方', v:'上海XX纸业贸易有限公司'},
+  {k:'签订日期', v:'2026-03-11'},
+  {k:'合同金额', v:'CNY 3,200,000.00'},
+  {k:'标的物', v:'铜版纸 70g/㎡（规格 787×1092mm）', bad:1, tip:{tag:'差异', t:'与发票标的物不一致', b:'合同标的物为“铜版纸 70g/㎡”，发票货物名称为“办公用品·打印纸”，两者不构成包含关系。'}},
+  {k:'数量', v:'32 吨'},
+  {k:'交货期', v:'2026-04-15 前'}
+ ],
+ F9:[
+  {k:'订单编号', v:'PO-2026-0330'},
+  {k:'对应合同', v:'PC-2026-0311'},
+  {k:'订单金额', v:'CNY 3,000,000.00'},
+  {k:'标的物', v:'铜版纸 70g/㎡ · 30 吨'},
+  {k:'下单日期', v:'2026-03-30'}
+ ],
+ F10:[
+  {k:'发票种类', v:'增值税专用发票', tip:{tag:'术语', t:'增值税专用发票', b:'可抵扣进项税额的增值税发票。审核要点：购销双方信息、货物名称、金额需与合同及付款三流一致。'}},
+  {k:'发票代码/号码', v:'3100231130 / 03827451'},
+  {k:'开票日期', v:'2026-04-02'},
+  {k:'购买方', v:'XX铜版纸制造有限公司'},
+  {k:'销售方', v:'上海XX纸业贸易有限公司'},
+  {k:'货物名称', v:'办公用品·打印纸', bad:1, tip:{tag:'差异', t:'与合同标的物不一致', b:'发票开具的货物名称为“办公用品·打印纸”，与采购合同约定的“铜版纸 70g/㎡”不构成大范围包含小范围的关系。'}},
+  {k:'价税合计', v:'CNY 3,000,000.00'},
+  {k:'验真状态', v:'已通过国家税务总局平台查验'}
+ ],
+ F11:[
+  {k:'文件语种', v:'英文（已自动翻译）', tip:{tag:'翻译', t:'外文处理', b:'系统识别语种后自动翻译，并对专业术语做对照标注；原文与译文均随审核记录留痕。'}},
+  {k:'Agreement No.', v:'SA-2026-028'},
+  {k:'Party A / 甲方', v:'XX Copperplate Paper Mfg. Co., Ltd.', tr:'XX铜版纸制造有限公司'},
+  {k:'Party B / 乙方', v:'XX Technology Co., Ltd.', tr:'XX 科技有限公司'},
+  {k:'Scope of Services', v:'IT System Implementation and Integration Services', tr:'IT 系统实施与集成服务', tip:{tag:'翻译', t:'IT System Implementation and Integration Services', b:'中文对照：IT 系统实施与集成服务。该表述为服务大类，通常可同时覆盖咨询与实施，属“大范围”。'}},
+  {k:'Contract Amount', v:'USD 420,000.00', tr:'美元 42 万元（折 CNY 3,024,000.00，汇率 7.20）'},
+  {k:'Effective Date', v:'2026-03-28'},
+  {k:'Payment Terms', v:'Milestone based, 3 tranches', tr:'按里程碑分 3 期付款', tip:{tag:'术语', t:'Milestone based', b:'按里程碑付款：以交付节点为付款触发条件，支持发票分批使用与分批提款。'}}
+ ],
+ F12:[
+  {k:'文件语种', v:'英文（已自动翻译）'},
+  {k:'Invoice No.', v:'INV-2026-0417'},
+  {k:'Invoice Date', v:'2026-04-15'},
+  {k:'Description', v:'IT Consulting Service Fee', tr:'IT 咨询服务费', tip:{tag:'翻译', t:'IT Consulting Service Fee', b:'中文对照：IT 咨询服务费。注意其范围窄于服务协议的“实施与集成”，配合金额缺口一并提示。'}},
+  {k:'Amount', v:'USD 230,000.00', tr:'美元 23 万元（折 CNY 1,656,000.00，汇率 7.20）', bad:1, tip:{tag:'差异', t:'发票金额低于支付金额', b:'支付指令 PI-02 金额为 CNY 2,000,000.00，本发票折合 CNY 1,656,000.00，缺口 CNY 344,000.00，不满足“发票金额 ≥ 支付金额”。'}},
+  {k:'查重结果', v:'与 2025 年登记记录 INV-2025-0912 相似度 94%', warn:1, tip:{tag:'风险', t:'重复登记风险', b:'发票号不同但抬头、金额结构、服务描述高度相似，存在同一笔服务重复登记或重复融资的可能。'}}
+ ],
+ F13:[
+  {k:'合同编号', v:'PC-2026-0318'},
+  {k:'买方', v:'XX铜版纸制造有限公司'},
+  {k:'卖方', v:'上海YY包装材料有限公司'},
+  {k:'签订日期', v:'2026-03-18'},
+  {k:'合同金额', v:'CNY 2,000,000.00'},
+  {k:'标的物', v:'瓦楞纸箱 五层AB楞 1200×800×600mm'},
+  {k:'数量', v:'20,000 只'},
+  {k:'交货期', v:'2026-04-20 前（分批交货）'}
+ ],
+ F14:[
+  {k:'订单编号', v:'PO-2026-0402'},
+  {k:'对应合同', v:'PC-2026-0318'},
+  {k:'订单金额', v:'CNY 2,000,000.00'},
+  {k:'标的物', v:'瓦楞纸箱 · 20,000 只'},
+  {k:'下单日期', v:'2026-04-02'}
+ ],
+ F15:[
+  {k:'发票种类', v:'增值税专用发票'},
+  {k:'发票代码/号码', v:'3100231130 / 03839670'},
+  {k:'开票日期', v:'2026-04-06'},
+  {k:'购买方', v:'XX铜版纸制造有限公司'},
+  {k:'销售方', v:'上海YY包装材料有限公司'},
+  {k:'货物名称', v:'瓦楞纸箱 五层AB楞 1200×800×600mm'},
+  {k:'价税合计', v:'CNY 2,000,100.00（含 100.00 元尾差）'},
+  {k:'验真状态', v:'已通过国家税务总局平台查验'}
+ ],
+ F16:[
+  {k:'合同编号', v:'TC-2026-022'},
+  {k:'委托方（甲方）', v:'XX铜版纸制造有限公司'},
+  {k:'承运方（乙方）', v:'深圳市ZZ物流有限公司'},
+  {k:'签订日期', v:'2026-03-25'},
+  {k:'合同金额', v:'CNY 1,200,000.00'},
+  {k:'服务内容', v:'公路干线运输（上海 — 深圳）'},
+  {k:'计费方式', v:'按实际发运车次结算', tip:{tag:'术语', t:'按车次结算', b:'运输类合同常见计费方式，付款金额以实际发运车次为准，可分批使用发票。'}}
+ ],
+ F17:[
+  {k:'发票种类', v:'货物运输业增值税专用发票'},
+  {k:'发票代码/号码', v:'3100231130 / 03841120'},
+  {k:'开票日期', v:'2026-04-10'},
+  {k:'购买方', v:'XX铜版纸制造有限公司'},
+  {k:'销售方', v:'深圳市ZZ物流有限公司'},
+  {k:'品名', v:'运输服务费（上海—深圳 干线）'},
+  {k:'价税合计', v:'CNY 1,000,000.00'},
+  {k:'验真状态', v:'已通过国家税务总局平台查验'}
+ ],
+ F18:[
+  {k:'缴款通知编号', v:'TAX-2026Q2-118'},
+  {k:'纳税人', v:'XX铜版纸制造有限公司'},
+  {k:'税种', v:'增值税及附加税费'},
+  {k:'应缴金额', v:'CNY 2,000,000.00'},
+  {k:'税款所属期', v:'2026 年第二季度'},
+  {k:'缴款期限', v:'2026-04-20'},
+  {k:'缴款方式', v:'银行端查询缴税'}
+ ]
+};
+
+/* =========================================================
+   2. 原文渲染（paper mock）
+   ========================================================= */
+const PAPER = {
+ F1:{co:'XX BANK · 中国香港分行', title:'流动资金贷款合同', sub:'LOAN AGREEMENT · No. LN20260315-008', page:'P.1 / 12', stamp:'XX银行\n中国香港分行',
+   blocks:[
+    {t:'p', v:'借款人：<b>XX铜版纸制造有限公司</b>　　贷款人：<b>XX银行 中国香港分行</b>'},
+    {t:'p', v:'<b>第一条　授信额度</b>　贷款人同意向借款人提供金额为人民币叁仟万元整（CNY 30,000,000.00）的流动资金贷款授信额度，额度可循环使用。'},
+    {t:'p', v:'<b>第二条　贷款用途</b>　本合同项下贷款资金仅限用于借款人<b>日常经营（流动资金周转）</b>，包括支付货款、服务费、运输费及依法应缴纳的税费。不得用于证券投资、房地产投资及法律法规禁止的其他用途。'},
+    {t:'p', v:'<b>第三条　贷款利率</b>　本合同项下贷款利率按贷款市场报价利率（LPR）加 150 个基点执行，即 <b>LPR + 1.50%</b>，按季浮动。'},
+    {t:'p', v:'<b>第四条　贷款期限</b>　自 2026 年 3 月 15 日起至 2027 年 3 月 14 日止，共 12 个月。'},
+    {t:'p', v:'<b>第五条　提款方式</b>　在授信额度及有效期内，借款人可循环、逐笔提款，每笔提款须提交《提款指令》，经贷款人审核通过后放款。'},
+    {t:'sign', v:['借款人（盖章）：____________','贷款人（盖章）：____________','签署日期：<b>2026 年 3 月 15 日</b>']}
+   ]},
+ F2:{co:'提款申请文件', title:'提 款 指 令', sub:'DRAWDOWN INSTRUCTION · DD20260401-002', page:'P.1 / 3', stamp:'客户\n签章',
+   blocks:[
+    {t:'kv', rows:[
+      ['对应贷款合同编号','LN20260315-008'],
+      ['贷款合同日期','<b>2026-03-20</b>'],
+      ['提款金额','CNY 10,000,000.00（人民币壹仟万元整）'],
+      ['利率（组合勾选）','☑ LPR ＋ ☑ 1.50% ＋ ☑ 按季浮动'],
+      ['放款日','2026-04-08'],
+      ['到期日','<b>2026-10-05</b>'],
+      ['提款用途','支付货款、服务费、运输费及税款']
+    ]},
+    {t:'note', v:'本指令项下资金拟拆分为 5 笔支付，收款人分别为：上海XX纸业贸易有限公司、XX Technology Co., Ltd.、上海YY包装材料有限公司、深圳市ZZ物流有限公司、国家税务总局上海市XX区税务局，具体以各《支付指令》为准。'},
+    {t:'sign', v:['申请人（签字/盖章）：__________','日期：2026 年 4 月 1 日']}
+   ]},
+ F3:{co:'付款委托文件', title:'支 付 指 令', sub:'PAYMENT INSTRUCTION · PI-01', page:'P.1 / 2', stamp:'客户\n签章',
+   blocks:[
+    {t:'kv', rows:[
+      ['指令编号','PI-01'],
+      ['关联提款指令','DD20260401-002'],
+      ['收款人名称','上海XX纸业贸易有限公司'],
+      ['收款人账号','6217 **** **** 3382'],
+      ['开户银行','中国工商银行上海市XX支行'],
+      ['支付金额','CNY 3,000,000.00'],
+      ['支付用途','支付原材料货款'],
+      ['资金流向','☑ 境内'],
+      ['对应单据','采购合同 PC-2026-0311 / 采购订单 PO-2026-0330 / 发票 No.03827451']
+    ]},
+    {t:'note', v:'本支付指令项下资金仅限支付上述对应单据款项，不得挪作他用。'},
+    {t:'sign', v:['申请人（签字/盖章）：__________','日期：2026 年 4 月 3 日']}
+   ]},
+ F4:{co:'付款委托文件', title:'支 付 指 令', sub:'PAYMENT INSTRUCTION · PI-02', page:'P.1 / 2', stamp:'客户\n签章',
+   blocks:[
+    {t:'kv', rows:[
+      ['指令编号','PI-02'],
+      ['关联提款指令','DD20260401-002'],
+      ['收款人名称','XX Technology Co., Ltd.'],
+      ['收款人开户行','Bank of Singapore, SWIFT: DBSSSGSG'],
+      ['支付金额','CNY 2,000,000.00（折 USD 277,777.78）'],
+      ['支付用途','支付 IT 系统实施服务费'],
+      ['资金流向','☑ 跨境付汇'],
+      ['对应单据','服务协议 SA-2026-028 / Invoice INV-2026-0417'],
+      ['随附材料','□ 对外支付税务备案表　□ 服务订单']
+    ]},
+    {t:'note', v:'注：本笔属服务贸易项下对外支付，单笔等值超过 5 万美元，须先行办理税务备案手续。'},
+    {t:'sign', v:['申请人（签字/盖章）：__________','日期：2026 年 4 月 3 日']}
+   ]},
+ F5:{co:'付款委托文件', title:'支 付 指 令', sub:'PAYMENT INSTRUCTION · PI-03', page:'P.1 / 2', stamp:'客户\n签章',
+   blocks:[
+    {t:'kv', rows:[
+      ['指令编号','PI-03'],
+      ['关联提款指令','DD20260401-002'],
+      ['收款人名称','上海YY包装材料有限公司'],
+      ['收款人账号','6214 **** **** 7719'],
+      ['开户银行','中国建设银行上海市XX支行'],
+      ['支付金额','CNY 2,000,000.00'],
+      ['支付用途','支付包装材料货款'],
+      ['资金流向','☑ 境内'],
+      ['对应单据','采购合同 PC-2026-0318 / 采购订单 PO-2026-0402 / 发票 No.03839670']
+    ]},
+    {t:'note', v:'本支付指令项下资金仅限支付上述对应单据款项；与 PI-01 项下纸业货款分属不同供应商，不得合并支付。'},
+    {t:'sign', v:['申请人（签字/盖章）：__________','日期：2026 年 4 月 3 日']}
+   ]},
+ F6:{co:'付款委托文件', title:'支 付 指 令', sub:'PAYMENT INSTRUCTION · PI-04', page:'P.1 / 2', stamp:'客户\n签章',
+   blocks:[
+    {t:'kv', rows:[
+      ['指令编号','PI-04'],
+      ['关联提款指令','DD20260401-002'],
+      ['收款人名称','深圳市ZZ物流有限公司'],
+      ['收款人账号','6222 **** **** 1043'],
+      ['开户银行','招商银行深圳分行XX支行'],
+      ['支付金额','CNY 1,000,000.00'],
+      ['支付用途','支付干线运输服务费'],
+      ['资金流向','☑ 境内'],
+      ['对应单据','运输服务合同 TC-2026-022 / 货物运输业发票 No.03841120']
+    ]},
+    {t:'note', v:'本支付指令项下款项为运输服务费，按实际发运车次结算。'},
+    {t:'sign', v:['申请人（签字/盖章）：__________','日期：2026 年 4 月 3 日']}
+   ]},
+ F7:{co:'付款委托文件', title:'支 付 指 令', sub:'PAYMENT INSTRUCTION · PI-05', page:'P.1 / 2', stamp:'客户\n签章',
+   blocks:[
+    {t:'kv', rows:[
+      ['指令编号','PI-05'],
+      ['关联提款指令','DD20260401-002'],
+      ['收款人名称','国家税务总局上海市XX区税务局（税款专户）'],
+      ['支付金额','CNY 2,000,000.00'],
+      ['支付用途','缴纳增值税及附加税费'],
+      ['资金流向','☑ 境内'],
+      ['对应单据','付税通知 TAX-2026Q2-118']
+    ]},
+    {t:'sign', v:['申请人（签字/盖章）：__________','日期：2026 年 4 月 3 日']}
+   ]},
+ F8:{co:'购销合同', title:'采 购 合 同', sub:'PURCHASE CONTRACT · PC-2026-0311', page:'P.1 / 8', stamp:'合同\n专用章',
+   blocks:[
+    {t:'p', v:'买方（甲方）：<b>XX铜版纸制造有限公司</b>　　卖方（乙方）：<b>上海XX纸业贸易有限公司</b>'},
+    {t:'p', v:'第一条　标的物及价款'},
+    {t:'tb', head:['货物名称','规格型号','数量','单价','金额（元）'],
+     rows:[['<b>铜版纸</b>','70g/㎡　787×1092mm','32 吨','100,000.00','3,200,000.00']]},
+    {t:'p', v:'第二条　质量标准　按 GB/T 10335 执行，克重偏差不超过 ±3%。'},
+    {t:'p', v:'第三条　交货　乙方应于 2026 年 4 月 15 日前将全部货物运至甲方指定仓库，运费由乙方承担。'},
+    {t:'p', v:'第四条　结算　甲方在收到货物及乙方开具的增值税专用发票后 30 日内支付货款，付款金额以实际收货数量结算。'},
+    {t:'sign', v:['甲方（盖章）：____________','乙方（盖章）：____________','签订日期：2026 年 3 月 11 日']}
+   ]},
+ F9:{co:'采购订单', title:'采 购 订 单', sub:'PURCHASE ORDER · PO-2026-0330', page:'P.1 / 2', stamp:'企业\n订单章',
+   blocks:[
+    {t:'kv', rows:[['订单编号','PO-2026-0330'],['对应合同','PC-2026-0311'],['下单日期','2026-03-30'],['订单金额','CNY 3,000,000.00']]},
+    {t:'tb', head:['货物名称','规格','数量','金额（元）'],
+     rows:[['铜版纸','70g/㎡','30 吨','3,000,000.00']]},
+    {t:'p', v:'备注：本订单为 PC-2026-0311 项下首批交货订单，剩余 2 吨另行下单。'},
+    {t:'sign', v:['采购经办：__________','审批：__________']}
+   ]},
+ F10:{co:'国家税务总局　全国增值税发票查验平台', title:'增值税专用发票', sub:'VAT SPECIAL INVOICE · No. 03827451', page:'P.1 / 1', stamp:'发票\n专用章',
+   blocks:[
+    {t:'kv', rows:[['发票代码','3100231130'],['发票号码','03827451'],['开票日期','2026-04-02'],['校验码','02218 73361 24095 88112']]},
+    {t:'tb', head:['购买方名称','纳税人识别号'], rows:[['XX铜版纸制造有限公司','91310000MA1FL***X2']]},
+    {t:'tb', head:['货物或应税劳务名称','规格型号','数量','单价','金额','税率','税额'],
+     rows:[['<b>办公用品·打印纸</b>','—','30 吨','88,495.58','2,654,867.26','13%','345,132.74']]},
+    {t:'kv', rows:[['价税合计（大写）','叁佰万元整　　（小写）CNY 3,000,000.00'],['销售方名称','上海XX纸业贸易有限公司'],['备注','—']]},
+    {t:'sign', v:['开票人：张明','收款人：李静','复核：王强']}
+   ]},
+ F11:{en:1, co:'SERVICE AGREEMENT', title:'Service Agreement', sub:'IT SYSTEM IMPLEMENTATION AND INTEGRATION SERVICES', page:'Page 1 of 14', stamp:'EXECUTED',
+   blocks:[
+    {t:'p', v:'This Service Agreement (the "Agreement") is made and entered into as of <b>March 28, 2026</b> by and between:'},
+    {t:'pv', v:'Party A: <b>XX Copperplate Paper Mfg. Co., Ltd.</b>（甲方：XX铜版纸制造有限公司）'},
+    {t:'pv', v:'Party B: <b>XX Technology Co., Ltd.</b>（乙方：XX 科技有限公司）'},
+    {t:'p', v:'<b>1. Scope of Services.</b> Party B shall provide IT System Implementation and Integration Services, including system planning, configuration, data migration, integration testing and go-live support.'},
+    {t:'pv', v:'服务范围：乙方应提供 IT 系统实施与集成服务，包括系统规划、配置、数据迁移、集成测试与上线支持。'},
+    {t:'p', v:'<b>2. Contract Amount.</b> The total contract price is <b>USD 420,000.00</b> (US Dollars Four Hundred Twenty Thousand only).'},
+    {t:'p', v:'<b>3. Payment Terms.</b> Milestone based, 3 tranches, payable against invoice and acceptance milestone.'},
+    {t:'pv', v:'付款方式：按里程碑分 3 期付款，凭发票及交付确认节点付款。'},
+    {t:'sign', v:['For and on behalf of Party A: __________','For and on behalf of Party B: __________','Date: March 28, 2026']}
+   ]},
+ F12:{en:1, co:'XX TECHNOLOGY CO., LTD.', title:'INVOICE', sub:'INVOICE NO. INV-2026-0417', page:'Page 1 of 1', stamp:'NET 30',
+   blocks:[
+    {t:'kv', rows:[['Invoice No.','INV-2026-0417'],['Invoice Date','April 15, 2026'],['Bill To','XX Copperplate Paper Mfg. Co., Ltd.'],['Payment Terms','Net 30']]},
+    {t:'tb', head:['Description','Qty','Unit Price','Amount (USD)'],
+     rows:[['<b>IT Consulting Service Fee</b>','1','230,000.00','230,000.00']]},
+    {t:'pv', v:'项目说明：IT 咨询服务费。注：本发票仅涵盖咨询阶段服务，不含系统实施与集成部分。'},
+    {t:'kv', rows:[['Subtotal','USD 230,000.00'],['Tax','0.00'],['Total Due','<b>USD 230,000.00</b>'],['Amount in CNY (rate 7.20)','CNY 1,656,000.00']]},
+    {t:'sign', v:['Authorized Signature: __________','Bank: Bank of Singapore / SWIFT DBSSSGSG']}
+   ]},
+ F13:{co:'购销合同', title:'采 购 合 同', sub:'PURCHASE CONTRACT · PC-2026-0318', page:'P.1 / 6', stamp:'合同\n专用章',
+   blocks:[
+    {t:'p', v:'买方（甲方）：<b>XX铜版纸制造有限公司</b>　　卖方（乙方）：<b>上海YY包装材料有限公司</b>'},
+    {t:'p', v:'第一条　标的物及价款'},
+    {t:'tb', head:['货物名称','规格型号','数量','单价','金额（元）'],
+     rows:[['<b>瓦楞纸箱</b>','五层AB楞　1200×800×600mm','20,000 只','100.00','2,000,000.00']]},
+    {t:'p', v:'第二条　质量标准　按 GB/T 6543 执行，抗压强度不低于 6,500 N，含水率不高于 12%。'},
+    {t:'p', v:'第三条　交货　乙方应于 2026 年 4 月 20 日前分批交货至甲方指定仓库；运输由甲方另行委托承运人。'},
+    {t:'p', v:'第四条　结算　甲方在收货并取得增值税专用发票后 30 日内支付货款，金额以实际收货数量结算。'},
+    {t:'sign', v:['甲方（盖章）：____________','乙方（盖章）：____________','签订日期：2026 年 3 月 18 日']}
+   ]},
+ F14:{co:'采购订单', title:'采 购 订 单', sub:'PURCHASE ORDER · PO-2026-0402', page:'P.1 / 2', stamp:'企业\n订单章',
+   blocks:[
+    {t:'kv', rows:[['订单编号','PO-2026-0402'],['对应合同','PC-2026-0318'],['下单日期','2026-04-02'],['订单金额','CNY 2,000,000.00']]},
+    {t:'tb', head:['货物名称','规格','数量','金额（元）'],
+     rows:[['瓦楞纸箱','五层AB楞 1200×800×600mm','20,000 只','2,000,000.00']]},
+    {t:'p', v:'备注：本订单为 PC-2026-0318 项下第一批交货订单，一次性交付。'},
+    {t:'sign', v:['采购经办：__________','审批：__________']}
+   ]},
+ F15:{co:'国家税务总局　全国增值税发票查验平台', title:'增值税专用发票', sub:'VAT SPECIAL INVOICE · No. 03839670', page:'P.1 / 1', stamp:'发票\n专用章',
+   blocks:[
+    {t:'kv', rows:[['发票代码','3100231130'],['发票号码','03839670'],['开票日期','2026-04-06'],['校验码','03374 41208 91553 62740']]},
+    {t:'tb', head:['购买方名称','纳税人识别号'], rows:[['XX铜版纸制造有限公司','91310000MA1FL***X2']]},
+    {t:'tb', head:['货物或应税劳务名称','规格型号','数量','单价','金额','税率','税额'],
+     rows:[['<b>瓦楞纸箱</b>','五层AB楞 1200×800×600mm','20,000 只','88.50','1,770,000.00','13%','230,100.00']]},
+    {t:'kv', rows:[['价税合计（大写）','贰佰万零壹佰元整　　（小写）CNY 2,000,100.00'],['销售方名称','上海YY包装材料有限公司'],['备注','含 100.00 元计量尾差']]},
+    {t:'sign', v:['开票人：陈璐','收款人：周涛','复核：孙敏']}
+   ]},
+ F16:{co:'运输服务合同', title:'运 输 服 务 合 同', sub:'TRANSPORT SERVICE CONTRACT · TC-2026-022', page:'P.1 / 5', stamp:'合同\n专用章',
+   blocks:[
+    {t:'p', v:'委托方（甲方）：<b>XX铜版纸制造有限公司</b>　　承运方（乙方）：<b>深圳市ZZ物流有限公司</b>'},
+    {t:'p', v:'第一条　服务内容　乙方为甲方提供<b>公路干线运输</b>服务，线路为上海至深圳，货物为成品纸及包装物。'},
+    {t:'p', v:'第二条　合同金额　本合同金额为人民币<b>壹佰贰拾万元整（CNY 1,200,000.00）</b>，按实际发运车次结算，可分批支付。'},
+    {t:'p', v:'第三条　结算与发票　乙方于每批次运输完成后 10 个工作日内向甲方开具货物运输业增值税专用发票，甲方收到发票后 30 日内付款。'},
+    {t:'p', v:'第四条　责任　货物在运输途中的灭失、短少、变质由乙方按实际损失赔偿。'},
+    {t:'sign', v:['委托方（盖章）：____________','承运方（盖章）：____________','签订日期：2026 年 3 月 25 日']}
+   ]},
+ F17:{co:'国家税务总局　全国增值税发票查验平台', title:'货物运输业增值税专用发票', sub:'FREIGHT VAT INVOICE · No. 03841120', page:'P.1 / 1', stamp:'发票\n专用章',
+   blocks:[
+    {t:'kv', rows:[['发票代码','3100231130'],['发票号码','03841120'],['开票日期','2026-04-10'],['校验码','01192 66340 72881 30446']]},
+    {t:'tb', head:['购买方名称','纳税人识别号'], rows:[['XX铜版纸制造有限公司','91310000MA1FL***X2']]},
+    {t:'tb', head:['货物或应税劳务名称','规格型号','数量','单价','金额','税率','税额'],
+     rows:[['<b>运输服务费</b>','上海—深圳 干线','1 批','917,431.19','917,431.19','9%','82,568.81']]},
+    {t:'kv', rows:[['价税合计（大写）','壹佰万元整　　（小写）CNY 1,000,000.00'],['销售方名称','深圳市ZZ物流有限公司'],['备注','对应合同 TC-2026-022']]},
+    {t:'sign', v:['开票人：林旭','收款人：吴倩','复核：黄鹏']}
+   ]},
+ F18:{co:'国家税务总局上海市XX区税务局', title:'税 款 缴 款 通 知 书', sub:'TAX PAYMENT NOTICE · TAX-2026Q2-118', page:'P.1 / 2', stamp:'税务局\n征收章',
+   blocks:[
+    {t:'p', v:'纳税人：<b>XX铜版纸制造有限公司</b>　　纳税人识别号：91310000MA1FL***X2'},
+    {t:'tb', head:['税种','税款所属期','计税依据（元）','税率','应缴金额（元）'],
+     rows:[['增值税','2026 年第二季度','13,614,703.85','13%','1,769,911.50'],['城建税及教育费附加','2026 年第二季度','1,769,911.50','—','230,088.50'],['<b>合计</b>','','','','<b>2,000,000.00</b>']]},
+    {t:'p', v:'缴款期限：<b>2026 年 4 月 20 日</b>；缴款方式：银行端查询缴税。逾期将按日加收滞纳金。'},
+    {t:'sign', v:['税务机关（盖章）：__________','填发日期：2026 年 4 月 2 日']}
+   ]}
+};
+function paperHTML(fid){
+  const p = PAPER[fid]; if(!p) return '<div class="muted" style="padding:30px;text-align:center">暂无原文预览</div>';
+  let body = '';
+  p.blocks.forEach(b=>{
+    if(b.t==='p') body += '<p class="paper-p">'+b.v+'</p>';
+    else if(b.t==='pv') body += '<p class="paper-p" style="color:#6b7688;font-family:-apple-system,\'Microsoft YaHei\',sans-serif;font-size:11px">'+b.v+'</p>';
+    else if(b.t==='note') body += '<div class="paper-note">'+b.v+'</div>';
+    else if(b.t==='kv') body += '<table class="paper-kv">'+b.rows.map(r=>'<tr><td class="lbl">'+r[0]+'</td><td>'+r[1]+'</td></tr>').join('')+'</table>';
+    else if(b.t==='tb') body += '<table class="paper-tb"><thead><tr>'+b.head.map(h=>'<th>'+h+'</th>').join('')+'</tr></thead><tbody>'+
+      b.rows.map(r=>'<tr>'+r.map((c,i)=>'<td'+(i>=2?' class="num"':'')+'>'+c+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
+    else if(b.t==='sign') body += '<div class="paper-sign">'+b.v.map(v=>'<div>'+v+'</div>').join('')+'</div>';
+  });
+  return '<div class="paper'+(p.en?' paper-en':'')+'">'+
+    '<div class="paper-page">'+p.page+'</div>'+
+    '<div class="paper-h"><div class="paper-co">'+p.co+'</div><div class="paper-t">'+p.title+'</div><div class="paper-s">'+p.sub+'</div></div>'+
+    body + '<div class="paper-stamp">'+p.stamp.replace('\n','<br>')+'</div></div>';
+}
+
+/* =========================================================
+   3. 检查规则
+   ========================================================= */
+const CHECKS = [
+ {id:'R01', g:'A', n:'提款指令 · 贷款合同日期一致性', st:'fail',
+  r:'drawdown.contract_date == loan.sign_date',
+  d:'提款指令填报的“贷款合同日期”必须与贷款合同签署日期一致。',
+  how:'取 LN20260315-008 签署栏「签署日期」字段值，与 DD20260401-002 表头「贷款合同日期」填报值做等值比对。',
+  res:'不通过 · 2026-03-20 ≠ 2026-03-15（相差 5 天）',
+  why:'两项日期不等值，提款指令自行填报的合同日期与合同正本不符，属填报类错误。',
+  files:['F2','F1'],
+  diff:[['贷款合同日期（提款指令）','2026-03-20','bad'],['签署日期（贷款合同）','2026-03-15','bad']],
+  sug:'要求客户将提款指令中的贷款合同日期更正为 2026-03-15 后重新提交。'},
+
+ {id:'R02', g:'A', n:'提款金额 ≤ 授信额度', st:'pass',
+  r:'drawdown.amount <= loan.facility_amount',
+  d:'单笔提款金额不得超过贷款合同项下授信额度，并核查剩余可用额度。',
+  how:'将提款金额与 LN20260315-008 第一条「授信额度」比对，同时扣减合同项下已提用金额，得出剩余可用额度。',
+  res:'通过 · CNY 10,000,000.00 ≤ CNY 30,000,000.00',
+  why:'提款金额落在授信额度内；扣减后仍有 CNY 20,000,000.00 可用额度，未构成超额提款。',
+  files:['F2','F1'],
+  diff:[['提款金额','CNY 10,000,000.00',''],['授信额度','CNY 30,000,000.00',''],['剩余可用','CNY 20,000,000.00','']],
+  sug:'额度充足，本项通过。'},
+
+ {id:'R03', g:'A', n:'利率一致性（组合勾选）', st:'pass',
+  r:'drawdown.rate == loan.rate',
+  d:'提款指令利率为组合勾选控件，需逐项比对基准、加点与浮动周期。',
+  how:'解析提款指令利率控件勾选的三项值（基准 / 加点 / 浮动周期），与合同第三条利率条款逐项比对。',
+  res:'通过 · LPR + 1.50% = LPR + 1.50%',
+  why:'三项勾选结果与合同条款完全一致，无加点或浮动周期偏差。',
+  files:['F2','F1'],
+  diff:[['提款指令利率','LPR + 1.50%',''],['合同利率','LPR + 1.50%','']],
+  sug:'本项通过。'},
+
+ {id:'R04', g:'A', n:'到期日及时限合规性', st:'fail',
+  r:'term(disburse_date, maturity_date) <= loan.tenor AND is_holiday(maturity_date) == false',
+  d:'放款日至到期日计算所得期限不得超过合同期限，且到期日不得落在法定节假日。',
+  how:'① 计算放款日→到期日的实际天数并与合同期限比较；② 调用法定节假日日历判断到期日是否落在假期区间内。两个子条件必须同时成立。',
+  res:'不通过 · 期限 180 天符合，但到期日 2026-10-05 落在国庆节假期（10/1–10/8）',
+  why:'子条件「期限不超期」通过，「到期日不得为节假日」不通过。到期日落在非营业日将导致资金无法按时划付。',
+  files:['F2','F1'],
+  diff:[['放款日','2026-04-08',''],['到期日','2026-10-05','bad'],['计算期限','180 天（≤ 365 天，符合）',''],['节假日校验','落入国庆节法定假期（10/1–10/8）','bad']],
+  sug:'建议将到期日调整为假期后的首个工作日 2026-10-09，或按合同顺延条款处理。'},
+
+ {id:'R05', g:'A', n:'提款用途 ⊆ 合同用途', st:'pass',
+  r:'drawdown.purpose ⊆ loan.purpose',
+  d:'提款指令用途须落在贷款合同约定的用途范围内。',
+  how:'对提款用途文本做语义归一后，判断是否为合同用途（日常经营 / 流动资金周转）的下位概念。',
+  res:'通过 · “支付货款、服务费、运输费及税款” ⊆ “日常经营（流动资金周转）”',
+  why:'四项用途均属日常经营项下的常规支出类别，未越出合同约定的资金用途范围。',
+  files:['F2','F1'],
+  diff:[['合同用途','日常经营（流动资金周转）',''],['提款用途','支付货款、服务费、运输费及税款','']],
+  sug:'本项通过。'},
+
+ {id:'R06', g:'B', n:'支付指令笔数 = 收款人数量', st:'pass',
+  r:'count(payment_instruction) == count(distinct(payee))',
+  d:'单笔提款项下每一收款人须对应一份独立支付指令。',
+  how:'统计 DD20260401-002 项下挂载的支付指令数量，与各支付指令收款人名称去重后的数量比对。',
+  res:'通过 · 5 份 = 5 个收款人',
+  why:'每个收款人各有一份独立支付指令，不存在合并支付或缺漏收款人的情形，为后续按收款人分组的独立比对奠定基础。',
+  files:['F2','F3','F4','F5','F6','F7'],
+  diff:[['支付指令笔数','5',''],['去重收款人','5（纸业 / Technology / 包装 / 物流 / 税务）','']],
+  sug:'笔数与收款人一一对应。'},
+
+ {id:'R07', g:'B', n:'支付金额合计 = 提款金额', st:'pass',
+  r:'sum(payment.amount) == drawdown.amount',
+  d:'各支付指令金额合计应等于该笔提款金额，允许合理尾差阈值。',
+  how:'对五份支付指令金额求和，与提款金额比对，尾差阈值设为 CNY 0.01。',
+  res:'通过 · 300万 + 200万 + 200万 + 100万 + 200万 = CNY 10,000,000.00',
+  why:'五笔合计金额与提款金额完全轧平，无尾差，资金拆分路径闭合。',
+  files:['F2','F3','F4','F5','F6','F7'],
+  diff:[['PI-01 上海XX纸业（货款）','CNY 3,000,000.00',''],['PI-02 XX Technology（服务费）','CNY 2,000,000.00',''],['PI-03 上海YY包装（货款）','CNY 2,000,000.00',''],['PI-04 深圳市ZZ物流（运输费）','CNY 1,000,000.00',''],['PI-05 税务专户（税款）','CNY 2,000,000.00',''],['合计 / 提款金额','CNY 10,000,000.00 = CNY 10,000,000.00',''],['尾差','CNY 0.00','']],
+  sug:'完全轧平。'},
+
+ {id:'R08', g:'B', n:'币种一致性', st:'pass',
+  r:'payment.currency == drawdown.currency',
+  d:'同一提款项下所有支付指令币种须一致，外币按付款日汇率折算。',
+  how:'比对提款币种与各支付指令币种；涉及外币的，按付款日中国外汇交易中心中间价折算为合同币种后比对。',
+  res:'通过 · 五笔全部为 CNY（PI-02 的 USD 部分按 7.20 折算）',
+  why:'币种一致；折算汇率取自公开中间价，口径统一可复核，不存在汇率口径混用。',
+  files:['F2','F3','F4','F5','F6','F7'],
+  diff:[['提款币种','CNY',''],['PI-01 / PI-03 / PI-04 / PI-05','CNY',''],['PI-02','CNY（折 USD 277,777.78，汇率 7.20）','']],
+  sug:'本项通过。'},
+
+ {id:'R09', g:'B', n:'收款人名称与商务合同对手方一致', st:'pass',
+  r:'payment.payee == contract.counterparty',
+  d:'支付指令收款人须与对应商务合同对手方名称一致（含全称、简称映射）。',
+  how:'将每份支付指令的收款人名称与「其本人专属组内」商务合同的对手方（买方/卖方、甲方/乙方、委托方/承运方）做归一化匹配，跨支付指令不参与匹配。',
+  res:'通过 · 4 组有商务合同的支付指令全部匹配',
+  why:'PI-01↔采购合同卖方（纸业）、PI-02↔服务协议乙方（Technology）、PI-03↔采购合同卖方（包装）、PI-04↔运输合同承运方（物流）四组名称完全匹配；PI-05 为税款专户，以付税通知的纳税人主体核验。不存在“付款给第三方”的情形，也不存在跨组误配。',
+  files:['F3','F4','F5','F6','F8','F11','F13','F16'],
+  diff:[['PI-01 收款人','上海XX纸业贸易有限公司 = PC-2026-0311 卖方',''],['PI-02 收款人','XX Technology Co., Ltd. = SA-2026-028 乙方',''],['PI-03 收款人','上海YY包装材料有限公司 = PC-2026-0318 卖方',''],['PI-04 收款人','深圳市ZZ物流有限公司 = TC-2026-022 承运方',''],['交叉校验','四组指纹互不重合，无跨组匹配','']],
+  sug:'本项通过。'},
+
+ {id:'R10', g:'C', n:'单据齐套性（按分行规则集）', st:'warn',
+  r:'for each payment: has(contract) AND has(order) AND has(invoice | tax_notice)',
+  d:'按业务所属分行的材料清单规则集，逐笔核验外部单据是否齐备。',
+  how:'加载中国香港分行规则集 v2.3（要求：商务合同 + 订单 + 发票/付税通知），对 5 份支付指令逐笔核验其挂载单据的类别覆盖情况。',
+  res:'提示 · PI-02 缺服务订单 / 交付确认单',
+  why:'PI-01（采购合同+订单+发票）、PI-03（采购合同+订单+发票）、PI-04（运输合同+运输发票）、PI-05（付税通知）材料齐备；PI-02 仅有服务协议与发票，未检索到订单类文件，材料完整性存在缺口。',
+  files:['F4','F11','F12'],
+  diff:[['PI-01','采购合同 / 订单 / 发票 → 齐备',''],['PI-02','服务协议 / 发票 → 缺订单类文件','warn'],['PI-03','采购合同 / 订单 / 发票 → 齐备',''],['PI-04','运输合同 / 运输发票 → 齐备',''],['PI-05','付税通知 → 齐备','']],
+  sug:'请客户补充 Supplier B 项下服务订单或交付确认单。'},
+
+ {id:'R11', g:'C', n:'金额勾稽：发票金额 ≥ 支付金额', st:'fail',
+  r:'invoice.amount >= payment.amount AND contract.amount >= payment.amount',
+  d:'合同金额、发票金额均应大于等于对应支付金额，允许发票分批使用（多张累加）。',
+  how:'对每笔支付，分别比对「其专属组内商务合同金额 ≥ 支付金额」与「其专属组内发票金额合计 ≥ 支付金额」；外币发票按同一汇率折算后比对，不跨支付指令累加。',
+  res:'不通过 · PI-02 发票折合 CNY 1,656,000.00 < 支付 CNY 2,000,000.00',
+  why:'PI-01（合同 320万 / 发票 300万 ≥ 支付 300万）、PI-03（200万 / 200.01万 ≥ 支付 200万）、PI-04（120万 / 100万 ≥ 支付 100万）均通过；PI-02 合同金额满足，但发票金额低于支付金额 CNY 344,000.00，贸易背景金额不足以覆盖付款金额。',
+  files:['F4','F11','F12'],
+  diff:[['PI-02 支付金额','CNY 2,000,000.00',''],['SA-2026-028 合同金额','USD 420,000.00 ≈ CNY 3,024,000.00',''],['INV-2026-0417 发票金额','USD 230,000.00 ≈ CNY 1,656,000.00','bad'],['缺口','CNY 344,000.00','bad']],
+  sug:'请客户补开等额发票，或将 PI-02 支付金额下调至发票金额以内。'},
+
+ {id:'R12', g:'C', n:'标的物一致性（合同 ⊇ 发票）', st:'fail',
+  r:'invoice.goods ⊆ contract.subject_matter',
+  d:'发票载明的标的物应与合同一致，或构成“合同大范围、发票小范围”的包含关系。',
+  how:'在每笔支付指令的专属单据组内，将发票货物名称与其对应商务合同标的物做品类与规格双向映射，判断是否等值或构成包含关系。',
+  res:'不通过 · PI-01 项下“办公用品·打印纸” ⊄ “铜版纸 70g/㎡”',
+  why:'PI-03 的瓦楞纸箱、PI-04 的运输服务费均与各自合同标的可映射；PI-01 项下发票品类为“办公用品”，合同品类为“铜版纸”，规格亦无对应项，两者既不相等也不构成包含关系，存在发票开具不实风险。',
+  files:['F8','F10'],
+  diff:[['PC-2026-0311 标的物','铜版纸 70g/㎡（787×1092mm）',''],['No.03827451 货物名称','办公用品·打印纸','bad'],['包含关系判定','不成立（品类与规格均不可映射）','bad'],['对照 · No.03839670','瓦楞纸箱 = PC-2026-0318 标的物 → 一致',''],['对照 · No.03841120','运输服务费 = TC-2026-022 服务内容 → 一致','']],
+  sug:'要求客户换开与实际交易一致的发票，或提交书面说明证明对应关系。'},
+
+ {id:'R13', g:'C', n:'发票验真与状态校验', st:'pass',
+  r:'invoice.verify_status == "pass" AND invoice.status != "void"',
+  d:'增值税发票须通过国家税务总局全国增值税发票查验平台验真，且不得为作废或红冲状态。',
+  how:'提取发票代码与号码，调用国家税务总局全国增值税发票查验平台比对金额、购销双方与开票日期，并检查发票状态字段；境外 Invoice 以供应商签章与银行付款流水交叉核验。',
+  res:'通过 · 3 张增值税发票返回“一致”，境外 Invoice 交叉核验通过',
+  why:'票面信息与税务平台留档一致，且发票非作废、非红冲，票面真实有效；INV-2026-0417 虽为境外发票无法在税务总局平台查验，但供应商签章、SWIFT 收款账户与合同约定一致，交叉核验无异常。',
+  files:['F10','F12','F15','F17'],
+  diff:[['No.03827451','平台查验“一致” · 状态正常',''],['No.03839670','平台查验“一致” · 状态正常',''],['No.03841120','平台查验“一致” · 状态正常',''],['INV-2026-0417','境外发票 · 签章与收款账户交叉核验通过','']],
+  sug:'已通过验真。'},
+
+ {id:'R14', g:'D', n:'用途穿透：发票用途 ⊆ 支付用途 ⊆ 提款用途 ⊆ 合同用途', st:'pass',
+  r:'goods_purpose ⊆ payment.purpose ⊆ drawdown.purpose ⊆ loan.purpose',
+  d:'沿“贷款合同 → 提款指令 → 支付指令 → 商务合同/发票”逐层穿透，任一层的用途不得越出上层口径。',
+  how:'构建四层用途语义树，对 5 笔支付分别向下层单据、向上层指令逐级做包含关系判定，任一层不成立则整条链路判定失败。',
+  res:'通过 · 5 条链路均可回溯至提款用途，并落在合同“日常经营”口径内',
+  why:'原材料货款与包装材料货款→“货款”、IT 服务费→“服务费”、运输服务费→“运输费”、税费→“税款”，五项均落在提款用途范围内；提款用途又整体落在合同“日常经营”口径内。各层用途逐级收敛，未出现越出口径或资金挪用迹象。',
+  files:['F1','F2','F3','F4','F5','F6','F7','F8','F11','F12','F13','F16','F17','F18'],
+  diff:[['L1 合同用途','日常经营（流动资金周转）',''],['L2 提款用途','支付货款、服务费、运输费及税款',''],['L3+L4 PI-01','铜版纸采购货款 → 属“货款” ✓',''],['L3+L4 PI-02','IT 系统实施服务费 → 属“服务费” ✓',''],['L3+L4 PI-03','包装材料货款 → 属“货款” ✓',''],['L3+L4 PI-04','干线运输服务费 → 属“运输费” ✓',''],['L3+L4 PI-05','增值税及附加税费 → 属“税款” ✓','']],
+  sug:'用途穿透链完整，未发现资金挪用迹象。'},
+
+ {id:'R15', g:'E', n:'境内外法规合规检索', st:'warn',
+  r:'RAG.search(domestic_law, overseas_law) -> purpose_allowed AND required_filings_found',
+  d:'基于用途与交易对手所在地，检索境内外法规库，判断用途是否被允许，并核验应办手续是否齐备。',
+  how:'以用途关键词与交易对手所在地为检索条件，对境内外法规库做 RAG 检索，分两步判定：① 是否存在用途禁止性规定；② 应办理的监管手续材料是否齐备。',
+  res:'提示 · 用途合法（第 ① 步通过），但需补交对外支付税务备案表、完税凭证（第 ② 步未齐备）',
+  why:'未检索到与“货款、服务费、运输费、税费”相关的用途禁止性规定，用途本身合法；但 PI-02 跨境付汇需办税务备案、PI-05 需附完税凭证，前置材料尚未收到，暂列提示而不阻断。',
+  files:['F4','F7','F11','F12','F18'],
+  diff:[['境内 · 国家税务总局 2013 年 40 号公告','服务贸易对外支付单笔超 5 万美元须办理税务备案','warn'],['境内 · 增值税暂行条例','境内销售货物、提供应税劳务依法缴纳增值税 → 用途合法',''],['中国香港 · 贷款用途限制','放款资金不得直接或间接用于证券投资、房地产投资',''],['待补材料','对外支付税务备案表（PI-02）、完税凭证（PI-05）','warn']],
+  sug:'用途本身合法可放款；请客户补交 PI-02 对外支付税务备案表与 PI-05 完税凭证。'},
+
+ {id:'R16', g:'F', n:'模板登记与重复率查重', st:'warn',
+  r:'similarity(new_record, history_registry) < 0.9',
+  d:'商务合同与发票信息按指定模板登记入库，并与历史登记记录做相似度查重。',
+  how:'将 5 笔支付项下的商务合同与发票信息按 TradeDoc-Registry-Template v2 抽取登记，与历史登记记录做多维相似度比对（对手方、金额结构、服务描述、日期区间），阈值 0.9。',
+  res:'提示 · INV-2026-0417 与 INV-2025-0912 相似度 94%（超阈值）',
+  why:'该发票的对手方、金额结构与服务描述与 2025 年度一条登记记录高度重合，超过 0.9 阈值，存在同一笔服务重复登记或重复融资的可能；三张境内增值税发票与运输发票均无重复命中。',
+  files:['F10','F12','F15','F17'],
+  diff:[['登记模板','TradeDoc-Registry-Template v2',''],['INV-2026-0417 相似命中','INV-2025-0912','warn'],['相似度','94%（阈值 90%）','warn'],['No.03827451 / No.03839670 / No.03841120','无重复命中','']],
+  sug:'请人工确认 INV-2026-0417 是否重复登记、是否已在其他业务项下使用。'}
+];
+const checkById = id => CHECKS.find(c=>c.id===id);
+const ORIG = {}; CHECKS.forEach(c=>{ ORIG[c.id] = {st:c.st, why:c.why}; });
+const EXEC_ORDER = CHECKS.map(c=>c.id);
+const stColor = s => s==='pass' ? 'var(--ok)' : (s==='fail' ? 'var(--err)' : 'var(--warn)');
+const stLabel = s => s==='pass' ? '通过' : (s==='fail' ? '不通过' : '提示');
+
+/* 文件组：以文件为主线，5 笔支付各自成组 */
+const GROUPS = [
+ {id:'G1', no:'01', t:'贷款合同 + 提款指令（授信层）', d:'授信额度、利率、期限、用途的一致性来源',
+  files:['F1','F2']},
+ {id:'G2', no:'02', t:'支付指令 PI-01 · 上海XX纸业贸易（境内货款）', d:'本组外部单据仅归属于 PI-01，不与其他支付指令共用',
+  files:['F3','F8','F9','F10']},
+ {id:'G3', no:'03', t:'支付指令 PI-02 · XX Technology（跨境服务费）', d:'本组外部单据仅归属于 PI-02，跨境付汇场景',
+  files:['F4','F11','F12']},
+ {id:'G4', no:'04', t:'支付指令 PI-03 · 上海YY包装材料（境内货款）', d:'与 PI-01 同为“合同+订单+发票”，但属独立供应商组',
+  files:['F5','F13','F14','F15']},
+ {id:'G5', no:'05', t:'支付指令 PI-04 · 深圳市ZZ物流（运输费）', d:'运输类服务，合同 + 运输发票',
+  files:['F6','F16','F17']},
+ {id:'G6', no:'06', t:'支付指令 PI-05 · 税务专户（税款）', d:'以付税通知作为贸易背景凭据',
+  files:['F7','F18']},
+ {id:'G7', no:'07', t:'跨指令汇总 · 资金拆分完整性', d:'提款指令与 5 笔支付指令的合计勾稽，检查各笔是否闭合',
+  files:['F2','F3','F4','F5','F6','F7']}
+];
+
+/* 每条检查项「由哪些文件组承担」——决定该规则出现在哪个文件组的「涉及检查规则」Tab 中。
+   未列出的规则自动回退为「与该组文件有交集」。 */
+const CHECK_GROUP = {
+  R01:['G1'], R02:['G1'], R03:['G1'], R04:['G1'], R05:['G1'],
+  R06:['G7'], R07:['G7'], R08:['G7'],
+  R09:['G2','G3','G4','G5','G6'],
+  R10:['G3'],
+  R11:['G3'],
+  R12:['G2'],
+  R13:['G2','G3','G4','G5'],
+  R14:['G7'],
+  R15:['G3','G6'],
+  R16:['G2','G3','G4','G5']
+};
+const checksOfGroup = g => CHECKS.filter(c=>{
+  const m = CHECK_GROUP[c.id];
+  return m ? m.indexOf(g.id) >= 0 : c.files.some(f=>g.files.indexOf(f)>=0);
+});
+
+/* =========================================================
+   4. Agent 思考过程脚本
+   ========================================================= */
+const THOUGHTS = {
+ pre:[
+  {tag:'目标理解', cls:'phase', tx:'已接收业务编号 <b>TF-2026-0417</b> 项下 18 份文件。先做文档分类：1 份贷款合同、1 份提款指令、<b>5 份支付指令</b>、11 份贸易背景与税务类单据（采购/运输合同、订单、发票、付税通知）。'},
+  {tag:'字段抽取', cls:'phase', tx:'对 LN20260315-008 做版面理解，抽取关键条款：授信额度 <span class="mono">CNY 30,000,000</span>、用途 <b>日常经营</b>、利率 <span class="mono">LPR+1.50%</span>、期限 <span class="mono">12 个月</span>、签署日 <span class="mono">2026-03-15</span>。'},
+  {tag:'结构识别', cls:'phase', tx:'识别到提款指令 DD20260401-002 的“拆分收款人数量”为 <b>5 家</b>，即本笔 1000 万提款将被拆成 5 条独立的支付支线，后续所有单据都要按支线分组处理。'},
+  {tag:'关联归集', cls:'phase', tx:'以提款指令为锚点向下拆解，按收款人主体建立 5 条支线：<br>PI-01 → 上海XX纸业贸易（货款 300 万）<br>PI-02 → XX Technology（服务费 200 万）<br>PI-03 → 上海YY包装材料（货款 200 万）<br>PI-04 → 深圳市ZZ物流（运输费 100 万）<br>PI-05 → 税务专户（税款 200 万）'},
+  {tag:'去重校验', cls:'ok', tx:'按「收款人名称 + 合同编号 + 金额」三重指纹归集：PI-01 与 PI-03 都是“采购合同 + 订单 + 发票”的同构组合，但供应商、合同编号、金额三者完全不同，指纹比对后分别落在各自支线，<b>不会互串</b>。'},
+  {tag:'交叉排查', cls:'ok', tx:'进一步做反向校验：每一份外部单据都只能命中唯一支付指令。11 份外部单据全部为单命中，未出现一份单据同时挂载到多笔支付指令的情形。'},
+  {tag:'缺口发现', cls:'warn', tx:'PI-02 项下仅检索到 2 份外部单据（服务协议、Invoice），未检索到订单类文件。按中国香港分行规则集 v2.3，该笔支付的材料完整性存在缺口，先记录待后续规则判定。'},
+  {tag:'暂不下结论', cls:'phase', tx:'金额勾稽、用途穿透、法规检索等规则需在字段抽取与归集全部完成后统一执行，此处不提前判定，避免中间态误判。'}
+ ],
+ map:{
+  R01:{tag:'R01 合同日期', cls:'hit', tx:'比对提款指令「贷款合同日期」<span class="mono">2026-03-20</span> 与合同签署日 <span class="mono">2026-03-15</span>：不等值，相差 5 天。属<b>填报类不一致</b>，不涉及金额实质风险，但会阻断后续单据的自动对账。该异常挂起任务，等待业务人员处置。'},
+  R02:{tag:'R02 额度校验', cls:'ok', tx:'提款金额 1000 万 ≤ 授信额度 3000 万；扣减本笔后剩余可用额度 <b>2000 万</b>。额度维度无异常。'},
+  R03:{tag:'R03 利率校验', cls:'ok', tx:'利率组合勾选三项（基准 LPR / 加点 1.50% / 按季浮动）与合同第三条逐项一致，无加点偏差。'},
+  R04:{tag:'R04 期限与到期日', cls:'hit', tx:'两个子条件分别判定：期限 180 天 ≤ 合同 365 天，符合；但到期日 <span class="mono">2026-10-05</span> 命中法定节假日日历（国庆假期 10/1–10/8）。到期日落在非营业日将导致资金无法按时划付，判定不通过并挂起处置。'},
+  R05:{tag:'R05 提款用途', cls:'ok', tx:'“支付货款、服务费、运输费及税款”语义归一后是“日常经营”的下位概念，四项均未越出合同用途范围。'},
+  R06:{tag:'R06 笔数匹配', cls:'ok', tx:'5 份支付指令对应 5 个去重收款人，一一对应，不存在合并支付或遗漏收款人。这是后续<b>按收款人分组、跨组不比对</b>的前提条件。'},
+  R07:{tag:'R07 金额轧平', cls:'ok', tx:'PI-01 300万 + PI-02 200万 + PI-03 200万 + PI-04 100万 + PI-05 200万 = <b>1000万</b>，与提款金额完全一致，尾差 0，五条支线合计闭合。'},
+  R08:{tag:'R08 币种校验', cls:'ok', tx:'提款与五笔支付币种均为 CNY；PI-02 的 USD 按付款日中间价 7.20 折算，口径统一。'},
+  R09:{tag:'R09 收款人匹配', cls:'ok', tx:'逐组比对收款人与合同对手方：PI-01↔纸业（卖方）、PI-02↔Technology（乙方）、PI-03↔包装材料（卖方）、PI-04↔ZZ物流（承运方）。四组均在各自支线内匹配成功，<b>未发生跨组误配</b>，说明 A 的采购合同没有挂在 B 名下。'},
+  R10:{tag:'R10 单据齐套', cls:'warn', tx:'按分行规则集逐笔核验：PI-01、PI-03（合同+订单+发票）、PI-04（运输合同+发票）、PI-05（付税通知）齐备；PI-02 缺订单类文件。材料缺口记为提示项，不阻断，已挂入待处理清单。'},
+  R11:{tag:'R11 金额勾稽', cls:'hit', tx:'逐笔比对发票与支付：PI-01 发票 300万 ≥ 支付 300万、PI-03 发票 200.01万 ≥ 支付 200万、PI-04 发票 100万 ≥ 支付 100万，均通过。PI-02 发票折合 <span class="mono">CNY 1,656,000</span> 低于支付 <span class="mono">CNY 2,000,000</span>，缺口 <b>34.4 万</b>，贸易背景金额不足以覆盖付款金额，判定不通过并挂起。'},
+  R12:{tag:'R12 标的物', cls:'hit', tx:'发票货物名称与合同标的做品类与规格双向映射：PI-03 的瓦楞纸箱、PI-04 的运输服务费均可映射；PI-01 项下发票为“办公用品·打印纸”，合同为“铜版纸 70g/㎡”，品类不可映射、规格无对应项，存在发票开具不实风险，判定不通过并挂起。'},
+  R13:{tag:'R13 发票验真', cls:'ok', tx:'3 张增值税发票（03827451 / 03839670 / 03841120）经国家税务总局查验平台返回“一致”，状态正常；INV-2026-0417 属境外发票，改以供应商签章与 SWIFT 收款账户交叉核验，与合同约定一致。'},
+  R14:{tag:'R14 用途穿透', cls:'ok', tx:'构建四层用途语义树，5 条支线分别向上回溯：原材料货款/包装材料货款→“货款”、IT 服务费→“服务费”、运输服务费→“运输费”、税费→“税款”，五项均落在提款用途内；提款用途整体落在合同“日常经营”口径内。穿透链完整，未发现资金挪用迹象。'},
+  R15:{tag:'R15 法规检索', cls:'warn', tx:'法规检索分两步：① 未检索到与“货款、服务费、运输费、税费”相关的用途禁止性规定，用途合法；② PI-02 跨境付汇需办对外支付税务备案、PI-05 需附完税凭证，前置材料未收到。第 ① 步通过、第 ② 步未齐备，记为提示。'},
+  R16:{tag:'R16 登记查重', cls:'warn', tx:'按登记模板抽取后与历史库比对：INV-2026-0417 与 INV-2025-0912 在对手方、金额结构、服务描述三个维度高度重合，相似度 94% 超过阈值 90%，提示重复登记风险。三张境内发票与运输发票无命中。'}
+ }
+};
+
+/* =========================================================
+   5. 工具
+   ========================================================= */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+let state = {page:'1', running:false, done:0, autoKeep:false, waitId:null, waitResolve:null};
+
+(function(){
+  const tip = $('#tip');
+  function move(e){
+    const r = tip.getBoundingClientRect();
+    let x = e.clientX + 14, y = e.clientY + 16;
+    if (x + r.width > innerWidth - 12) x = e.clientX - r.width - 14;
+    if (y + r.height > innerHeight - 12) y = e.clientY - r.height - 14;
+    tip.style.left = x + 'px'; tip.style.top = y + 'px';
+  }
+  document.addEventListener('mouseover', e=>{
+    const el = e.target.closest('[data-tip-title]'); if(!el) return;
+    tip.innerHTML = '<div class="tt-tag">'+esc(el.dataset.tipTag)+'</div><div class="tt-title">'+esc(el.dataset.tipTitle)+
+      '</div><div class="tt-body">'+esc(el.dataset.tipBody)+'</div>';
+    tip.classList.add('show'); move(e);
+  });
+  document.addEventListener('mousemove', e=>{ if(tip.classList.contains('show')) move(e); });
+  document.addEventListener('mouseout', e=>{ if(e.target.closest('[data-tip-title]')) tip.classList.remove('show'); });
+})();
+function tipAttr(o){
+  if(!o.tip) return '';
+  const cls = o.tip.tag === '法规' ? ' t-legal' : (o.tip.tag === '翻译' ? ' t-tr' : '');
+  return ' class="tipable'+cls+'" data-tip-tag="'+esc(o.tip.tag)+'" data-tip-title="'+esc(o.tip.t)+'" data-tip-body="'+esc(o.tip.b)+'"';
+}
+function structTable(rows){
+  return '<table class="kv">' + rows.map(o=>{
+    const c = o.bad ? ' class="hit"' : (o.warn ? ' class="hitw"' : '');
+    let v = esc(o.v);
+    if (o.tr) v += '<br><span style="color:#7b8bb0">↳ ' + esc(o.tr) + '</span>';
+    return '<tr'+c+'><td class="k">'+esc(o.k)+'</td><td class="v"><span'+tipAttr(o)+'>'+v+'</span></td></tr>';
+  }).join('') + '</table>';
+}
+
+/* =========================================================
+   6. 导航
+   ========================================================= */
+const PAGE_NAMES = {'1':'页面一 · 上传归集与思考过程','2':'页面二 · 检查结果概览','3':'页面三 · 解析结果概览','4':'页面四 · 总结与反馈'};
+function go(n){
+  state.page = String(n);
+  $$('.page').forEach(p=>p.classList.toggle('active', p.id === 'page'+n));
+  $$('.nav-item').forEach(b=>b.classList.toggle('active', b.dataset.page === String(n)));
+  $('#tbSub').textContent = PAGE_NAMES[String(n)] || '';
+  $('#scrollBox').scrollTop = 0;
+}
+$$('.nav-item').forEach(b=>b.addEventListener('click',()=>go(b.dataset.page)));
+
+/* =========================================================
+   7. 页面一 · 关联树 / 思考流 / 待处理项
+   ========================================================= */
+const BR_NAME = {a:'PI-01', b:'PI-02', c:'PI-03', d:'PI-04', e:'PI-05'};
+const BR_COLOR = {a:'var(--br-a)', b:'var(--br-b)', c:'var(--br-c)', d:'var(--br-d)', e:'var(--br-e)'};
+
+function renderTree(){
+  const marks = {};
+  TREE.forEach((n,i)=>{
+    let last = true;
+    for(let j=i+1;j<TREE.length;j++){ if(TREE[j].depth === n.depth){ last=false; break; } if(TREE[j].depth < n.depth) break; }
+    marks[i] = last;
+  });
+  $('#tree').innerHTML = TREE.map((n,i)=>{
+    const pad = n.depth * 22;
+    if(n.miss){
+      return '<div class="tnode lv3 miss '+(marks[i]?'last ':'')+'" style="margin-left:'+pad+'px">'+
+        '<span class="twire"></span>'+
+        '<div class="tline"><span class="tbranch" style="background:var(--warn)">'+BR_NAME[n.br]+'</span>'+
+        '<span class="tname">⚠ '+esc(n.miss)+'</span><span class="tstate" style="color:var(--warn)">未检索到</span></div></div>';
+    }
+    const f = fileById(n.file);
+    const belong = n.belong ? '<span class="tbranch" style="background:'+BR_COLOR[n.br]+'">归属 '+esc(n.belong)+'</span>' : '';
+    const sub = n.note ? '<div class="tsub">'+esc(n.note)+'</div>' : '';
+    const payee = n.payee ? '<div class="tsub">收款人 '+esc(n.payee)+' · '+esc(n.amt)+'</div>' : '';
+    return '<div class="tnode lv'+n.depth+' '+(n.br?'br-'+n.br:'')+' '+(marks[i]?'last ':'')+(n.depth===0?'root':'')+'" style="margin-left:'+pad+'px" id="tn-'+f.id+'">'+
+      '<span class="twire"></span>'+
+      '<div class="tline">'+belong+
+        '<div class="tico '+f.cls+'">'+esc(f.kind.slice(0,2))+'</div>'+
+        '<span class="tname">'+esc(f.zh)+'</span>'+
+        '<span class="tcode">'+esc(f.code)+'</span>'+
+        '<span class="tstate" id="ts-'+f.id+'"><span class="tstate-tx">待解析</span></span>'+
+      '</div>'+sub+payee+'</div>';
+  }).join('');
+}
+function setTreeState(id, mode){
+  const el = document.getElementById('ts-'+id); if(!el) return;
+  const node = document.getElementById('tn-'+id);
+  if(node) node.classList.toggle('parsing', mode==='parsing');
+  el.innerHTML = mode==='parsing' ? '<span class="pulse"></span><span class="tstate-tx">解析中…</span>'
+    : '<span class="tstate-tx" style="color:var(--ok)">✓ 已结构化</span>';
+}
+
+async function thinkPush(tag, cls, html){
+  const box = $('#think');
+  const line = document.createElement('div');
+  line.className = 'th-line ' + (cls||'');
+  line.innerHTML = '<span class="th-tag">'+esc(tag)+'</span><span class="th-tx"></span>';
+  box.appendChild(line);
+  const tx = line.querySelector('.th-tx');
+  const caret = document.createElement('span'); caret.className='caret';
+  tx.appendChild(caret);
+  const tokens = html.match(/<[^>]+>|[\s\S]/g) || [];
+  let buf = '';
+  for(const tk of tokens){
+    buf += tk; tx.innerHTML = buf; tx.appendChild(caret);
+    box.scrollTop = box.scrollHeight;
+    if(!tk.startsWith('<')) await sleep(3);
+  }
+  caret.remove();
+  box.scrollTop = box.scrollHeight;
+}
+function thinkStatus(t, cls){ const el = $('#chipThink'); el.textContent = t; el.className = 'chip ' + (cls||''); }
+
+/* ---------- 待处理项 ---------- */
+const PEND = {};
+function addPending(id){
+  const c = checkById(id);
+  PEND[id] = {st: c.st==='fail' ? 'open' : 'ack-pending'};
+  renderPending();
+}
+function renderPending(){
+  const ids = Object.keys(PEND);
+  const open = ids.filter(id=>PEND[id].st==='open' || PEND[id].st==='ack-pending').length;
+  const cc = $('#pendCount');
+  cc.textContent = open ? open + ' 项待处置' : (ids.length ? '已全部处置' : '0 项');
+  cc.className = 'chip ' + (open ? 'warn' : (ids.length ? 'ok' : ''));
+  if(!ids.length){ $('#pendBox').innerHTML = '<div class="pend-empty">暂无待处理项<br>解析过程中命中的异常将在此排队</div>'; return; }
+  $('#pendBox').innerHTML = ids.map(id=>{
+    const c = checkById(id), p = PEND[id];
+    const isFail = ORIG[id].st === 'fail';
+    const cls = 'pend-item' + (isFail ? '' : ' warn') + (p.st==='open' ? ' wait' : '') + (['kept','accepted','ack'].indexOf(p.st)>=0 ? ' done' : '');
+    let act = '', done = '';
+    if(p.st==='open'){
+      act = '<div class="pi-act">'+
+        '<button class="btn sm primary" onclick="resolvePending(\''+id+'\',\'accept\')">该项异常确认无问题，继续</button>'+
+        '<button class="btn sm" onclick="resolvePending(\''+id+'\',\'keep\')">保留异常，继续处理</button>'+
+      '</div>';
+    } else if(p.st==='ack-pending'){
+      act = '<div class="pi-act"><button class="btn sm" onclick="resolvePending(\''+id+'\',\'ack\')">已知悉，记录在案</button></div>';
+    } else if(p.st==='accepted'){
+      done = '<div class="pi-done" style="color:var(--ok)">✓ 业务人员确认该处异常无实质影响 · 判定已修正为「通过」</div>';
+    } else if(p.st==='kept'){
+      done = '<div class="pi-done" style="color:var(--err)">■ 业务人员选择「保留异常」· 维持「不通过」并计入最终缺陷清单</div>';
+    } else if(p.st==='ack'){
+      done = '<div class="pi-done" style="color:var(--warn)">✓ 已知悉 · 作为提示项记录在案</div>';
+    }
+    return '<div class="'+cls+'" id="pi-'+id+'">'+
+      '<div class="pi-top"><span class="pill '+ORIG[id].st+'">'+stLabel(ORIG[id].st)+'</span>'+
+        '<span class="pi-t">'+esc(c.n)+'</span><span class="pi-id">'+id+'</span></div>'+
+      '<div class="pi-d">'+esc(c.res)+'</div>'+act+done+'</div>';
+  }).join('');
+}
+function resolvePending(id, kind){
+  const c = checkById(id);
+  if(kind === 'accept'){
+    c.st = 'pass'; c.st2 = 'accepted';
+    c.why = '【人工判定】业务人员确认该处异常无实质影响，判定为通过；原始差异记录仍保留以备追溯。';
+    PEND[id].st = 'accepted';
+  } else if(kind === 'keep'){
+    c.st2 = 'kept'; PEND[id].st = 'kept';
+  } else {
+    PEND[id].st = 'ack';
+  }
+  renderPending(); updateCheckDOM(id); renderFailList(curFilter);
+  if(state.waitId === id){ const r = state.waitResolve; state.waitId = null; state.waitResolve = null; if(r) r(); }
+}
+function autoKeepRest(){
+  state.autoKeep = true;
+  if(state.waitId){ const id = state.waitId; resolvePending(id,'keep'); }
+}
+function pauseFor(id){
+  return new Promise(resolve=>{
+    if(state.autoKeep){ resolvePending(id,'keep'); resolve(); return; }
+    state.waitId = id; state.waitResolve = resolve;
+    thinkStatus('已挂起 · 等待处置','warn');
+  });
+}
+
+/* ---------- 主流程：只做解析归集 + 思考，不做规则引擎执行 ---------- */
+async function runPipeline(){
+  if(state.running) return;
+  state.running = true; state.done = 0;
+  thinkStatus('分析中','primary');
+  $('#think').innerHTML = '';
+  Object.keys(PEND).forEach(k=>delete PEND[k]);
+  renderPending(); renderTree();
+  $('#fileBar').style.width='0%'; $('#chipParsed').textContent='0 / 18 已解析'; $('#chipProgress').textContent='已解析 0 / 18';
+
+  for(const t of THOUGHTS.pre){ await thinkPush(t.tag, t.cls, t.tx); await sleep(80); }
+
+  const order = ['F1','F2','F3','F8','F9','F10','F4','F11','F12','F5','F13','F14','F15','F6','F16','F17','F7','F18'];
+  for(let i=0;i<order.length;i++){
+    setTreeState(order[i],'parsing');
+    await sleep(120);
+    setTreeState(order[i],'done');
+    const pct = Math.round((i+1)/order.length*100);
+    $('#fileBar').style.width = pct+'%';
+    $('#chipParsed').textContent = (i+1)+' / 18 已解析';
+    $('#chipProgress').textContent = '已解析 '+(i+1)+' / 18';
+  }
+
+  for(const id of EXEC_ORDER){
+    const c = checkById(id);
+    const th = THOUGHTS.map[id]; if(!th) continue;
+    await sleep(70);
+    await thinkPush(th.tag, th.cls, th.tx);
+    if(c.st === 'fail'){
+      addPending(id);
+      await thinkPush('挂起','hit','该异常已挂入右侧「需业务人员处理项」，任务在此<b>暂停</b>，等待业务人员处置后继续。');
+      await pauseFor(id);
+    } else if(c.st === 'warn'){
+      addPending(id);
+      await thinkPush('记录','warn','该提示项已挂入「需业务人员处理项」，<b>不阻断</b>后续流程，由业务人员知悉并留痕。');
+    }
+  }
+
+  thinkStatus('分析完成','ok');
+  await thinkPush('结论','phase','16 条规则的结果已全部产出：<b>9 条通过</b>、<b>4 条严重不通过</b>、<b>3 条提示</b>。可进入「检查结果概览」查看失败项原文，或直接生成客户反馈邮件。');
+  state.running = false;
+}
+
+function restart(){
+  state.running = false; state.waitId = null; state.waitResolve = null; state.autoKeep = false;
+  Object.keys(PEND).forEach(k=>delete PEND[k]);
+  CHECKS.forEach(c=>{ delete c.st2; c.st = ORIG[c.id].st; c.why = ORIG[c.id].why; });
+  renderPending(); renderTree(); renderFailList(curFilter); renderGroups();
+  $('#fileBar').style.width='0%'; $('#chipParsed').textContent='0 / 18 已解析'; $('#chipProgress').textContent='已解析 0 / 18';
+  thinkStatus('待启动','');
+  $('#think').innerHTML='<div class="think-empty">等待解析启动…</div>';
+  go(1);
+  setTimeout(runPipeline, 300);
+}
+
+/* =========================================================
+   8. 页面二 · 检查结果明细（含原文）
+   ========================================================= */
+let curFilter = 'all';
+function renderFailList(filter){
+  if(filter) curFilter = filter;
+  filter = curFilter;
+  const items = CHECKS.filter(c=> c.st !== 'pass' && (filter==='all' || c.st===filter));
+  $('#failList').innerHTML = items.map(c=>
+    '<div class="fcard" id="fc-'+c.id+'" onclick="openCheck(\''+c.id+'\')">'+
+      '<div class="fcard-top"><span class="sev '+(c.st==='fail'?'f':'w')+'"></span>'+
+      '<span class="fcard-name">'+esc(c.n)+'</span></div>'+
+      '<div class="fcard-sub">'+c.id+' · '+c.files.map(f=>fileById(f).code).join(' / ')+'</div>'+
+    '</div>').join('') + (items.length?'':'<div class="muted" style="padding:20px;text-align:center">无匹配项</div>');
+}
+function filterChecks(k, btn){
+  renderFailList(k);
+  const box = $('#filterBox');
+  if(box){ Array.from(box.children).forEach(b=>b.classList.remove('primary')); if(btn) btn.classList.add('primary'); }
+}
+let curCheck = 'R01', curFile = null, curPane = 'paper';
+
+function openCheck(id){
+  curCheck = id; curPane = 'paper'; curFile = null;
+  $$('.fcard').forEach(e=>e.classList.remove('active'));
+  const fc = $('#fc-'+id); if(fc) fc.classList.add('active');
+  drawDetail();
+}
+function drawDetail(pickFile, pickTab){
+  const c = checkById(curCheck); if(!c) return;
+  if(pickFile) curFile = pickFile;
+  if(pickTab) curPane = pickTab;
+  if(!curFile || c.files.indexOf(curFile) < 0) curFile = c.files[0];
+  if(!curPane) curPane = 'paper';
+  const f = fileById(curFile);
+
+  const level = c.st==='fail' ? '<span class="pill fail"><span class="dot"></span>严重不通过</span>'
+    : c.st==='warn' ? '<span class="pill warn"><span class="dot"></span>提示项</span>'
+    : '<span class="pill pass"><span class="dot"></span>已通过</span>';
+
+  const fileTabs = c.files.map(fid=>{
+    const ff = fileById(fid);
+    return '<button class="tab'+(fid===curFile?' active':'')+'" data-fid="'+fid+'" onclick="drawDetail(\''+fid+'\',\'\')">'+
+      esc(ff.zh)+' · '+esc(ff.code)+'</button>';
+  }).join('');
+
+  const paneTabs =
+    '<div class="tabs" style="margin-top:-4px">'+
+      '<button class="tab'+(curPane==='paper'?' active':'')+'" onclick="drawDetail(\'\',\'paper\')">原文</button>'+
+      '<button class="tab'+(curPane==='struct'?' active':'')+'" onclick="drawDetail(\'\',\'struct\')">结构化文本</button>'+
+    '</div>';
+
+  const pane = curPane === 'paper'
+    ? paperHTML(curFile) + '<div style="font-size:11px;color:var(--muted);margin-top:8px;text-align:center">'+
+      esc(f.zh)+' · '+esc(f.code)+' · 共 '+f.pages+' 页 · 当前显示第 1 页（OCR 识别源）</div>'
+    : structTable(STRUCT[curFile]) + '<div class="note" style="margin-top:12px"><span>ℹ️</span><div>以上字段由 OCR + 版面理解自动抽取。带虚线下划线的字段可鼠标悬停查看术语解释与译文；<b style="color:var(--err)">红色行</b>为规则命中的差异字段。</div></div>';
+
+  const diffTable = c.diff ? '<div class="sec-title" style="margin-top:18px">规则判定明细</div>'+
+    '<table class="kv" style="border:1px solid var(--border);border-radius:8px;overflow:hidden">'+
+    c.diff.map(d=>'<tr'+(d[2]==='bad'?' class="hit"':d[2]==='warn'?' class="hitw"':'')+'><td class="k">'+esc(d[0])+'</td><td class="v">'+esc(d[1])+'</td></tr>').join('')+
+    '</table>' : '';
+
+  $('#failDetail').innerHTML =
+    '<div style="display:flex;align-items:center;gap:9px;margin-bottom:6px">'+
+      '<span class="mono" style="font-size:11px;color:var(--muted)">'+c.id+'</span>'+level+
+      (c.st2==='kept'?'<span class="chip warn">人工保留异常</span>':c.st2==='accepted'?'<span class="chip ok">人工确认无问题</span>':'')+
+    '</div>'+
+    '<h3 style="margin:4px 0 6px;font-size:15px">'+esc(c.n)+'</h3>'+
+    '<div class="txt" style="font-size:12.5px">'+esc(c.d)+'</div>'+
+    '<div class="mono" style="margin-top:8px;font-size:11px;padding:9px 11px;background:var(--surface-2);border:1px solid var(--border);border-radius:7px;color:#43506b;word-break:break-all">'+esc(c.r)+'</div>'+
+    diffTable +
+    '<div class="sec-title" style="margin-top:18px">相关文件 · 原文与识别结果（'+c.files.length+' 份）</div>'+
+    '<div class="tabs" id="fileTabs" data-n="'+c.files.length+'">'+fileTabs+'</div>'+
+    paneTabs +
+    '<div style="margin-top:2px">'+pane+'</div>'+
+    '<div class="note '+(c.st==='fail'?'err':(c.st==='warn'?'warn':''))+'" style="margin-top:18px"><span>💡</span><div><b>处理建议：</b>'+esc(c.sug)+'</div></div>';
+}
+
+/* =========================================================
+   9. 页面三 · 文件组（文件原本 / 结构化文本 / 涉及检查规则）
+   ========================================================= */
+function checkRowHTML(c, scope){
+  const id = 'ckr-'+scope+'-'+c.id;
+  const chips = c.files.map(fid=>{const ff=fileById(fid);return '<span class="mini-chip">'+esc(ff.zh)+' '+esc(ff.code)+'</span>';}).join('');
+  return '<div class="ckrow '+c.st+'" id="'+id+'" data-ckrow="'+c.id+'">'+
+    '<div class="ckrow-h" onclick="toggleCheckRow(\''+id+'\')">'+
+      '<span class="pill '+c.st+'">'+stLabel(c.st)+'</span>'+
+      '<span class="ckrow-n">'+esc(c.n)+'</span>'+
+      '<span class="ckrow-id">'+c.id+'</span>'+
+      '<span class="grp-arrow">▶</span>'+
+    '</div>'+
+    '<div class="ckrow-b">'+
+      '<div class="ckfield"><span class="fk">怎么检查</span><span class="fv">'+esc(c.how)+'</span></div>'+
+      '<div class="ckfield"><span class="fk">规则表达式</span><span class="fv mono">'+esc(c.r)+'</span></div>'+
+      '<div class="ckfield"><span class="fk">检查结果</span><span class="fv" data-fld="res"><b style="color:'+stColor(c.st)+'">'+esc(c.res)+'</b></span></div>'+
+      '<div class="ckfield"><span class="fk" data-fld="why-lbl">'+(c.st==='pass'?'为什么通过':'为什么不通过')+'</span><span class="fv" data-fld="why">'+esc(c.why)+'</span></div>'+
+      '<div class="ckfield"><span class="fk">关联文件</span><span class="fv"><div class="mini-chips">'+chips+'</div></span></div>'+
+      '<div class="ckfield"><span class="fk">处理建议</span><span class="fv">'+esc(c.sug)+'</span></div>'+
+    '</div></div>';
+}
+function toggleCheckRow(id){ const el = $('#'+id); if(el) el.classList.toggle('open'); }
+function updateCheckDOM(id){
+  const c = checkById(id);
+  $$('[data-ckrow="'+id+'"]').forEach(el=>{
+    el.className = 'ckrow ' + c.st + (el.classList.contains('open') ? ' open' : '');
+    const pill = el.querySelector('.pill'); pill.className = 'pill '+c.st; pill.textContent = stLabel(c.st);
+    const res = el.querySelector('[data-fld="res"]'); if(res) res.innerHTML = '<b style="color:'+stColor(c.st)+'">'+esc(c.res)+'</b>';
+    const why = el.querySelector('[data-fld="why"]'); if(why) why.textContent = c.why;
+    const whyLbl = el.querySelector('[data-fld="why-lbl"]'); if(whyLbl) whyLbl.textContent = c.st==='pass'?'为什么通过':'为什么不通过';
+  });
+}
+function renderGroups(){
+  $('#groupList').innerHTML = GROUPS.map((g,i)=>{
+    const checks = checksOfGroup(g);
+    const paperCol = g.files.map(fid=>{
+      const ff = fileById(fid);
+      return '<div style="margin-bottom:12px">'+paperHTML(fid)+
+        '<div style="font-size:10.5px;color:var(--muted);margin-top:5px;text-align:center">'+esc(ff.zh)+' · '+esc(ff.code)+'</div></div>';
+    }).join('');
+    const structCol = g.files.map(fid=>{
+      const ff = fileById(fid);
+      return '<div style="border:1px solid var(--border);border-radius:8px;margin-bottom:8px;overflow:hidden">'+
+        '<div class="diff-h">'+esc(ff.zh)+' · '+esc(ff.code)+'</div>'+
+        '<div class="diff-b" style="padding:6px 10px">'+STRUCT[fid].map(o=>
+          '<div class="diff-r'+(o.bad?' bad':'')+'"><span class="k">'+esc(o.k)+'</span><span class="v"><span'+tipAttr(o)+'>'+
+          esc(o.tr||o.v)+'</span></span></div>').join('')+'</div></div>';
+    }).join('');
+    return '<div class="grp'+(i===0?' open':'')+'" id="grp-'+g.id+'">'+
+      '<div class="grp-h" onclick="toggleGroup(\''+g.id+'\')">'+
+        '<div class="grp-ico">'+g.no+'</div>'+
+        '<div style="flex:1"><div class="grp-t">文件组 '+g.no+' · '+esc(g.t)+'</div>'+
+        '<div class="grp-d">'+esc(g.d)+' · '+g.files.length+' 份文件 · '+checks.length+' 条关联检查项</div></div>'+
+        '<span class="grp-arrow">▶</span>'+
+      '</div>'+
+      '<div class="grp-b">'+
+        '<div class="tabs">'+
+          '<button class="tab active" onclick="switchTab(this,\'tb-'+g.id+'-files\')">文件原本（'+g.files.length+'）</button>'+
+          '<button class="tab" onclick="switchTab(this,\'tb-'+g.id+'-struct\')">结构化文本（'+g.files.length+'）</button>'+
+          '<button class="tab" onclick="switchTab(this,\'tb-'+g.id+'-chk\')">涉及检查规则（'+checks.length+'）</button>'+
+        '</div>'+
+        '<div id="tb-'+g.id+'-files" class="tab-panel active"><div class="grid-2" style="gap:12px;align-items:start">'+paperCol+'</div></div>'+
+        '<div id="tb-'+g.id+'-struct" class="tab-panel"><div class="grid-2" style="gap:10px;align-items:start">'+structCol+'</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:8px">ℹ️ 虚线下划线字段支持鼠标悬停查看术语解释与译文；红色高亮为规则命中的差异字段。</div></div>'+
+        '<div id="tb-'+g.id+'-chk" class="tab-panel">'+checks.map(c=>checkRowHTML(c, g.id)).join('')+'</div>'+
+      '</div></div>';
+  }).join('');
+}
+function toggleGroup(id){ $('#grp-'+id).classList.toggle('open'); }
+function switchTab(btn, target){
+  const box = btn.closest('.grp-b');
+  box.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  box.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  $('#'+target).classList.add('active');
+}
+
+/* =========================================================
+   10. 页面四
+   ========================================================= */
+const ADVICE = [
+  {n:'01', t:'更正提款指令贷款合同日期', d:'由 2026-03-20 更正为 2026-03-15（与贷款合同签署日期一致）。', lv:'err', files:'DD20260401-002'},
+  {n:'02', t:'调整提款到期日', d:'2026-10-05 落入国庆节法定假期，建议调整为 2026-10-09 或按合同顺延条款处理。', lv:'err', files:'DD20260401-002'},
+  {n:'03', t:'补齐 PI-02 项下发票金额缺口', d:'INV-2026-0417 折合 CNY 1,656,000.00，低于支付金额 CNY 2,000,000.00，缺口 CNY 344,000.00，需补开发票或下调支付金额。', lv:'err', files:'INV-2026-0417'},
+  {n:'04', t:'说明 PI-01 发票与合同标的物不一致', d:'发票开具“办公用品·打印纸”，与采购合同 PC-2026-0311 的“铜版纸 70g/㎡”不一致，需换开发票或提交书面说明。', lv:'err', files:'No.03827451'},
+  {n:'05', t:'补充 PI-02 服务订单', d:'按中国香港分行规则集 v2.3，PI-02 项下缺少服务订单 / 交付确认单。', lv:'warn', files:'SA-2026-028'},
+  {n:'06', t:'补充跨境付汇与完税材料', d:'需提交服务贸易对外支付税务备案表（PI-02）及税款完税凭证（PI-05）。', lv:'warn', files:'PI-02 / PI-05'},
+  {n:'07', t:'人工确认发票是否重复登记', d:'INV-2026-0417 与 2025 年登记记录 INV-2025-0912 相似度 94%，需确认是否为同一笔服务。', lv:'warn', files:'INV-2026-0417'}
+];
+const SUMMARY =
+  '<p><b>审核范围：</b>本次共接收 18 份贷款支持性文件，覆盖 1 份贷款合同、1 份提款指令、<b>5 份支付指令</b>（境内货款 2 笔、跨境服务费 1 笔、运输费 1 笔、税款 1 笔），以及分属 4 个收款人的采购 / 运输合同、订单、发票与付税通知。全部单据已按收款人指纹归入 7 个文件组。</p>' +
+  '<p><b>总体结论：</b>系统共执行 16 条检查规则，<b style="color:var(--ok)">9 条通过</b>、<b style="color:var(--err)">4 条严重不通过</b>、<b style="color:var(--warn)">3 条提示</b>。建议<b style="color:var(--err)">暂缓放款</b>，待客户补齐材料并更正单据后重新提交。</p>' +
+  '<p><b>结构性问题：</b>单据之间的<b>用途穿透链完整</b>——五笔支付指令（两份货款、服务费、运输费、税费）均落在提款指令“支付货款、服务费、运输费及税款”范围内，并进一步落在贷款合同“日常经营”口径内，未发现资金挪用迹象。<b>金额轧平良好</b>：五笔支付合计 CNY 10,000,000.00 与提款金额完全一致；四组收款人与各自商务合同对手方名称全部匹配，三张境内增值税发票均通过税务平台验真。</p>' +
+  '<p><b>主要缺陷：</b>问题集中在<b>单据填报一致性</b>与<b>贸易背景充分性</b>两个环节。一是提款指令自行填报的贷款合同日期（2026-03-20）与合同签署日（2026-03-15）不符；二是提款到期日 2026-10-05 落在国庆节法定假期内；三是 PI-02 项下发票折合人民币 1,656,000.00，低于支付金额 344,000.00；四是 PI-01 项下发票货物名称“办公用品·打印纸”与采购合同标的“铜版纸 70g/㎡”不构成包含关系，存在发票开具不实的嫌疑。</p>' +
+  '<p><b>归集质量说明：</b>本次五笔支付指令中有两笔（PI-01、PI-03）均采用“采购合同 + 采购订单 + 增值税发票”的同构组合，系统依据「收款人名称 + 合同编号 + 金额」三重指纹分别归集，7 个文件组内无一份单据被跨组重复挂载，可确认多笔支付指令下的外部合同未发生串档。</p>' +
+  '<p><b>合规提示：</b>PI-02 为境外供应商的服务贸易项下对外付汇，需先行办理对外支付税务备案；PI-05 税款支付需附完税凭证。此外，发票 INV-2026-0417 与 2025 年度登记记录相似度达 94%，建议人工确认是否存在重复登记或重复融资。</p>';
+function renderAdvice(){
+  $('#adviceList').innerHTML = ADVICE.map(a=>
+    '<div style="display:flex;gap:11px;padding:11px 0;border-bottom:1px dashed var(--border)">'+
+      '<div class="mono" style="font-size:11px;font-weight:800;color:'+(a.lv==='err'?'var(--err)':'var(--warn)')+';flex:0 0 20px;padding-top:1px">'+a.n+'</div>'+
+      '<div style="flex:1"><div style="font-size:12.5px;font-weight:650">'+esc(a.t)+'</div>'+
+      '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.65">'+esc(a.d)+'</div>'+
+      '<div class="mini-chips" style="margin-top:6px"><span class="mini-chip">'+esc(a.files)+'</span></div></div>'+
+      '<span class="chip '+(a.lv==='err'?'err':'warn')+'">'+(a.lv==='err'?'阻断':'提示')+'</span>'+
+    '</div>').join('');
+}
+function mailBody(){
+  return '尊敬的客户：\n\n' +
+  '您好。我行已完成业务编号 TF-2026-0417 项下贷款支持性文件的初步审核，现将审核情况反馈如下。\n\n' +
+  '一、总体情况\n' +
+  '本次共收到 18 份文件（1 份贷款合同、1 份提款指令、5 份支付指令及 11 份贸易背景与税务单据），完成 16 项规则校验。其中 9 项通过，4 项存在严重不一致，3 项需进一步确认。五笔支付的资金用途穿透链完整，合计金额与提款金额一致，暂未发现资金挪用迹象。\n\n' +
+  '二、需补充或更正的材料\n' +
+  '1.【提款指令 DD20260401-002】填报的贷款合同日期为 2026-03-20，与贷款合同 LN20260315-008 的签署日期 2026-03-15 不一致，请更正后重新提交。\n' +
+  '2.【提款指令 DD20260401-002】到期日 2026-10-05 落入国庆节法定假期，请调整为 2026-10-09 或提供合同项下的顺延说明。\n' +
+  '3.【发票 INV-2026-0417】折合人民币 1,656,000.00 元，低于支付指令 PI-02 的支付金额 2,000,000.00 元，缺口 344,000.00 元。请补开等额发票，或将支付金额调整至发票金额以内。\n' +
+  '4.【增值税专用发票 No.03827451】开具的货物名称为“办公用品·打印纸”，与采购合同 PC-2026-0311 约定的“铜版纸 70g/㎡”不一致。请换开与实际交易一致的发票，或提交书面说明以证明两者对应关系。\n' +
+  '5. PI-02 项下缺少服务订单或交付确认单，请补充提供。\n' +
+  '6. 请提交服务贸易对外支付税务备案表（PI-02）及税款完税凭证（PI-05）。\n\n' +
+  '三、其他提示\n' +
+  '发票 INV-2026-0417 与我行 2025 年度登记记录 INV-2025-0912 相似度较高，请确认是否属于同一笔服务，以免重复登记。\n\n' +
+  '上述材料补齐并更正后，请回复本邮件，我行将按原业务编号自动重跑校验并出具新的审核结论。如有疑问，欢迎随时与我们联系。\n\n' +
+  '顺颂商祺\n' +
+  '贸易融资部\n' +
+  'XX 银行 中国香港分行';
+}
+function copyMail(btn){
+  const t = '【贸易融资】业务编号 TF-2026-0417 贷款资料审核反馈 · 需补充材料 6 项\n\n' + mailBody();
+  const done = ()=>{ if(btn){ const o=btn.textContent; btn.textContent='✓ 已复制'; setTimeout(()=>btn.textContent=o,1500); } };
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, done);
+  else { const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); }catch(e){} document.body.removeChild(ta); done(); }
+}
+
+/* =========================================================
+   11. 初始化
+   ========================================================= */
+function init(){
+  renderTree(); renderPending(); renderFailList('all');
+  renderGroups(); renderAdvice();
+  $('#summaryText').innerHTML = SUMMARY;
+  $('#mailBody').textContent = mailBody();
+  const first = $('#ckr-G1-R01'); if(first) first.classList.add('open');
+  openCheck('R01');
+  setTimeout(()=>{ if(state.page==='1') runPipeline(); }, 450);
+}
+init();
+</script>
+</body>
+</html>
