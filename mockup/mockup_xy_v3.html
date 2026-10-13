@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智汇跨境贷途 · 跨境贷款文件智能审核台 POC</title>
+<style>
+:root{
+  --blue:#1D4ED8; --blue-2:#2563EB; --blue-soft:#EFF4FF; --blue-border:#C7D7FE;
+  --bg:#F5F7FA; --panel:#FFFFFF; --line:#E5E9F0; --line-2:#EDF0F5;
+  --txt:#1F2937; --txt-2:#4B5563; --txt-3:#8A94A6;
+  --g:#16A34A; --g-bg:#EAF7EF;
+  --y:#D97706; --y-bg:#FDF3E3;
+  --r:#DC2626; --r-bg:#FCECEC;
+  --x:#9CA3AF; --x-bg:#F1F3F6;
+  --shadow:0 1px 3px rgba(16,24,40,.06);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:"Segoe UI","Microsoft YaHei","PingFang SC",system-ui,sans-serif;background:var(--bg);color:var(--txt);font-size:13px;overflow:hidden}
+button{font-family:inherit;cursor:pointer}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:#CBD2DD;border-radius:4px}
+::-webkit-scrollbar-track{background:transparent}
+
+/* ===== 顶栏 ===== */
+.topbar{height:52px;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 20px;gap:20px;flex-shrink:0}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:15px;color:var(--txt)}
+.brand .logo{width:28px;height:28px;border-radius:7px;background:var(--blue);display:flex;align-items:center;justify-content:center;color:#fff}
+.brand .sub{font-weight:400;color:var(--txt-3);font-size:12px;margin-left:2px}
+.nav{display:flex;gap:4px;margin-left:12px}
+.nav button{border:none;background:transparent;padding:7px 14px;border-radius:7px;font-size:13px;color:var(--txt-2)}
+.nav button.active{background:var(--blue-soft);color:var(--blue);font-weight:600}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.user-chip{display:flex;align-items:center;gap:8px;color:var(--txt-2)}
+.avatar{width:26px;height:26px;border-radius:50%;background:var(--blue-2);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
+.btn{border:1px solid var(--line);background:#fff;color:var(--txt-2);padding:6px 13px;border-radius:7px;font-size:12.5px}
+.btn:hover{border-color:var(--blue-border);color:var(--blue)}
+.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn.primary:hover{background:var(--blue-2)}
+.btn.primary:disabled{background:#B9C6E8;border-color:#B9C6E8;cursor:not-allowed}
+.btn.danger{background:var(--r);border-color:var(--r);color:#fff}
+.btn.ghost-blue{border:1px solid var(--blue-border);color:var(--blue);background:var(--blue-soft)}
+
+/* ===== 主区 ===== */
+.main{height:calc(100vh - 52px);overflow:hidden}
+.page{display:none;height:100%}
+.page.active{display:flex;flex-direction:column}
+
+/* ===== 灯 ===== */
+.lamp{display:inline-flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0}
+.dot.g{background:var(--g)} .dot.y{background:var(--y)} .dot.r{background:var(--r)} .dot.x{background:var(--x)}
+.lamp.g{color:var(--g)} .lamp.y{color:var(--y)} .lamp.r{color:var(--r)} .lamp.x{color:var(--x)}
+
+/* ===== 待办页 ===== */
+#pg-todo{padding:24px 32px;overflow-y:auto}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;max-width:1100px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;box-shadow:var(--shadow)}
+.stat .num{font-size:26px;font-weight:700;margin-top:4px}
+.stat .lbl{color:var(--txt-3);font-size:12.5px}
+.stat.blue .num{color:var(--blue)} .stat.yel .num{color:var(--y)} .stat.red .num{color:var(--r)} .stat.grn .num{color:var(--g)}
+.sec-title{font-size:15px;font-weight:700;margin:26px 0 12px;max-width:1100px}
+.case-card{max-width:1100px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px 22px;box-shadow:var(--shadow);cursor:pointer;transition:border-color .15s}
+.case-card:hover{border-color:var(--blue-border)}
+.case-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.case-id{font-weight:700;font-size:14.5px;color:var(--blue)}
+.tag{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11.5px;font-weight:600}
+.tag.blue{background:var(--blue-soft);color:var(--blue)}
+.tag.yellow{background:var(--y-bg);color:var(--y)}
+.case-meta{margin-top:10px;color:var(--txt-2);display:flex;gap:22px;flex-wrap:wrap}
+.case-mods{margin-top:14px;display:flex;gap:14px;flex-wrap:wrap}
+.mod-chip{border:1px solid var(--line);border-radius:8px;padding:8px 12px;background:#FAFBFD;display:flex;align-items:center;gap:10px}
+.mod-chip .t{font-weight:600}
+.case-foot{margin-top:16px;display:flex;justify-content:flex-end}
+
+/* ===== 工作台布局 ===== */
+#pg-work{overflow:hidden}
+.wb-wrap{flex:1;display:grid;grid-template-columns:264px 1fr 384px;min-height:0}
+.col{min-height:0;overflow-y:auto;background:var(--panel)}
+.col.left{border-right:1px solid var(--line);padding:16px 14px}
+.col.center{border-right:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+.col.right{padding:16px 14px}
+
+/* 左栏 */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px 14px;margin-bottom:12px;box-shadow:var(--shadow)}
+.col.left .card{box-shadow:none}
+.card h4{font-size:12.5px;color:var(--txt-3);font-weight:600;margin-bottom:10px;letter-spacing:.3px}
+.kv{display:flex;justify-content:space-between;gap:8px;padding:4px 0;font-size:12.5px}
+.kv .k{color:var(--txt-3);flex-shrink:0}
+.kv .v{text-align:right;font-weight:500}
+.ftree-item{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:7px;cursor:pointer;color:var(--txt-2);font-size:12.5px}
+.ftree-item:hover{background:var(--blue-soft)}
+.ftree-item.active{background:var(--blue-soft);color:var(--blue);font-weight:600}
+.ftree-item svg{flex-shrink:0}
+.ftree-sub{padding-left:18px}
+
+/* 中栏 */
+.center-tabs{display:flex;gap:2px;padding:10px 16px 0;background:var(--panel);border-bottom:1px solid var(--line);flex-shrink:0}
+.center-tabs button{border:none;background:transparent;padding:9px 14px;font-size:13px;color:var(--txt-2);border-bottom:2px solid transparent}
+.center-tabs button.active{color:var(--blue);font-weight:600;border-bottom-color:var(--blue)}
+.pane{display:none;flex:1;overflow-y:auto;padding:14px 16px;min-height:0}
+.pane.active{display:block}
+
+/* 流程条 */
+.flowbar{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:14px;margin-bottom:12px;box-shadow:var(--shadow)}
+.flow-step{display:flex;align-items:center;gap:10px;flex:1}
+.flow-step .ic{width:30px;height:30px;border-radius:8px;background:var(--blue-soft);color:var(--blue);display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0}
+.flow-step .tt{font-weight:600;font-size:13px}
+.flow-step .dd{color:var(--txt-3);font-size:11.5px;margin-top:2px;display:flex;gap:8px;flex-wrap:wrap}
+.flow-arrow{color:#C4CCDA;flex-shrink:0}
+.flow-note{margin-top:0;flex-basis:100%;font-size:11.5px;color:var(--blue);background:var(--blue-soft);border-radius:6px;padding:5px 10px}
+
+/* 筛选条 */
+.filter-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.f-chip{border:1px solid var(--line);background:#fff;border-radius:20px;padding:5px 13px;font-size:12.5px;color:var(--txt-2);display:inline-flex;align-items:center;gap:6px}
+.f-chip.active{border-color:var(--blue);background:var(--blue-soft);color:var(--blue);font-weight:600}
+.f-sep{width:1px;height:20px;background:var(--line);margin:0 4px}
+
+/* 校验项 */
+.item{background:var(--panel);border:1px solid var(--line);border-radius:9px;margin-bottom:8px;overflow:hidden}
+.item-head{display:flex;align-items:center;gap:10px;padding:10px 13px;cursor:pointer}
+.item-head:hover{background:#FAFBFE}
+.item .no{color:var(--txt-3);font-size:11.5px;width:22px;flex-shrink:0}
+.item .rule{font-weight:700;color:var(--blue);font-size:12px;flex-shrink:0;background:var(--blue-soft);border-radius:5px;padding:2px 7px}
+.item .txt{flex:1;color:var(--txt);line-height:1.5}
+.item .chev{color:var(--txt-3);flex-shrink:0;transition:transform .15s}
+.item.open .chev{transform:rotate(180deg)}
+.done-badge{flex-shrink:0;font-size:11px;background:var(--g-bg);color:var(--g);border-radius:5px;padding:2px 8px;font-weight:600}
+.item-body{display:none;border-top:1px solid var(--line-2);padding:12px 14px;background:#FBFCFE}
+.item.open .item-body{display:block}
+.ai-explain{display:flex;gap:8px;background:var(--blue-soft);border-radius:8px;padding:9px 12px;color:#1E3A8A;font-size:12.5px;line-height:1.6;margin-bottom:10px}
+.ai-explain svg{flex-shrink:0;margin-top:2px}
+.loc-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;color:var(--txt-3);font-size:12px}
+.disp-zone{border-top:1px dashed var(--line);padding-top:10px}
+.disp-zone textarea{width:100%;border:1px solid var(--line);border-radius:7px;padding:8px 10px;font-family:inherit;font-size:12.5px;resize:vertical;min-height:52px;margin-bottom:8px}
+.disp-btns{display:flex;gap:8px;flex-wrap:wrap}
+.disp-record{font-size:12px;color:var(--g);background:var(--g-bg);border-radius:7px;padding:7px 11px;line-height:1.6}
+
+/* 文档查看器 */
+.doc{background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);overflow:hidden}
+.doc-head{padding:13px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.doc-head .t{font-weight:700;font-size:14px}
+.doc-body{padding:6px 16px 12px}
+.frow{display:flex;gap:14px;padding:8px 10px;border-bottom:1px solid var(--line-2);border-radius:6px;font-size:12.5px;line-height:1.6}
+.frow:last-child{border-bottom:none}
+.frow .fk{width:150px;flex-shrink:0;color:var(--txt-3)}
+.frow .fv{flex:1}
+.frow.hl{background:var(--y-bg);outline:1.5px solid var(--y);animation:hlflash 1.6s}
+@keyframes hlflash{0%{background:#FDE68A}100%{background:var(--y-bg)}}
+.doc-empty{color:var(--txt-3);text-align:center;padding:50px 0}
+
+/* 支付指令表 */
+.pay-table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:var(--shadow)}
+.pay-table th{background:#F8FAFD;text-align:left;padding:9px 12px;font-size:12px;color:var(--txt-3);font-weight:600;border-bottom:1px solid var(--line);white-space:nowrap}
+.pay-table td{padding:10px 12px;border-bottom:1px solid var(--line-2);font-size:12.5px;vertical-align:top}
+.pay-table tr.prow{cursor:pointer}
+.pay-table tr.prow:hover{background:#FAFBFE}
+.diff{color:var(--r);font-weight:600;background:var(--r-bg);border-radius:4px;padding:1px 5px}
+.ai-corner{display:inline-block;background:var(--y-bg);color:var(--y);font-size:10.5px;border-radius:4px;padding:1px 6px;font-weight:700;margin-left:5px}
+.subrow td{background:#FBFCFE;padding:12px 16px}
+.mini{width:100%;border-collapse:collapse}
+.mini td{padding:6px 10px;border:1px solid var(--line-2);font-size:12px}
+.mini td.mk{background:#F8FAFD;color:var(--txt-3);width:130px;font-weight:600}
+
+/* 右栏：流程状态 */
+.stepper{position:relative;padding-left:6px}
+.step{display:flex;gap:11px;position:relative;padding-bottom:16px}
+.step::before{content:"";position:absolute;left:9px;top:22px;bottom:0;width:2px;background:var(--line)}
+.step:last-child::before{display:none}
+.step .sdot{width:20px;height:20px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;z-index:1}
+.step.done .sdot{background:var(--g);color:#fff}
+.step.doing .sdot{background:var(--blue);color:#fff;box-shadow:0 0 0 4px var(--blue-soft)}
+.step.todo .sdot{background:#fff;border:2px solid #CBD2DD;color:var(--txt-3)}
+.step .st{font-weight:600;font-size:12.5px}
+.step .ss{color:var(--txt-3);font-size:11.5px;margin-top:2px;line-height:1.5}
+.step.doing .st{color:var(--blue)}
+.role-row{display:flex;gap:8px}
+.role{flex:1;border:1px solid var(--line);border-radius:8px;padding:9px 10px;background:#FAFBFD}
+.role .rn{font-weight:600;font-size:12.5px}
+.role .rt{color:var(--txt-3);font-size:11px;margin-top:2px}
+.role .rb{display:inline-block;margin-top:5px;font-size:10.5px;border-radius:4px;padding:1px 7px;background:var(--blue-soft);color:var(--blue);font-weight:600}
+
+/* AI 面板 */
+.ai-cap{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
+.ai-cap span{font-size:11px;background:var(--blue-soft);color:var(--blue);border-radius:5px;padding:2.5px 8px}
+.risk{border:1px solid #F3DFC0;background:#FFFBF2;border-radius:8px;padding:10px 12px;margin-bottom:9px}
+.risk .rt{font-weight:600;font-size:12.5px;color:#92400E;display:flex;gap:6px;align-items:center}
+.risk .rd{font-size:12px;color:var(--txt-2);line-height:1.6;margin:6px 0 8px}
+.gen-out{background:#fff;border:1px dashed var(--blue-border);border-radius:7px;padding:9px 11px;font-size:12px;color:var(--txt-2);line-height:1.7;margin-top:8px;white-space:pre-wrap}
+.mail-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:10px;border-radius:8px;border:none;background:var(--blue);color:#fff;font-size:13px;font-weight:600;margin-top:4px}
+.mail-btn:hover{background:var(--blue-2)}
+.mail-status{margin-top:8px;font-size:12px;border-radius:7px;padding:8px 11px;line-height:1.6}
+.mail-status.draft{background:var(--y-bg);color:#92400E}
+.mail-status.review{background:var(--blue-soft);color:var(--blue)}
+.mail-status.sent{background:var(--g-bg);color:var(--g)}
+
+/* 底部状态条 */
+.statusbar{flex-shrink:0;height:52px;background:var(--panel);border-top:1px solid var(--line);display:flex;align-items:center;padding:0 18px;gap:16px}
+.sb-lamps{display:flex;gap:14px}
+.sb-prog{color:var(--txt-2)}
+.sb-prog b{color:var(--blue)}
+.sb-right{margin-left:auto;display:flex;gap:10px;align-items:center}
+
+/* ===== 规则库页 ===== */
+#pg-rules{padding:22px 30px;overflow-y:auto}
+.rule-mod{max-width:1150px;margin-bottom:26px}
+.rule-mod-h{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
+.rule-mod-h .t{font-size:15px;font-weight:700}
+.rule-mod-h .s{color:var(--txt-3);font-size:12.5px}
+.rule-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px 16px;margin-bottom:9px;box-shadow:var(--shadow)}
+.rule-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rule-top .rid{font-weight:700;color:var(--blue);background:var(--blue-soft);border-radius:5px;padding:2px 8px;font-size:12px}
+.rule-top .rn{font-weight:600}
+.rule-top .hit{margin-left:auto;display:flex;gap:8px;align-items:center}
+.rule-std{color:var(--txt-2);font-size:12.5px;line-height:1.7;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line-2)}
+.rule-std b{color:var(--txt-3);font-weight:600}
+
+/* ===== 审计页 ===== */
+#pg-audit{padding:22px 30px;overflow-y:auto}
+.timeline{max-width:900px;position:relative;padding-left:22px}
+.timeline::before{content:"";position:absolute;left:6px;top:6px;bottom:6px;width:2px;background:var(--line)}
+.tl-item{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 15px;margin-bottom:11px;box-shadow:var(--shadow)}
+.tl-item::before{content:"";position:absolute;left:-21px;top:16px;width:10px;height:10px;border-radius:50%;background:var(--blue);border:2px solid #fff;box-shadow:0 0 0 2px var(--blue-border)}
+.tl-item.sys::before{background:var(--x);box-shadow:0 0 0 2px var(--line)}
+.tl-item .tt{font-weight:600;font-size:13px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tl-item .tm{color:var(--txt-3);font-size:11.5px;margin-top:3px}
+.tl-item .td{color:var(--txt-2);font-size:12.5px;margin-top:5px;line-height:1.6}
+
+/* ===== 弹窗 / Toast ===== */
+.mask{position:fixed;inset:0;background:rgba(17,24,39,.42);display:none;align-items:center;justify-content:center;z-index:100}
+.mask.show{display:flex}
+.modal{background:#fff;border-radius:13px;width:720px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 18px 50px rgba(0,0,0,.2)}
+.modal.sm{width:440px}
+.modal-h{padding:15px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.modal-h .t{font-weight:700;font-size:15px}
+.modal-h .x{margin-left:auto;border:none;background:none;font-size:18px;color:var(--txt-3);cursor:pointer}
+.modal-b{padding:16px 20px;overflow-y:auto;flex:1}
+.modal-f{padding:13px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:10px;align-items:center}
+.mail-area{width:100%;min-height:340px;border:1px solid var(--line);border-radius:8px;padding:13px 15px;font-family:inherit;font-size:12.5px;line-height:1.8;resize:vertical}
+.mail-meta{font-size:12px;color:var(--txt-3);margin-bottom:10px;line-height:1.7}
+.review-note{display:flex;gap:8px;background:var(--blue-soft);border-radius:8px;padding:9px 12px;color:#1E3A8A;font-size:12.5px;margin-bottom:12px;line-height:1.6}
+#toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);background:#111827;color:#fff;padding:10px 20px;border-radius:9px;font-size:13px;opacity:0;transition:all .25s;z-index:200;pointer-events:none}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.empty-tip{color:var(--txt-3);text-align:center;padding:40px 0;font-size:12.5px}
+</style>
+</head>
+<body>
+
+<!-- ============ 顶栏 ============ -->
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"><path d="M12 2L2 8l10 6 10-6-10-6z"/><path d="M2 14l10 6 10-6"/></svg>
+    </div>
+    智汇跨境贷途<span class="sub">跨境贷款文件智能审核台</span>
+  </div>
+  <nav class="nav">
+    <button data-page="pg-todo" class="active">待办</button>
+    <button data-page="pg-work">案件工作台</button>
+    <button data-page="pg-rules">比对规则库</button>
+    <button data-page="pg-audit">审计留痕</button>
+  </nav>
+  <div class="top-right">
+    <div class="user-chip"><div class="avatar">张</div><span>张敏 · 贷款运营专员（经办人）</span></div>
+    <button class="btn" onclick="resetDemo()">重置演示</button>
+  </div>
+</header>
+
+<main class="main">
+
+<!-- ============ 页 1 · 待办 ============ -->
+<section class="page active" id="pg-todo">
+  <div class="stats">
+    <div class="stat blue"><div class="lbl">今日待办案件</div><div class="num">1</div></div>
+    <div class="stat yel"><div class="lbl">待复核（🟡）</div><div class="num">2</div></div>
+    <div class="stat red"><div class="lbl">违规拦截（🔴）</div><div class="num">5</div></div>
+    <div class="stat grn"><div class="lbl">本月已完成</div><div class="num">3</div></div>
+  </div>
+  <div class="sec-title">待办案件</div>
+  <div class="case-card" onclick="goWork()">
+    <div class="case-head">
+      <span class="case-id">CASE-2026-0312</span>
+      <span class="tag blue">上海恒钢贸易有限公司</span>
+      <span class="tag yellow">两阶段预检完成 · 待人工处理</span>
+    </div>
+    <div class="case-meta">
+      <span>业务类型：钢材采购流动资金贷款</span>
+      <span>提款金额：人民币 2,000 万元</span>
+      <span>拟授信使用日：2026-03-16</span>
+      <span>提交时间：2026-03-12 09:12</span>
+    </div>
+    <div class="case-mods">
+      <div class="mod-chip"><span class="t">模块一 · 授信申请核对</span><span class="lamp g"><i class="dot g"></i>13</span><span class="lamp x"><i class="dot x"></i>1</span><span class="lamp r"><i class="dot r"></i>2</span></div>
+      <div class="mod-chip"><span class="t">模块二 · 支付指令核对</span><span class="lamp g"><i class="dot g"></i>10</span><span class="lamp y"><i class="dot y"></i>1</span><span class="lamp r"><i class="dot r"></i>3</span></div>
+      <div class="mod-chip"><span class="t">AI 辅助识别</span><span class="lamp g"><i class="dot g"></i>1</span><span class="lamp y"><i class="dot y"></i>1</span></div>
+    </div>
+    <div class="case-foot"><button class="btn primary" onclick="event.stopPropagation();goWork()">进入工作台</button></div>
+  </div>
+</section>
+
+<!-- ============ 页 2 · 案件工作台 ============ -->
+<section class="page" id="pg-work">
+  <div class="wb-wrap">
+
+    <!-- 左栏 -->
+    <aside class="col left">
+      <div class="card">
+        <h4>案件摘要</h4>
+        <div class="kv"><span class="k">案件编号</span><span class="v">CASE-2026-0312</span></div>
+        <div class="kv"><span class="k">借款人</span><span class="v">上海恒钢贸易有限公司</span></div>
+        <div class="kv"><span class="k">授信函</span><span class="v">FOL-2026-SH-0188</span></div>
+        <div class="kv"><span class="k">授信段</span><span class="v">第一段 · 人民币循环贷款</span></div>
+        <div class="kv"><span class="k">提款金额</span><span class="v">¥ 20,000,000</span></div>
+        <div class="kv"><span class="k">拟使用日</span><span class="v">2026-03-16</span></div>
+        <div class="kv"><span class="k">演示汇率</span><span class="v">1 USD = 7.20 CNY</span></div>
+      </div>
+      <div class="card">
+        <h4>文件包（6 主文件 + 12 支持文件）</h4>
+        <div id="ftree"></div>
+      </div>
+    </aside>
+
+    <!-- 中栏 -->
+    <div class="col center">
+      <div class="center-tabs">
+        <button data-pane="pane-check" class="active" onclick="switchPane(this)">核查清单 <span id="tab-check-n"></span></button>
+        <button data-pane="pane-pay" onclick="switchPane(this)">支付指令拆分（4 笔）</button>
+        <button data-pane="pane-doc" onclick="switchPane(this)">文件原文</button>
+      </div>
+
+      <!-- 核查清单 -->
+      <div class="pane active" id="pane-check">
+        <div class="flowbar">
+          <div style="display:flex;align-items:center;gap:14px;width:100%;flex-wrap:wrap">
+            <div class="flow-step">
+              <div class="ic">一</div>
+              <div><div class="tt">阶段一 · 授信申请核对</div><div class="dd"><span>16 条规则 · 16 项</span><span class="lamp g"><i class="dot g"></i>13</span><span class="lamp x"><i class="dot x"></i>1</span><span class="lamp r"><i class="dot r"></i>2</span></div></div>
+            </div>
+            <div class="flow-arrow">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </div>
+            <div class="flow-step">
+              <div class="ic">二</div>
+              <div><div class="tt">阶段二 · 支付指令核对</div><div class="dd"><span>5 条规则 · 14 项</span><span class="lamp g"><i class="dot g"></i>10</span><span class="lamp y"><i class="dot y"></i>1</span><span class="lamp r"><i class="dot r"></i>3</span></div></div>
+            </div>
+            <div class="flow-note">传统流程需两轮退回；本系统两模块同步预检，7 处问题一次性退回，一轮整改完成。</div>
+          </div>
+        </div>
+        <div class="filter-row" id="mod-filters"></div>
+        <div class="filter-row" id="lamp-filters"></div>
+        <div id="item-list"></div>
+      </div>
+
+      <!-- 支付指令拆分 -->
+      <div class="pane" id="pane-pay">
+        <div style="margin-bottom:10px;color:var(--txt-3);font-size:12.5px">4 笔境外汇款申请书合计 USD 2,800,000 × 7.20（演示汇率）= 折合人民币 20,160,000 元；提款金额 20,000,000 元。点击行展开字段级比对明细。</div>
+        <table class="pay-table" id="pay-table"></table>
+      </div>
+
+      <!-- 文件原文 -->
+      <div class="pane" id="pane-doc">
+        <div id="doc-view"><div class="doc-empty">请在左侧文件树选择文件，或在核查项中点击「定位原文」</div></div>
+      </div>
+    </div>
+
+    <!-- 右栏 -->
+    <aside class="col right">
+      <div class="card">
+        <h4>办理进度</h4>
+        <div class="role-row" style="margin-bottom:12px">
+          <div class="role"><div class="rn">张敏</div><div class="rt">贷款运营专员</div><span class="rb">经办人 · 当前处理中</span></div>
+          <div class="role"><div class="rn">王磊</div><div class="rt">信贷审批官</div><span class="rb" id="reviewer-badge">审核人 · 待接力</span></div>
+        </div>
+        <div class="stepper" id="stepper"></div>
+      </div>
+
+      <div class="card">
+        <h4>AI 助手</h4>
+        <div class="ai-cap"><span>交叉对比材料</span><span>法规核查</span><span>用途确认</span><span>证据链整理</span><span>邮件起草</span></div>
+        <div class="risk">
+          <div class="rt"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>风险提示 ① · 疑似关联方交易</div>
+          <div class="rd">P4 收款方 Skyline Metal Trading Co., Ltd. 注册于开曼群岛，公开工商信息显示其股东与借款人主要股东高度重合，商业实质待核实。</div>
+          <button class="btn ghost-blue" onclick="genTpl(1)">生成说明模板</button>
+          <div class="gen-out" id="tpl-1" style="display:none"></div>
+        </div>
+        <div class="risk">
+          <div class="rt"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>风险提示 ② · 折算金额超出提款金额</div>
+          <div class="rd">支付指令折算合计 20,160,000 元，超出提款金额 160,000 元，超出部分资金来源需借款人补充说明。</div>
+          <button class="btn ghost-blue" onclick="genTpl(2)">生成说明模板</button>
+          <div class="gen-out" id="tpl-2" style="display:none"></div>
+        </div>
+        <button class="mail-btn" onclick="openMail()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M4 4h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2z"/><path d="M22 6l-10 7L2 6"/></svg>
+          <span id="mail-btn-txt">AI 生成退回邮件草稿</span>
+        </button>
+        <div class="mail-status" id="mail-status" style="display:none"></div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 底部状态条 -->
+  <div class="statusbar">
+    <div class="sb-lamps">
+      <span class="lamp g"><i class="dot g"></i>24 自动放行</span>
+      <span class="lamp y"><i class="dot y"></i>2 待复核</span>
+      <span class="lamp r"><i class="dot r"></i>5 违规拦截</span>
+      <span class="lamp x"><i class="dot x"></i>1 忽略</span>
+    </div>
+    <div class="sb-prog">人工处理进度 <b id="prog-txt">0 / 7</b></div>
+    <div class="sb-right">
+      <button class="btn" onclick="batchRestore()">批量恢复待处理（演示回退）</button>
+      <button class="btn primary" id="btn-submit" disabled onclick="confirmSubmit()">提交审批</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 页 3 · 比对规则库 ============ -->
+<section class="page" id="pg-rules"><div id="rules-body" style="padding-bottom:30px"></div></section>
+
+<!-- ============ 页 4 · 审计留痕 ============ -->
+<section class="page" id="pg-audit">
+  <div class="filter-row" id="audit-filters" style="max-width:900px">
+    <button class="f-chip active" data-af="all">全部</button>
+    <button class="f-chip" data-af="sys">系统事件</button>
+    <button class="f-chip" data-af="human">人工操作</button>
+  </div>
+  <div class="timeline" id="timeline"></div>
+</section>
+
+</main>
+
+<!-- ============ 邮件弹窗 ============ -->
+<div class="mask" id="mail-mask">
+  <div class="modal">
+    <div class="modal-h">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><path d="M4 4h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2z"/><path d="M22 6l-10 7L2 6"/></svg>
+      <span class="t" id="mail-title">AI 退回邮件草稿</span>
+      <button class="x" onclick="closeMail()">✕</button>
+    </div>
+    <div class="modal-b">
+      <div class="review-note" id="mail-note">AI 已根据 5 项违规与 2 项待复核结果自动起草退回邮件。经办人（张敏）可直接修改，确认后提交审核人（王磊）复核，复核通过即可发出。</div>
+      <div class="mail-meta">收件人：上海恒钢贸易有限公司 业务联系人　|　抄送：客户经理　|　案件：CASE-2026-0312</div>
+      <textarea class="mail-area" id="mail-body"></textarea>
+    </div>
+    <div class="modal-f" id="mail-foot"></div>
+  </div>
+</div>
+
+<!-- ============ 确认弹窗 ============ -->
+<div class="mask" id="cf-mask">
+  <div class="modal sm">
+    <div class="modal-h"><span class="t">提交审批</span><button class="x" onclick="document.getElementById('cf-mask').classList.remove('show')">✕</button></div>
+    <div class="modal-b" style="color:var(--txt-2);line-height:1.8">7 项待处理已全部处置完毕。确认将本案提交审核人（王磊 · 信贷审批官）审批？</div>
+    <div class="modal-f">
+      <button class="btn" onclick="document.getElementById('cf-mask').classList.remove('show')">取消</button>
+      <button class="btn primary" onclick="doSubmit()">确认提交</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ================= 数据 ================= */
+const LAMP={g:{cls:'g',name:'通过'},y:{cls:'y',name:'待复核'},r:{cls:'r',name:'违规'},x:{cls:'x',name:'忽略'}};
+const lampHtml=l=>'<span class="lamp '+LAMP[l].cls+'"><i class="dot '+LAMP[l].cls+'"></i>'+LAMP[l].name+'</span>';
+
+const FILES_META=[
+  {id:'fol',name:'授信函 FOL-2026-SH-0188'},
+  {id:'app',name:'授信使用申请书'},
+  {id:'p1',name:'支付指令 P1（Nippon Steel）'},
+  {id:'p2',name:'支付指令 P2（POSCO）'},
+  {id:'p3',name:'支付指令 P3（Tata Steel）'},
+  {id:'p4',name:'支付指令 P4（Skyline Metal）'},
+  {id:'sup',name:'支持文件（合同/发票/提单 ×4）'}
+];
+
+const DOCS={
+fol:{title:'授信函 FOL-2026-SH-0188',rows:[
+ ['borrower','借款人','上海恒钢贸易有限公司'],
+ ['lender','贷款人','汇丰银行（中国）有限公司上海分行'],
+ ['date','订立日期','2026年1月15日'],
+ ['total','授信总金额','人民币 5,000 万元（分三段）'],
+ ['t1','第一段','人民币循环贷款授信，人民币 3,000 万元'],
+ ['t2','第二段','多币种进口贸易融资授信，等值人民币 1,500 万元，授信使用的货币可为贷款人同意的任何币种'],
+ ['t3','第三段','人民币透支授信，人民币 500 万元'],
+ ['t1-purpose','第一段 · 用途','满足借款人流动资金需求，包括购买货物、原材料、生产资料（含钢材等大宗商品采购）'],
+ ['t1-cond','第一段 · 使用条件','授信使用的货币为人民币；每笔贷款（含续借）的期限不得超过 12 个月'],
+ ['t1-interest','第一段 · 利息','适用利率为 1 年期贷款市场报价利率（LPR）加 1.50%（演示：LPR 3.00% + 1.50% = 4.50%）'],
+ ['t1-intp','第一段 · 利息期','1 个月、3 个月或 6 个月'],
+ ['t1-repay','第一段 · 还款','每笔贷款于到期日一次性归还本金（无分期还款计划）'],
+ ['t1-entrust','第一段 · 贷款资金发放','银行受托支付的支付限额为人民币 500 万元或其等值币种；超过该限额的授信使用应采用银行受托支付']
+]},
+app:{title:'授信使用申请书',rows:[
+ ['date','日期','（空白，未填写）'],
+ ['to','致','汇丰银行（中国）有限公司上海分行'],
+ ['folref','授信函引用','于 2026 年 1 月 15 日订立的银行授信函'],
+ ['a','(a) 拟授信使用日','2026 年 3 月 16 日'],
+ ['b','(b) 拟使用的授信段','第一段（人民币循环贷款授信）'],
+ ['c','(c) 拟使用的授信','人民币循环贷款授信'],
+ ['d','(d) 币种','人民币'],
+ ['e','(e) 金额','人民币 20,000,000 元'],
+ ['f','(f) 利息期','3 个月'],
+ ['g','(g) 利率','1 年期 LPR + 1.50%（当前 4.50%）'],
+ ['h','(h) 到期日','2027 年 4 月 16 日'],
+ ['i','(i) 用途','勾选「流动资金」；附文字「购买钢材（热轧卷板、冷轧不锈钢卷、螺纹钢、钢坯）并支付货款」'],
+ ['j','(j) 放款指示','户名 上海恒钢贸易有限公司；账号 100-200030-018；开户行 汇丰银行（中国）有限公司上海分行'],
+ ['k','(k) 支付方式','勾选「借款人自主支付」'],
+ ['clause2','第 2 条 确认与承诺','与标准条款一致']
+]},
+p1:{title:'境外汇款申请书 P1',rows:[
+ ['remitter','汇款人','上海恒钢贸易有限公司'],['account','汇款人账号','100-200030-018'],
+ ['payee','收款人','Nippon Steel Corporation（日本制铁株式会社）'],['country','收款人国家/地区','日本'],
+ ['amount','汇款币种及金额','USD 1,120,000'],['cap','金额大写','US DOLLARS ONE MILLION ONE HUNDRED TWENTY THOUSAND ONLY'],
+ ['memo','交易附言','热轧卷板 2,000 吨货款']
+]},
+p2:{title:'境外汇款申请书 P2',rows:[
+ ['remitter','汇款人','上海恒钢贸易有限公司'],['account','汇款人账号','100-200030-019'],
+ ['payee','收款人','POSCO（浦项制铁）'],['country','收款人国家/地区','韩国'],
+ ['amount','汇款币种及金额','USD 850,000'],['cap','金额大写','US DOLLARS EIGHT HUNDRED FIFTY THOUSAND ONLY'],
+ ['memo','交易附言','冷轧不锈钢卷 500 吨货款']
+]},
+p3:{title:'境外汇款申请书 P3',rows:[
+ ['remitter','汇款人','上海恒钢贸易有限公司'],['account','汇款人账号','100-200030-018'],
+ ['payee','收款人','Tata Steel Limited（塔塔钢铁）'],['country','收款人国家/地区','印度'],
+ ['amount','汇款币种及金额','USD 680,000'],['cap','金额大写','US DOLLARS EIGHT HUNDRED SIXTY THOUSAND ONLY'],
+ ['memo','交易附言','螺纹钢 1,200 吨货款']
+]},
+p4:{title:'境外汇款申请书 P4',rows:[
+ ['remitter','汇款人','上海恒钢贸易（集团）有限公司'],['account','汇款人账号','100-200030-018'],
+ ['payee','收款人','Skyline Metal Trading Co., Ltd.（注册地：开曼群岛乔治敦）'],['country','收款人国家/地区','开曼群岛'],
+ ['amount','汇款币种及金额','USD 150,000'],['cap','金额大写','US DOLLARS ONE HUNDRED FIFTY THOUSAND ONLY'],
+ ['memo','交易附言','钢坯 800 吨货款']
+]},
+sup:{title:'支持文件清单',rows:[
+ ['list','采购合同 ×4','对应 P1–P4，合同金额与支付指令一致'],
+ ['list2','商业发票 ×4','发票金额与支付指令一致'],
+ ['list3','提单 ×4','货物描述与合同一致']
+]}
+};
+
+/* 32 项校验结果（不可增删改） */
+const ITEMS=[
+ {n:1,mod:'m1',rule:'R01',lamp:'x',text:'申请书「日期」栏空白，规则规定为空则忽略',loc:['app','date','申请书-日期'],detail:'规则明确「日期为空则忽略」，本项不计入待处理。'},
+ {n:2,mod:'m1',rule:'R02',lamp:'g',text:'上海分行与 FOL 贷款人一致',loc:['app','to','申请书-抬头 / FOL-贷款人'],detail:'申请书抬头与授信函贷款人均为上海分行，系统自动放行。'},
+ {n:3,mod:'m1',rule:'R03',lamp:'g',text:'引用 2026-01-15，等于 FOL 订立日',loc:['app','folref','申请书-授信函引用'],detail:'申请书引用的授信函日期与 FOL 订立日期一致。'},
+ {n:4,mod:'m1',rule:'R04',lamp:'g',text:'2026-03-16 为周一，非节假日，晚于当前日期 2026-03-12',loc:['app','a','申请书-(a)'],detail:'拟授信使用日为工作日且晚于系统当前日期 2026-03-12。'},
+ {n:5,mod:'m1',rule:'R05',lamp:'g',text:'第一段与 FOL 授信段表述一致',loc:['app','b','申请书-(b) / FOL-授信段'],detail:'申请书勾选的第一段与 FOL 授信段表述一致。'},
+ {n:6,mod:'m1',rule:'R06',lamp:'g',text:'「人民币循环贷款授信」在 FOL 有相同表述',loc:['app','c','申请书-(c)'],detail:'拟使用授信名称在 FOL 对应段落存在相同表述。'},
+ {n:7,mod:'m1',rule:'R07',lamp:'g',text:'人民币在第一段授信使用币种范围内',loc:['app','d','申请书-(d) / FOL-使用条件'],detail:'第一段使用条件限定人民币，申请币种为人民币，符合。'},
+ {n:8,mod:'m1',rule:'R08',lamp:'g',text:'2,000 万元 ≤ 3,000 万元',loc:['app','e','申请书-(e) / FOL-金额'],detail:'提款金额未超过第一段授信金额上限。'},
+ {n:9,mod:'m1',rule:'R09',lamp:'g',text:'3 个月属于 FOL 的 1/3/6 个月之一',loc:['app','f','申请书-(f) / FOL-利息期'],detail:'利息期 3 个月属于 FOL 允许的三个利息期之一。'},
+ {n:10,mod:'m1',rule:'R10',lamp:'g',text:'1 年期 LPR+1.50% 与 FOL 一致',loc:['app','g','申请书-(g) / FOL-利息'],detail:'申请书利率表述与 FOL 利率条款一致（当前 4.50%）。'},
+ {n:11,mod:'m1',rule:'R11',lamp:'g',text:'到期日 2027-04-16 已填写，为周四，非本地及币种节假日',loc:['app','h','申请书-(h)'],detail:'到期日有效性校验通过（工作日校验无误）。'},
+ {n:12,mod:'m1',rule:'R12',lamp:'r',text:'2027-04-16 减 2026-03-16 为 13 个月，超过 FOL 12 个月期限上限；FOL 无还款计划，无需勾稽',loc:['app','h','申请书-(h) / FOL-使用条件'],detail:'AI 勾稽：到期日距拟提款日 13 个月，超出特别授信条款「每笔贷款期限不得超过 12 个月」的上限，须退回更正到期日。本案 FOL 无还款计划，无需还款计划勾稽。'},
+ {n:13,mod:'m1',rule:'R13',lamp:'g',text:'钢材采购属 FOL 流动资金用途范围，且不在禁止用途清单内',loc:['app','i','申请书-(i) / FOL-用途'],detail:'AI 用途确认：购买钢材并支付货款属于 FOL 流动资金用途范围，未命中禁止用途清单（分红、投资、证券市场、房地产、转贷等）。'},
+ {n:14,mod:'m1',rule:'R14',lamp:'g',text:'100-200030-018 符合 xxx-xxxxxx-xxx 格式',loc:['app','j','申请书-(j)'],detail:'放款指示账号为 12 位数字且符合格式要求。'},
+ {n:15,mod:'m1',rule:'R15',lamp:'r',text:'提款 2,000 万元大于受托支付限额 500 万元，应勾选「银行受托支付」，实际勾选「借款人自主支付」',loc:['app','k','申请书-(k) / FOL-贷款资金发放'],detail:'AI 核对：提款金额超过 FOL 受托支付限额（500 万元），按规则应采用银行受托支付，申请书勾选有误，须退回更正。'},
+ {n:16,mod:'m1',rule:'R16',lamp:'g',text:'与标准条款一致',loc:['app','clause2','申请书-第 2 条'],detail:'确认与承诺条款与标准内容一致。'},
+ {n:17,mod:'m2',rule:'R17',lamp:'g',text:'提款币种人民币、支付币种美元，规则允许币种不相等',loc:['app','d','申请书-(d) / 各支付指令-汇款币种'],detail:'信息性规则：提款币种与支付币种可以不相等。'},
+ {n:18,mod:'m2',rule:'R18',lamp:'y',text:'币种不相等，走折算分支：USD 2,800,000 × 7.20 = 20,160,000 元 ≥ 提款 20,000,000 元，规则符合；但折算后超出提款金额 16 万元，超出部分资金来源需借款人补充说明',loc:['p1','amount','各支付指令-金额汇总'],detail:'AI 交叉核对：规则层面符合（折算后加总 ≥ 提款金额），但超出 16 万元的资金来源不明，需人工复核并向借款人索取说明后放行。'},
+ {n:19,mod:'m2',rule:'R19',lamp:'g',text:'P1 大写对应 1,120,000，与金额一致',loc:['p1','cap','P1-金额大写'],detail:'大写金额与数字金额一致。'},
+ {n:20,mod:'m2',rule:'R19',lamp:'g',text:'P2 大写对应 850,000，与金额一致',loc:['p2','cap','P2-金额大写'],detail:'大写金额与数字金额一致。'},
+ {n:21,mod:'m2',rule:'R19',lamp:'r',text:'P3 大写 EIGHT HUNDRED SIXTY THOUSAND 对应 860,000，与汇款金额 680,000 不一致',loc:['p3','cap','P3-金额大写'],detail:'AI 交叉比对发现：P3 大写金额为 860,000 美元，数字金额为 680,000 美元，两者不符，须退回更正。'},
+ {n:22,mod:'m2',rule:'R19',lamp:'g',text:'P4 大写对应 150,000，与金额一致',loc:['p4','cap','P4-金额大写'],detail:'大写金额与数字金额一致。'},
+ {n:23,mod:'m2',rule:'R20',lamp:'g',text:'P1 账号 100-200030-018 与放款指示账号一致',loc:['p1','account','P1-账号'],detail:'支付账号与申请书放款指示账号一致。'},
+ {n:24,mod:'m2',rule:'R20',lamp:'r',text:'P2 账号 100-200030-019 不等于放款指示账号 100-200030-018，付款疑似未使用贷款发放账户',loc:['p2','account','P2-账号'],detail:'AI 交叉比对发现：P2 付款账号与申请书放款指示账号不一致，贷款资金可能未经由约定账户支付，须退回更正或说明。'},
+ {n:25,mod:'m2',rule:'R20',lamp:'g',text:'P3 账号一致',loc:['p3','account','P3-账号'],detail:'支付账号与申请书放款指示账号一致。'},
+ {n:26,mod:'m2',rule:'R20',lamp:'g',text:'P4 账号一致',loc:['p4','account','P4-账号'],detail:'支付账号与申请书放款指示账号一致。'},
+ {n:27,mod:'m2',rule:'R21',lamp:'g',text:'P1 汇款人上海恒钢贸易有限公司，等于 FOL 借款人',loc:['p1','remitter','P1-汇款人'],detail:'汇款人名称与 FOL 借款人一致。'},
+ {n:28,mod:'m2',rule:'R21',lamp:'g',text:'P2 汇款人一致',loc:['p2','remitter','P2-汇款人'],detail:'汇款人名称与 FOL 借款人一致。'},
+ {n:29,mod:'m2',rule:'R21',lamp:'g',text:'P3 汇款人一致',loc:['p3','remitter','P3-汇款人'],detail:'汇款人名称与 FOL 借款人一致。'},
+ {n:30,mod:'m2',rule:'R21',lamp:'r',text:'P4 汇款人「上海恒钢贸易（集团）有限公司」不等于 FOL 借款人「上海恒钢贸易有限公司」',loc:['p4','remitter','P4-汇款人 / FOL-借款人'],detail:'AI 交叉比对发现：P4 汇款人名称多出「（集团）」字样，与 FOL 借款人不一致，须退回更正或提供主体关系证明。'},
+ {n:31,mod:'ai',rule:'AI-01',lamp:'y',text:'关联方识别：P4 收款方注册于开曼群岛，公开工商信息显示其股东与借款人主要股东高度重合，疑似关联方交易，商业实质待核实（AI 辅助项，非规则比对）',loc:['p4','payee','P4-收款人'],detail:'AI 关联方图谱提示：Skyline Metal Trading Co., Ltd.（开曼群岛）股东与借款人主要股东高度重合，疑似关联方交易，需人工核实商业实质并填写复核说明。'},
+ {n:32,mod:'ai',rule:'AI-02',lamp:'g',text:'文件完整性：4 份采购合同、4 份商业发票、4 份提单齐备，发票金额与支付指令一致（AI 辅助项）',loc:['sup','list','支持文件清单'],detail:'AI 证据链整理：合同、发票、提单三类支持文件齐备且金额勾稽一致，证据链完整。'}
+];
+
+const PAYS=[
+ {id:'p1',no:'P1',payee:'Nippon Steel Corporation',country:'日本',amt:'USD 1,120,000',cny:'¥ 8,064,000',goods:'热轧卷板 2,000 吨',account:'100-200030-018',remitter:'上海恒钢贸易有限公司',lamp:'g',ai:false,
+  diffs:[['汇款人','上海恒钢贸易有限公司',0],['账号','100-200030-018',0],['金额','USD 1,120,000',0],['大写','对应 1,120,000 ✓',0]]},
+ {id:'p2',no:'P2',payee:'POSCO（浦项制铁）',country:'韩国',amt:'USD 850,000',cny:'¥ 6,120,000',goods:'冷轧不锈钢卷 500 吨',account:'100-200030-019',remitter:'上海恒钢贸易有限公司',lamp:'r',ai:false,
+  diffs:[['汇款人','上海恒钢贸易有限公司',0],['账号','100-200030-019 ≠ 放款指示账号 100-200030-018',1],['金额','USD 850,000',0],['大写','对应 850,000 ✓',0]]},
+ {id:'p3',no:'P3',payee:'Tata Steel Limited',country:'印度',amt:'USD 680,000',cny:'¥ 4,896,000',goods:'螺纹钢 1,200 吨',account:'100-200030-018',remitter:'上海恒钢贸易有限公司',lamp:'r',ai:false,
+  diffs:[['汇款人','上海恒钢贸易有限公司',0],['账号','100-200030-018',0],['金额','USD 680,000',0],['大写','EIGHT HUNDRED SIXTY THOUSAND = 860,000 ≠ 680,000',1]]},
+ {id:'p4',no:'P4',payee:'Skyline Metal Trading Co., Ltd.',country:'开曼群岛',amt:'USD 150,000',cny:'¥ 1,080,000',goods:'钢坯 800 吨',account:'100-200030-018',remitter:'上海恒钢贸易（集团）有限公司',lamp:'r',ai:true,
+  diffs:[['汇款人','上海恒钢贸易（集团）有限公司 ≠ FOL 借款人',1],['账号','100-200030-018',0],['金额','USD 150,000',0],['大写','对应 150,000 ✓',0],['AI 提示','收款方注册于开曼群岛，疑似关联方',2]]}
+];
+
+const RULES_M1=[
+ ['R01','日期','申请书日期 vs 授信函订立日/拟使用日','申请书日期若有值，须不早于授信函订立日（第一段），也不早于拟授信使用日；若为空则忽略','1 项 ⚪'],
+ ['R02','分支行','申请书抬头 vs FOL 贷款人','必填；FOL 有具体分支行时须与其一致；FOL 表述为「汇丰银行(中国)有限公司(通过任一或多个分支行行事)」时提示人工检查','1 项 🟢'],
+ ['R03','授信函日期','申请书引用日期 vs FOL 日期','申请书引用的授信函日期须等于 FOL 最初或最新的日期','1 项 🟢'],
+ ['R04','拟授信使用日','申请书-(a)','必填；不应为中国及对应币种节假日；应不早于当前日期','1 项 🟢'],
+ ['R05','授信段','申请书-(b) vs FOL 授信段','可为空；有值时须与 FOL 中该授信段表述一致（不考虑中英文差异）','1 项 🟢'],
+ ['R06','授信','申请书-(c) vs FOL 段落','必填；所填内容须在 FOL 对应段落有相同表述','1 项 🟢'],
+ ['R07','提款币种','申请书-(d) vs FOL 币种条款','必填；须在 FOL 对应授信条款表述的币种范围内；若 FOL 表述为「授信使用的货币可为贷款人同意的任何币种」则忽略比对','1 项 🟢'],
+ ['R08','提款金额','申请书-(e) vs FOL 授信金额','必填；须小于等于 FOL 对应授信的金额','1 项 🟢'],
+ ['R09','利息期','申请书-(f) vs FOL 利息期','可为空；有值时须与 FOL 表述一致，FOL 有多个值时符合其一即可；若 FOL 有「贷款人同意的」类表述则忽略比较','1 项 🟢'],
+ ['R10','利率','申请书-(g) vs FOL 利率','必填；须与 FOL 对应利率一致；若 FOL 表述为「适用利率由贷款人和借款人在授信使用日确定」则忽略比较','1 项 🟢'],
+ ['R11','到期日 · 有效性','申请书-(h)','必填；到期日不应为本地和币种节假日','1 项 🟢'],
+ ['R12','到期日 · 期限与还款计划','申请书-(h) vs FOL 期限/还款计划','到期日减提款日所得期限不得长于 FOL 要求期限；若 FOL 条款为「自首个授信使用日/借款人签署本授信函之日起[**]年/月」式，需用户输入相关日期；并结合还款计划（如有）与累计提款金额勾稽，AI 可辅助生成还款计划。本案 FOL 无还款计划、期限上限 12 个月，只需核对期限上限','1 项 🔴'],
+ ['R13','用途','申请书-(i) vs FOL 用途 + 禁止清单','必填（勾选部分可不填）；须在 FOL 用途范围内，且不得用于：股东分红，金融资产/固定资产/股权等投资，证券/期货/房地产市场，转贷，票据解付，支付奖金或缴纳罚款，虚增财政收入，新增地方政府隐性债务，国家禁止生产经营领域','1 项 🟢'],
+ ['R14','放款指示账号','申请书-(j)','必填；我行账号为 12 位数字，格式 xxx-xxxxxx-xxx 或 xxxxxxxxxxxx','1 项 🟢'],
+ ['R15','支付方式','申请书-(k) vs FOL 受托支付限额','必填；当提款金额大于 FOL 中「银行受托支付」的支付限额时，应勾选「银行受托支付」','1 项 🔴'],
+ ['R16','承诺内容','申请书-第 2 条 vs 标准条款','应和标准内容一致','1 项 🟢']
+];
+const RULES_M2=[
+ ['R17','币种','提款币种 vs 支付指令汇款币种','提款指令币种与支付指令汇款币种可以不相等（信息性规则）','1 项 🟢'],
+ ['R18','金额','支付指令加总 vs 提款金额','若币种相等，支付指令加总金额应大于等于提款金额；若币种不相等，按提款指令币种汇率折算后，支付指令加总金额应大于等于提款金额','1 项 🟡'],
+ ['R19','金额大写','每笔支付指令大写 vs 汇款金额','每笔支付指令的大写金额应和其汇款金额表示一致','4 项（🟢3 🔴1）'],
+ ['R20','支付账号','每笔支付指令账号 vs 放款指示账号','每笔支付指令的账号应等于申请书的放款指示账号','4 项（🟢3 🔴1）'],
+ ['R21','汇款人名称','每笔支付指令汇款人 vs FOL 借款人','每笔支付指令的汇款人名称应等于 FOL 借款人名称','4 项（🟢3 🔴1）']
+];
+
+const PRESET_AUDIT=[
+ {t:'2026-03-12 09:12',type:'sys',title:'案件创建与文件上传',desc:'6 份主文件 + 12 份支持文件上传完成（借款人一次性提交整套文件包）'},
+ {t:'2026-03-12 09:15',type:'sys',title:'文件解析完成',desc:'全部文件字段解析完成，进入比对队列'},
+ {t:'2026-03-12 09:16',type:'sys',title:'模块一「授信申请阶段核对」完成',desc:'16 条规则，16 项结果：🔴 2 · ⚪ 1（其余 🟢 自动放行）'},
+ {t:'2026-03-12 09:16',type:'sys',title:'模块二「支付指令阶段核对」完成',desc:'5 条规则，14 项结果：🔴 3 · 🟡 1（其余 🟢 自动放行）'},
+ {t:'2026-03-12 09:16',type:'sys',title:'AI 辅助分析完成',desc:'关联方提示 1 条（P4 收款方）、文件完整性核查 1 条；证据链整理完成'},
+ {t:'2026-03-12 09:17',type:'sys',title:'生成一次性退回建议清单',desc:'两模块同步预检完成，共 7 处问题（🔴 5 + 🟡 2），一次性退回、一轮整改'}
+];
+
+const MAIL_DRAFT=
+'主题：关于 CASE-2026-0312 授信使用申请及支付指令的退回通知（5 处须整改 + 2 项待补充说明）\n\n'+
+'尊敬的上海恒钢贸易有限公司：\n\n'+
+'贵司于 2026 年 3 月 12 日一次性提交的授信使用申请书及 4 笔境外汇款申请书（P1–P4），我行已完成授信申请与支付指令两阶段同步预检。为减少往返轮次，现将全部问题一次性退回，请一并整改后重新提交。\n\n'+
+'一、须更正后重新提交（5 处）\n'+
+'1. 贷款期限超授信上限：申请到期日 2027-04-16，自拟提款日 2026-03-16 起计 13 个月，超过授信函「每笔贷款期限不得超过 12 个月」的规定，请调整到期日。\n'+
+'2. 支付方式勾选有误：本次提款人民币 2,000 万元，超过授信函受托支付限额 500 万元，应勾选「银行受托支付」，请更正。\n'+
+'3. P3 金额大写不符：大写金额对应 860,000 美元，与汇款金额 680,000 美元不一致，请更正 P3 境外汇款申请书。\n'+
+'4. P2 付款账号不符：付款账号 100-200030-019 非申请书约定的放款指示账号 100-200030-018，请更正或书面说明原因。\n'+
+'5. P4 汇款人名称不符：「上海恒钢贸易（集团）有限公司」与授信函借款人「上海恒钢贸易有限公司」不一致，请更正或提供主体关系证明。\n\n'+
+'二、需补充说明 / 补充材料（2 项）\n'+
+'1. 4 笔支付指令按汇率折算合计人民币 20,160,000 元，超出本次提款金额 160,000 元，请书面说明超出部分的资金来源。\n'+
+'2. P4 收款方 Skyline Metal Trading Co., Ltd.（注册地：开曼群岛）疑似与贵司存在关联关系，请提供其股权结构及本次交易的商业实质说明。\n\n'+
+'请补充 / 更正的材料清单：\n'+
+'□ 重新签署的授信使用申请书（更正到期日、支付方式）\n'+
+'□ 更正后的 P2、P3、P4 境外汇款申请书\n'+
+'□ 超出部分资金来源说明（加盖公章）\n'+
+'□ P4 收款方股权结构及关联关系 / 商业实质说明\n\n'+
+'请于收到本通知后 5 个工作日内回复。如有疑问，请联系您的客户经理。\n\n'+
+'汇丰银行（中国）有限公司上海分行\n'+
+'贷款运营部　张敏\n'+
+'2026 年 3 月 12 日';
+
+/* ================= 状态 ================= */
+let S;
+function initState(){
+  S={disp:{},mail:'none',mailBody:MAIL_DRAFT,audit:JSON.parse(JSON.stringify(PRESET_AUDIT)),submitted:false,modFilter:'all',lampFilter:'all',docFile:null,auditFilter:'all'};
+}
+initState();
+
+function nowStr(){return '2026-03-12 '+new Date().toTimeString().slice(0,5);}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
+
+/* ================= 导航 ================= */
+document.querySelectorAll('.nav button').forEach(b=>{
+  b.onclick=()=>{showPage(b.dataset.page);};
+});
+function showPage(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===id));
+  if(id==='pg-audit')renderAudit();
+  if(id==='pg-work')renderAll();
+}
+function goWork(){showPage('pg-work');}
+
+/* ================= 工作台 ================= */
+function switchPane(btn){
+  document.querySelectorAll('.center-tabs button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('#pg-work .pane').forEach(p=>p.classList.remove('active'));
+  document.getElementById(btn.dataset.pane).classList.add('active');
+}
+function activatePane(id){
+  const btn=document.querySelector('.center-tabs button[data-pane="'+id+'"]');
+  if(btn)switchPane(btn);
+}
+
+/* 左栏文件树 */
+function renderTree(){
+  const el=document.getElementById('ftree');
+  el.innerHTML=FILES_META.map(f=>'<div class="ftree-item'+(S.docFile===f.id?' active':'')+'" onclick="openDoc(\''+f.id+'\')">'+
+    '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>'+f.name+'</div>').join('');
+}
+function openDoc(fid,hlKey){
+  S.docFile=fid;renderTree();renderDoc(hlKey);activatePane('pane-doc');
+}
+function renderDoc(hlKey){
+  const view=document.getElementById('doc-view');
+  if(!S.docFile){view.innerHTML='<div class="doc-empty">请在左侧文件树选择文件，或在核查项中点击「定位原文」</div>';return;}
+  const d=DOCS[S.docFile];
+  view.innerHTML='<div class="doc"><div class="doc-head"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg><span class="t">'+d.title+'</span></div><div class="doc-body">'+
+    d.rows.map(r=>'<div class="frow'+(hlKey&&r[0]===hlKey?' hl':'')+'" data-fk="'+r[0]+'"><div class="fk">'+r[1]+'</div><div class="fv">'+r[2]+'</div></div>').join('')+
+    '</div></div>';
+  if(hlKey){const row=view.querySelector('[data-fk="'+hlKey+'"]');if(row)setTimeout(()=>row.scrollIntoView({block:'center',behavior:'smooth'}),60);}
+}
+
+/* 筛选 */
+const MOD_TABS=[['all','全部'],['m1','模块一'],['m2','模块二'],['ai','AI 辅助']];
+function modCount(m){return ITEMS.filter(i=>m==='all'||i.mod===m).length;}
+function lampCount(l){return ITEMS.filter(i=>(S.modFilter==='all'||i.mod===S.modFilter)&&i.lamp===l).length;}
+function renderFilters(){
+  document.getElementById('mod-filters').innerHTML='<span style="color:var(--txt-3);font-size:12px">模块：</span>'+
+    MOD_TABS.map(t=>'<button class="f-chip'+(S.modFilter===t[0]?' active':'')+'" onclick="setMod(\''+t[0]+'\')">'+t[1]+' '+modCount(t[0])+'</button>').join('');
+  document.getElementById('lamp-filters').innerHTML='<span style="color:var(--txt-3);font-size:12px">灯色：</span>'+
+    '<button class="f-chip'+(S.lampFilter==='all'?' active':'')+'" onclick="setLamp(\'all\')">全部</button>'+
+    ['g','y','r','x'].map(l=>'<button class="f-chip'+(S.lampFilter===l?' active':'')+'" onclick="setLamp(\''+l+'\')"><i class="dot '+l+'"></i>'+LAMP[l].name+' '+lampCount(l)+'</button>').join('');
+}
+function setMod(m){S.modFilter=m;renderFilters();renderItems();}
+function setLamp(l){S.lampFilter=l;renderFilters();renderItems();}
+
+/* 校验项列表 */
+function dispOf(n){return S.disp[n];}
+function renderItems(){
+  const list=ITEMS.filter(i=>(S.modFilter==='all'||i.mod===S.modFilter)&&(S.lampFilter==='all'||i.lamp===S.lampFilter));
+  const el=document.getElementById('item-list');
+  if(!list.length){el.innerHTML='<div class="empty-tip">当前筛选无校验项</div>';return;}
+  el.innerHTML=list.map(i=>{
+    const d=dispOf(i.n);
+    let body='<div class="ai-explain"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 017 7c0 2.4-1.2 4.2-2.7 5.6-.9.9-1.3 1.6-1.3 2.4v1H9v-1c0-.8-.4-1.5-1.3-2.4C6.2 13.2 5 11.4 5 9a7 7 0 017-7z"/><path d="M9 21h6"/></svg><div>'+i.detail+'</div></div>'+
+      '<div class="loc-row"><span>原文定位：'+i.loc[2]+'</span><button class="btn ghost-blue" onclick="event.stopPropagation();locate('+i.n+')">定位原文</button></div>';
+    if(d){
+      body+='<div class="disp-zone"><div class="disp-record">✓ 已处置 · '+d.action+'　（'+d.actor+' · '+d.time+'）'+(d.note?'<br>说明：'+escapeHtml(d.note):'')+'</div></div>';
+    }else if(i.lamp==='r'){
+      body+='<div class="disp-zone"><textarea id="note-'+i.n+'" placeholder="请填写打回原因 / 授权例外理由（必填）"></textarea><div class="disp-btns">'+
+        '<button class="btn danger" onclick="dispose('+i.n+',\'打回借款人\')">打回借款人</button>'+
+        '<button class="btn" onclick="dispose('+i.n+',\'授权例外\')">授权例外（理由必填）</button></div></div>';
+    }else if(i.lamp==='y'){
+      body+='<div class="disp-zone"><textarea id="note-'+i.n+'" placeholder="请填写复核说明（必填）"></textarea><div class="disp-btns">'+
+        '<button class="btn primary" onclick="dispose('+i.n+',\'复核后放行\')">填写说明并放行</button></div></div>';
+    }
+    return '<div class="item" id="item-'+i.n+'">'+
+      '<div class="item-head" onclick="toggleItem('+i.n+')">'+lampHtml(i.lamp)+
+      '<span class="no">'+i.n+'</span><span class="rule">'+i.rule+'</span><span class="txt">'+i.text+'</span>'+
+      (d?'<span class="done-badge">已处置</span>':'')+
+      '<svg class="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></div>'+
+      '<div class="item-body">'+body+'</div></div>';
+  }).join('');
+}
+function toggleItem(n){document.getElementById('item-'+n).classList.toggle('open');}
+function locate(n){
+  const it=ITEMS.find(i=>i.n===n);
+  openDoc(it.loc[0],it.loc[1]);
+}
+function escapeHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+/* 处置 */
+function dispose(n,action){
+  const ta=document.getElementById('note-'+n);
+  const note=ta?ta.value.trim():'';
+  if(!note){toast('请先填写说明 / 理由');if(ta)ta.focus();return;}
+  S.disp[n]={action:action,note:note,actor:'张敏（经办人）',time:nowStr()};
+  const it=ITEMS.find(i=>i.n===n);
+  S.audit.push({t:S.disp[n].time,type:'human',title:'处置校验项 #'+n+'（'+it.rule+'）· '+action,desc:note,actor:'张敏 · 贷款运营专员'});
+  toast('已处置：'+action);
+  renderItems();renderStatus();renderStepper();
+}
+function batchRestore(){
+  S.disp={};
+  S.audit.push({t:nowStr(),type:'human',title:'批量恢复待处理（演示回退）',desc:'全部已处置项恢复为待处理状态',actor:'张敏 · 贷款运营专员'});
+  toast('已恢复全部待处理项');renderItems();renderStatus();renderStepper();
+}
+
+/* 底部状态 */
+function pendingItems(){return ITEMS.filter(i=>i.lamp==='r'||i.lamp==='y');}
+function doneCount(){return pendingItems().filter(i=>S.disp[i.n]).length;}
+function renderStatus(){
+  const d=doneCount();
+  document.getElementById('prog-txt').textContent=d+' / 7';
+  document.getElementById('btn-submit').disabled=d<7||S.submitted;
+  document.getElementById('btn-submit').textContent=S.submitted?'已提交审批':'提交审批';
+}
+function confirmSubmit(){document.getElementById('cf-mask').classList.add('show');}
+function doSubmit(){
+  document.getElementById('cf-mask').classList.remove('show');
+  S.submitted=true;
+  S.audit.push({t:nowStr(),type:'human',title:'提交审批',desc:'7 项待处理全部处置完毕，案件提交审核人王磊审批',actor:'张敏 · 贷款运营专员'});
+  toast('已提交审批');renderStatus();renderStepper();
+}
+
+/* 右栏进度 */
+function renderStepper(){
+  const d=doneCount();
+  const mailStep=S.mail==='sent'?['done','退回邮件已发出']:S.mail==='review'?['doing','邮件待审核人复核']:S.mail==='draft'?['doing','邮件草稿编辑中']:['todo','待生成退回邮件'];
+  const steps=[
+    ['done','材料接收与解析','6 主文件 + 12 支持文件 · 09:15 完成'],
+    ['done','AI 两阶段同步预检','21 条规则 + AI 辅助 · 32 项结果'],
+    [d>=7?'done':'doing','经办人处置','张敏 · 待处理 '+d+'/7 项'],
+    mailStep.concat(),
+    [S.submitted?'done':'todo','提交审批','审核人：王磊 · 信贷审批官']
+  ];
+  steps[3]=[mailStep[0],'退回邮件通知',mailStep[1]];
+  document.getElementById('stepper').innerHTML=steps.map(s=>
+    '<div class="step '+s[0]+'"><div class="sdot">'+(s[0]==='done'?'✓':s[0]==='doing'?'●':'')+'</div><div><div class="st">'+s[1]+'</div><div class="ss">'+s[2]+'</div></div></div>').join('');
+  const rb=document.getElementById('reviewer-badge');
+  if(S.mail==='review'){rb.textContent='审核人 · 复核邮件中';}
+  else if(S.submitted){rb.textContent='审核人 · 审批中';}
+  else if(S.mail==='sent'){rb.textContent='审核人 · 邮件已复核发出';}
+  else{rb.textContent='审核人 · 待接力';}
+}
+
+/* 支付指令表 */
+function renderPay(){
+  const t=document.getElementById('pay-table');
+  let html='<tr><th>编号</th><th>收款人</th><th>国家/地区</th><th>币种金额</th><th>折算人民币（演示汇率）</th><th>货物</th><th>账号</th><th>汇款人</th><th>灯态</th></tr>';
+  PAYS.forEach(p=>{
+    html+='<tr class="prow" onclick="togglePay(\''+p.id+'\')"><td><b>'+p.no+'</b></td><td>'+p.payee+(p.ai?'<span class="ai-corner">AI</span>':'')+'</td><td>'+p.country+'</td><td>'+p.amt+'</td><td>'+p.cny+'</td><td>'+p.goods+'</td><td>'+(p.id==='p2'?'<span class="diff">'+p.account+'</span>':p.account)+'</td><td>'+(p.id==='p4'?'<span class="diff">'+p.remitter+'</span>':p.remitter)+'</td><td>'+lampHtml(p.lamp)+'</td></tr>';
+    html+='<tr class="subrow" id="pay-'+p.id+'" style="display:none"><td colspan="9"><table class="mini">'+p.diffs.map(f=>'<tr><td class="mk">'+f[0]+'</td><td>'+(f[2]===1?'<span class="diff">'+f[1]+'</span>':f[2]===2?'<span style="color:var(--y);font-weight:600">'+f[1]+'</span>':f[1])+'</td></tr>').join('')+'</table></td></tr>';
+  });
+  t.innerHTML=html;
+}
+function togglePay(id){const r=document.getElementById('pay-'+id);r.style.display=r.style.display==='none'?'table-row':'none';}
+
+/* AI 说明模板 */
+function genTpl(k){
+  const el=document.getElementById('tpl-'+k);
+  el.style.display='block';
+  el.textContent=k===1?
+   '【补充说明模板 · 关联方核实】\n经系统核查，贵司 P4 笔收款方 Skyline Metal Trading Co., Ltd.（注册地：开曼群岛乔治敦）与贵司主要股东存在重合。请提供：① 该公司股权结构图及最终受益人说明；② 本次钢坯交易的商业实质说明及定价依据；③ 是否构成关联交易的声明。请于 5 个工作日内回复。':
+   '【补充说明模板 · 资金来源】\n经系统核查，贵司 4 笔支付指令折算合计人民币 20,160,000 元，超出本次提款金额（20,000,000 元）160,000 元。请书面说明超出部分的资金来源（自有资金 / 其他授信等），并加盖公司公章后反馈。';
+  S.audit.push({t:nowStr(),type:'human',title:'AI 生成说明模板（风险提示 '+(k===1?'① 关联方':'② 资金来源')+'）',desc:'张敏 调用 AI 生成借款人补充说明模板',actor:'张敏 · 贷款运营专员'});
+}
+
+/* ================= 邮件流程 ================= */
+function openMail(){
+  document.getElementById('mail-body').value=S.mailBody;
+  document.getElementById('mail-mask').classList.add('show');
+  renderMailFoot();
+}
+function closeMail(){document.getElementById('mail-mask').classList.remove('show');}
+function renderMailFoot(){
+  const f=document.getElementById('mail-foot');
+  const note=document.getElementById('mail-note');
+  const ta=document.getElementById('mail-body');
+  if(S.mail==='none'||S.mail==='draft'){
+    ta.disabled=false;
+    note.innerHTML='AI 已根据 5 项违规与 2 项待复核结果自动起草退回邮件。经办人（张敏）可直接修改，确认后提交审核人（王磊）复核，复核通过即可发出。';
+    f.innerHTML='<button class="btn" onclick="saveDraft()">保存草稿</button><button class="btn primary" onclick="sendToReview()">提交审核人（王磊）复核</button>';
+  }else if(S.mail==='review'){
+    ta.disabled=true;
+    note.innerHTML='邮件已提交审核人 <b>王磊 · 信贷审批官</b> 复核。以下为模拟审核人操作（POC 演示）：';
+    f.innerHTML='<button class="btn" onclick="rejectMail()">退回经办人修改</button><button class="btn primary" onclick="approveMail()">审核通过并发出</button>';
+  }else{
+    ta.disabled=true;
+    note.innerHTML='✓ 邮件已于 '+S.mailSentTime+' 经审核人复核通过后发出，全程留痕可查。';
+    f.innerHTML='<button class="btn" onclick="closeMail()">关闭</button>';
+  }
+}
+function saveDraft(){
+  S.mailBody=document.getElementById('mail-body').value;
+  if(S.mail==='none'){S.mail='draft';}
+  S.audit.push({t:nowStr(),type:'human',title:'保存退回邮件草稿',desc:'经办人修改并保存 AI 生成的退回邮件草稿',actor:'张敏 · 贷款运营专员'});
+  toast('草稿已保存');renderMailStatus();renderStepper();
+}
+function sendToReview(){
+  S.mailBody=document.getElementById('mail-body').value;
+  S.mail='review';
+  S.audit.push({t:nowStr(),type:'human',title:'退回邮件提交复核',desc:'经办人将退回邮件草稿提交审核人王磊复核',actor:'张敏 · 贷款运营专员'});
+  toast('已提交审核人王磊复核');renderMailFoot();renderMailStatus();renderStepper();
+}
+function rejectMail(){
+  S.mail='draft';
+  S.audit.push({t:nowStr(),type:'human',title:'邮件复核退回修改',desc:'审核人王磊退回邮件草稿，请经办人修改后重新提交',actor:'王磊 · 信贷审批官'});
+  toast('审核人已退回修改');renderMailFoot();renderMailStatus();renderStepper();
+}
+function approveMail(){
+  S.mail='sent';S.mailSentTime=nowStr();
+  S.audit.push({t:S.mailSentTime,type:'human',title:'退回邮件审核通过并发出',desc:'审核人王磊复核通过，退回通知邮件已发送至借款人（5 处整改 + 2 项补充说明，一次性退回）',actor:'王磊 · 信贷审批官'});
+  toast('邮件已发出');renderMailFoot();renderMailStatus();renderStepper();
+}
+function renderMailStatus(){
+  const el=document.getElementById('mail-status');
+  const bt=document.getElementById('mail-btn-txt');
+  if(S.mail==='none'){el.style.display='none';bt.textContent='AI 生成退回邮件草稿';return;}
+  el.style.display='block';
+  if(S.mail==='draft'){el.className='mail-status draft';el.textContent='● 邮件草稿编辑中（经办人张敏），待提交审核人复核。';bt.textContent='继续编辑邮件草稿';}
+  else if(S.mail==='review'){el.className='mail-status review';el.textContent='● 邮件待审核人王磊复核，点击按钮查看 / 模拟复核。';bt.textContent='查看邮件（待王磊复核）';}
+  else{el.className='mail-status sent';el.textContent='✓ 退回邮件已于 '+S.mailSentTime+' 复核发出。';bt.textContent='查看已发出邮件';}
+}
+
+/* ================= 规则库 ================= */
+function ruleCard(r,mod){
+  return '<div class="rule-card"><div class="rule-top"><span class="rid">'+r[0]+'</span><span class="rn">'+r[1]+'</span><span style="color:var(--txt-3);font-size:12px">'+r[2]+'</span><span class="hit"><span class="tag blue">本案命中 '+r[4]+'</span><button class="btn ghost-blue" onclick="gotoRule(\''+mod+'\',\''+r[0]+'\')">查看本案校验项</button></div></div><div class="rule-std"><b>比对标准：</b>'+r[3]+'</div></div>';
+}
+function renderRules(){
+  document.getElementById('rules-body').innerHTML=
+   '<div class="rule-mod"><div class="rule-mod-h"><span class="t">模块一 · 授信申请阶段核对</span><span class="s">16 条规则 → 本案 16 项结果（🟢13 ⚪1 🔴2）</span></div>'+
+   RULES_M1.map(r=>ruleCard(r,'m1')).join('')+'</div>'+
+   '<div class="rule-mod"><div class="rule-mod-h"><span class="t">模块二 · 支付指令阶段核对</span><span class="s">5 条规则 → 本案 14 项结果（🟢10 🟡1 🔴3）</span></div>'+
+   RULES_M2.map(r=>ruleCard(r,'m2')).join('')+'</div>';
+}
+function gotoRule(mod,rule){
+  showPage('pg-work');
+  S.modFilter=mod;S.lampFilter='all';
+  renderFilters();renderItems();
+  activatePane('pane-check');
+  setTimeout(()=>{
+    const it=ITEMS.find(i=>i.mod===mod&&i.rule===rule);
+    if(it){const el=document.getElementById('item-'+it.n);if(el){el.classList.add('open');el.scrollIntoView({block:'center',behavior:'smooth'});}}
+  },80);
+}
+
+/* ================= 审计 ================= */
+document.querySelectorAll('#audit-filters .f-chip').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('#audit-filters .f-chip').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');S.auditFilter=b.dataset.af;renderAudit();
+  };
+});
+function renderAudit(){
+  const list=S.audit.filter(a=>S.auditFilter==='all'||a.type===S.auditFilter);
+  document.getElementById('timeline').innerHTML=list.map(a=>
+   '<div class="tl-item '+(a.type==='sys'?'sys':'')+'"><div class="tt">'+(a.type==='sys'?'系统':'人工')+' · '+a.title+(a.actor?'<span class="tag blue">'+a.actor+'</span>':'')+'</div><div class="tm">'+a.t+'</div><div class="td">'+a.desc+'</div></div>').join('');
+}
+
+/* ================= 重置 ================= */
+function resetDemo(){
+  initState();
+  renderTree();renderFilters();renderItems();renderPay();renderDoc();renderStatus();renderStepper();renderMailStatus();renderAudit();
+  document.getElementById('mail-body').value=MAIL_DRAFT;
+  toast('演示数据已重置');
+}
+
+/* ================= 初始化 ================= */
+renderTree();renderFilters();renderItems();renderPay();renderStatus();renderStepper();renderRules();renderAudit();renderMailStatus();
+</script>
+</body>
+</html>
