@@ -16,11 +16,21 @@ export interface TaskOut {
   status: string
 }
 
+export interface FieldSource {
+  doc_code?: string
+  type_code?: string
+  pdf_file?: string | null
+  page: number
+  bbox: number[] // [x0, y0, x1, y1] 归一化 0~1
+}
+
 export interface DocumentOut {
   id: number
   doc_code: string
   type_code: string
   fields: Record<string, any>
+  pdf_file?: string | null
+  field_sources?: Record<string, { page: number; bbox: number[] }>
 }
 
 export interface TaskDetail extends TaskOut {
@@ -37,7 +47,8 @@ export interface CheckResult {
   status: CheckStatus
   why: string
   suggestion: string
-  detail: [string, string, string][] // [label, value, flag]
+  // [label, value, flag] 或 [label, value, flag, source]
+  detail: (string | FieldSource | null)[][]
 }
 
 export interface RunSummary {
@@ -61,6 +72,7 @@ export interface ParsedField {
   value: string | number | string[] | null
   kind: 'text' | 'number' | 'currency' | 'list'
   confidence: number
+  source?: { page: number; bbox: number[] } | null
 }
 
 export interface ParsedDocument {
@@ -68,6 +80,7 @@ export interface ParsedDocument {
   type_code: string
   type_label: string
   source_filename: string
+  pdf_file?: string | null
   fields: ParsedField[]
 }
 

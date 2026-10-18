@@ -45,8 +45,13 @@
         <!-- 已归集单据 -->
         <div v-if="detail" class="docs">
           <span class="muted">已归集单据：</span>
-          <el-tag v-for="d in detail.documents" :key="d.id" type="info" size="small" class="doctag">
+          <el-tag
+            v-for="d in detail.documents" :key="d.id" type="info" size="small" class="doctag"
+            :class="{ clickable: !!d.pdf_file }"
+            @click="d.pdf_file && viewDoc(d.id)"
+          >
             {{ d.doc_code }} · {{ d.type_code }}
+            <el-icon v-if="d.pdf_file" class="doc-eye"><View /></el-icon>
           </el-tag>
         </div>
 
@@ -66,10 +71,21 @@
             <div class="why"><strong>判定说明：</strong>{{ r.why }}</div>
             <el-table v-if="r.detail?.length" :data="toRows(r.detail)" size="small" border
               style="margin: 10px 0">
-              <el-table-column prop="label" label="项目" width="200" />
+              <el-table-column prop="label" label="项目" width="180" />
               <el-table-column label="值">
                 <template #default="{ row }">
                   <span :class="{ badvalue: row.flag === 'bad' }">{{ row.value }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="原文定位" width="120" align="center">
+                <template #default="{ row }">
+                  <el-button
+                    v-if="row.source?.pdf_file" size="small" link type="primary"
+                    @click="locateRow(row.source)"
+                  >
+                    <el-icon style="margin-right: 2px"><View /></el-icon>定位原文
+                  </el-button>
+                  <span v-else class="muted">—</span>
                 </template>
               </el-table-column>
             </el-table>
@@ -267,6 +283,9 @@
         </el-row>
       </el-tab-pane>
     </el-tabs>
+
+    <!-- 定位原文：PDF 预览 + 高亮出错点 -->
+    <PdfSourceViewer v-model:visible="pdfVisible" :source="pdfSource" />
   </el-card>
 </template>
 
@@ -275,13 +294,14 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowLeft, Back, DocumentChecked, MagicStick, Message,
-  Promotion, Refresh, RefreshRight, Select, VideoPlay,
+  Promotion, Refresh, RefreshRight, Select, VideoPlay, View,
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { api } from '@/api'
 import { useAuthStore } from '@/stores/auth'
-import type { AIPending, AIThought, AITreeNode, CheckResult, TaskDetail } from '@/types'
+import type { AIPending, AIThought, AITreeNode, CheckResult, TaskDetail, FieldSource } from '@/types'
 import { checkText, checkType, DIMENSION_NAME, fmt, statusText, statusType } from '@/utils'
+import PdfSourceViewer from '@/components/PdfSourceViewer.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -304,8 +324,58 @@ const counts = computed(() => {
 })
 const flagged = computed(() => results.value.filter((r) => r.status !== 'pass'))
 
-function toRows(detailArr: [string, string, string][]) {
-  return detailArr.map(([label, value, flag]) => ({ label, value, flag }))
+function toRows(detailArr: (string | FieldSource | null)[][]) {
+  return detailArr.map((row) => ({
+    label: row[0] as string,
+    value: row[1] as string,
+    flag: row[2] as string,
+    source: (row[3] as FieldSource) || null,
+  }))
+}
+
+/* ---------- 定位原文（PDF 预览 + 高亮）---------- */
+const pdfVisible = ref(false)
+const pdfSource = ref<FieldSource | null>(null)
+
+/** 打开规则明细行的定位（source 已自带 pdf_file/page/bbox）。 */
+function locateRow(source: FieldSource | null) {
+  if (!source?.pdf_file || !source?.bbox) {
+    ElMessage.info('该项暂无原文定位信息')
+    return
+  }
+  pdfSource.value = source
+  pdfVisible.value = true
+}
+
+/** 打开某单据某字段的定位（从 task.documents 的 field_sources 查）。 */
+function locateDocField(docId: number, fieldKey: string) {
+  const d = detail.value?.documents.find((x) => x.id === docId)
+  const src = d?.field_sources?.[fieldKey]
+  if (!d?.pdf_file || !src?.bbox) {
+    ElMessage.info('该字段暂无原文定位信息')
+    return
+  }
+  pdfSource.value = {
+    doc_code: d.doc_code,
+    type_code: d.type_code,
+    pdf_file: d.pdf_file,
+    page: src.page,
+    bbox: src.bbox,
+  }
+  pdfVisible.value = true
+}
+// 预留给单据字段逐项定位（当前经规则 detail 的 source 走 locateRow）
+void locateDocField
+
+/** 直接查看某单据原件（打开首页，无高亮）。 */
+function viewDoc(docId: number) {
+  const d = detail.value?.documents.find((x) => x.id === docId)
+  if (!d?.pdf_file) {
+    ElMessage.info('该单据暂无原件 PDF')
+    return
+  }
+  pdfSource.value = { doc_code: d.doc_code, type_code: d.type_code, pdf_file: d.pdf_file, page: 1, bbox: [] }
+  pdfVisible.value = true
 }
 
 /* ---------- 规则核对 ---------- */
@@ -586,6 +656,19 @@ onMounted(async () => {
 }
 .doctag {
   margin: 0 6px 6px 0;
+}
+.doctag.clickable {
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.doctag.clickable:hover {
+  color: var(--el-color-primary);
+  border-color: var(--el-color-primary);
+}
+.doc-eye {
+  margin-left: 4px;
+  vertical-align: -1px;
+  font-size: 12px;
 }
 .muted {
   color: var(--muted);

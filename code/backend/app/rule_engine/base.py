@@ -29,7 +29,9 @@ class RuleResult:
     status: Status
     why: str = ""
     suggestion: str = ""
-    detail: list = field(default_factory=list)  # [[label, value, flag], ...]
+    # 判定明细行：[label, value, flag] 或 [label, value, flag, source]
+    # source = {doc_code, type_code, pdf_file, page, bbox} —— 供前端「定位原文」高亮
+    detail: list = field(default_factory=list)
 
 
 @dataclass
@@ -38,9 +40,12 @@ class DocBundle:
 
     - by_type[type_code] -> list[dict(fields)]
     - first(type_code)   -> 第一份该类型单据的 fields（便于单实例取值）
+    - locate(type, key)  -> 该字段的定位信息 source（供 detail 行附带）
     """
 
     by_type: dict[str, list[dict]]
+    # 按类型保存每份单据的元数据（doc_code / pdf_file / field_sources），与 by_type 顺序对齐
+    meta_by_type: dict[str, list[dict]] = field(default_factory=dict)
 
     def first(self, type_code: str) -> dict | None:
         items = self.by_type.get(type_code) or []
@@ -48,6 +53,23 @@ class DocBundle:
 
     def all(self, type_code: str) -> list[dict]:
         return self.by_type.get(type_code) or []
+
+    def locate(self, type_code: str, field_key: str, idx: int = 0) -> dict | None:
+        """返回某类型第 idx 份单据中 field_key 字段的定位信息（含 pdf/页/框）。"""
+        metas = self.meta_by_type.get(type_code) or []
+        if idx >= len(metas):
+            return None
+        meta = metas[idx]
+        src = (meta.get("field_sources") or {}).get(field_key)
+        if not src:
+            return None
+        return {
+            "doc_code": meta.get("doc_code"),
+            "type_code": type_code,
+            "pdf_file": meta.get("pdf_file"),
+            "page": src.get("page", 1),
+            "bbox": src.get("bbox"),
+        }
 
 
 class Rule:

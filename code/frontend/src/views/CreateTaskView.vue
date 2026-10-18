@@ -18,7 +18,7 @@
     <template #header>
       <div class="card-head">
         <span>📎 上传材料</span>
-        <el-button type="success" plain :icon="MagicStick" @click="loadTemplate">
+        <el-button type="success" plain :icon="MagicStick" :loading="loadingTpl" @click="loadTemplate">
           一键载入模板 8 个文件
         </el-button>
       </div>
@@ -121,9 +121,23 @@
               </el-tag>
             </template>
           </el-table-column>
+          <el-table-column label="原文" width="100" align="center">
+            <template #default="{ row }">
+              <el-button
+                v-if="row.source && doc.pdf_file" size="small" link type="primary"
+                @click="locateParsed(doc, row)"
+              >
+                <el-icon style="margin-right: 2px"><View /></el-icon>查看
+              </el-button>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
         </el-table>
       </el-collapse-item>
     </el-collapse>
+
+    <!-- 定位原文：PDF 预览 + 高亮 -->
+    <PdfSourceViewer v-model:visible="pdfVisible" :source="pdfSource" />
 
     <div class="actions">
       <el-button @click="step = 0">上一步</el-button>
@@ -166,12 +180,14 @@ import {
   MagicStick,
   Promotion,
   UploadFilled,
+  View,
   WarningFilled,
 } from '@element-plus/icons-vue'
 import { ElMessage, type UploadFile, type UploadUserFile } from 'element-plus'
 import { api } from '@/api'
-import type { ParseResult } from '@/types'
+import type { ParseResult, ParsedDocument, ParsedField, FieldSource } from '@/types'
 import { fmt } from '@/utils'
+import PdfSourceViewer from '@/components/PdfSourceViewer.vue'
 
 const router = useRouter()
 
@@ -186,6 +202,25 @@ const parsing = ref(false)
 const creating = ref(false)
 const parsed = ref<ParseResult | null>(null)
 const activeDocs = ref<number[]>([])
+
+/* ---------- 定位原文（PDF 预览 + 高亮）---------- */
+const pdfVisible = ref(false)
+const pdfSource = ref<FieldSource | null>(null)
+
+function locateParsed(doc: ParsedDocument, row: ParsedField) {
+  if (!doc.pdf_file || !row.source?.bbox) {
+    ElMessage.info('该字段暂无原文定位信息')
+    return
+  }
+  pdfSource.value = {
+    doc_code: doc.doc_code,
+    type_code: doc.type_code,
+    pdf_file: doc.pdf_file,
+    page: row.source.page,
+    bbox: row.source.bbox,
+  }
+  pdfVisible.value = true
+}
 
 const taskForm = reactive({
   task_code: '',
@@ -231,22 +266,43 @@ function onFileRemove(_file: UploadFile, list: UploadUserFile[]) {
   files.value = list.map((f) => f.raw as File).filter(Boolean)
 }
 
-// 快捷键：造 8 个模板文件（内容为占位，演示解析）
-const TEMPLATE_FILES = [
-  '贷款合同.pdf', '授信请求.pdf', '提款指令.pdf', '支付指令-01.pdf',
-  '支付指令-02.pdf', '商务合同.pdf', '形式发票.pdf', '报关单.pdf',
+// 快捷键：从 sample_pdfs 载入 8 个真实 PDF（走和真人上传完全一致的 multipart 流程）
+// 每项 [前端呈现的模板名(决定解析类型), 服务器样本文件名(真实二进制来源)]
+const TEMPLATE_FILES: [string, string][] = [
+  ['贷款合同.pdf', 'facility_letter.pdf'],
+  ['授信请求.pdf', 'drawdown_instruction_zn.pdf'],
+  ['提款指令.pdf', 'drawdown_instruction_zn.pdf'],
+  ['支付指令-01.pdf', 'payment_instruction.pdf'],
+  ['支付指令-02.pdf', 'payment_instruction.pdf'],
+  ['商务合同.pdf', 'commercial_contract.pdf'],
+  ['形式发票.pdf', 'invoice.pdf'],
+  ['报关单.pdf', 'customs_declaration.pdf'],
 ]
-function loadTemplate() {
-  const made = TEMPLATE_FILES.map(
-    (name) => new File([`占位内容 ${name}`], name, { type: 'application/pdf' }),
-  )
-  files.value = made
-  fileList.value = made.map((f, i) => {
-    const raw = f as any
-    raw.uid = Date.now() + i
-    return { name: f.name, uid: raw.uid, raw }
-  })
-  ElMessage.success(`已载入 ${made.length} 个模板文件，可直接点「开始智能识别」`)
+const loadingTpl = ref(false)
+async function loadTemplate() {
+  loadingTpl.value = true
+  try {
+    // 并行拉取 8 个真实 PDF 二进制，封装成 File（文件名用中文模板名）
+    const made = await Promise.all(
+      TEMPLATE_FILES.map(async ([tplName, sample]) => {
+        const resp = await fetch(`/pdf/${encodeURIComponent(sample)}`)
+        if (!resp.ok) throw new Error(`拉取样本 ${sample} 失败 (${resp.status})`)
+        const blob = await resp.blob()
+        return new File([blob], tplName, { type: 'application/pdf' })
+      }),
+    )
+    files.value = made
+    fileList.value = made.map((f, i) => {
+      const raw = f as any
+      raw.uid = Date.now() + i
+      return { name: f.name, uid: raw.uid, raw }
+    })
+    ElMessage.success(`已载入 ${made.length} 个真实样本 PDF，可直接点「开始智能识别」`)
+  } catch (e: any) {
+    ElMessage.error('载入模板失败：' + (e?.message || e))
+  } finally {
+    loadingTpl.value = false
+  }
 }
 
 async function doParse() {
@@ -280,6 +336,11 @@ async function confirmCreate() {
       doc_code: d.doc_code,
       type_code: d.type_code,
       fields: Object.fromEntries(d.fields.map((f) => [f.key, f.value])),
+      pdf_file: d.pdf_file ?? null,
+      // 把字段级定位单独收集，供规则核对/复核时「定位原文」高亮
+      field_sources: Object.fromEntries(
+        d.fields.filter((f) => f.source).map((f) => [f.key, f.source]),
+      ),
     }))
     await api.createTask({
       task_code: taskForm.task_code,

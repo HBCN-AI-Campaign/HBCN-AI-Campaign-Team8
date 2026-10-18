@@ -10,10 +10,16 @@ from .base import RULES, DocBundle, RuleResult, Status
 def build_bundle(documents: list) -> DocBundle:
     """把 ORM Document 列表转成按 type_code 分组的 DocBundle。"""
     by_type: dict[str, list[dict]] = defaultdict(list)
+    meta_by_type: dict[str, list[dict]] = defaultdict(list)
     for d in documents:
         type_code = d.type_code.value if hasattr(d.type_code, "value") else str(d.type_code)
         by_type[type_code].append(d.fields or {})
-    return DocBundle(by_type=dict(by_type))
+        meta_by_type[type_code].append({
+            "doc_code": getattr(d, "doc_code", None),
+            "pdf_file": getattr(d, "pdf_file", None),
+            "field_sources": getattr(d, "field_sources", None) or {},
+        })
+    return DocBundle(by_type=dict(by_type), meta_by_type=dict(meta_by_type))
 
 
 def run_all(documents: list) -> list[RuleResult]:

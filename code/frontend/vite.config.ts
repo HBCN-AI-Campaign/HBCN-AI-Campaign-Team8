@@ -17,6 +17,16 @@ export default defineConfig({
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
+      // 样本 PDF 原件（供「定位原文」预览）
+      '/pdf': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      // 经办人上传的真实 PDF（落盘后按批次目录预览）
+      '/uploads': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
     },
   },
 })

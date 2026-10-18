@@ -9,8 +9,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .config import settings
+from .config import SAMPLE_PDF_DIR as _SAMPLE_PDF_DIR
+from .config import UPLOAD_DIR as _UPLOAD_DIR
 from .database import Base, engine
 from .routers import auth, tasks
 
@@ -35,6 +38,14 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(tasks.router)
+
+# 静态托管样本 PDF —— 前端 pdfjs 据此拉取原件做预览/高亮
+if _SAMPLE_PDF_DIR.is_dir():
+    app.mount("/pdf", StaticFiles(directory=str(_SAMPLE_PDF_DIR)), name="pdf")
+
+# 静态托管经办人上传的真实 PDF —— 前端经 /uploads/<批次>/<文件名> 预览/高亮
+_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(_UPLOAD_DIR)), name="uploads")
 
 
 @app.get("/api/health")

@@ -34,16 +34,39 @@ async def parse_documents(
 ):
     """上传材料 → 调用文件解析 Agent（当前为 mock）→ 返回 8 类单据识别字段。
 
+    传输方式：标准 multipart/form-data，前端把 N 个文件以同名字段 `files`
+    依次 append，后端 `list[UploadFile]` 自动收成文件数组（数量不限）。
+
     真实环境这里会把文件二进制转发给 OCR/LLM 解析服务；
-    目前仅读取文件名用于演示，内容不落盘。
+    当前为 Mock——内容虽不参与识别，但会按批次落盘，使「定位原文」
+    预览到的就是用户本次真实上传的 PDF，而非仓库自带样本。
     """
-    names = [f.filename or "未命名文件" for f in files]
-    # 触发一次读取以消费上传流（避免客户端悬挂），内容丢弃
-    for f in files:
-        await f.read()
-    if not names:
+    import uuid
+    from pathlib import Path
+
+    from ..config import UPLOAD_DIR as _UPLOAD_DIR
+
+    batch_id = uuid.uuid4().hex[:12]
+    batch_dir = Path(_UPLOAD_DIR) / batch_id
+    batch_dir.mkdir(parents=True, exist_ok=True)
+
+    # 落盘：保存每个上传文件，记录供预览的相对 URL（/uploads/<批次>/<文件名>）
+    saved: list[dict] = []
+    for i, f in enumerate(files):
+        raw_name = f.filename or f"未命名_{i + 1}.pdf"
+        # 清洗文件名，避免路径穿越
+        safe_name = Path(raw_name).name or f"file_{i + 1}.pdf"
+        dest = batch_dir / safe_name
+        content = await f.read()
+        dest.write_bytes(content)
+        saved.append({
+            "filename": raw_name,
+            "pdf_url": f"uploads/{batch_id}/{safe_name}",
+        })
+
+    if not saved:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="未收到任何文件")
-    return parse_files(names)
+    return parse_files(saved)
 
 
 @router.get("/dashboard", response_model=DashboardStats)
@@ -80,7 +103,10 @@ def create_task(
     )
     for d in payload.documents:
         task.documents.append(
-            models.Document(doc_code=d.doc_code, type_code=d.type_code, fields=d.fields)
+            models.Document(
+                doc_code=d.doc_code, type_code=d.type_code, fields=d.fields,
+                pdf_file=d.pdf_file, field_sources=d.field_sources,
+            )
         )
     db.add(task)
     db.commit()
@@ -150,7 +176,9 @@ def get_task_detail(
         documents=[
             {"id": d.id, "doc_code": d.doc_code,
              "type_code": d.type_code.value if hasattr(d.type_code, "value") else str(d.type_code),
-             "fields": d.fields}
+             "fields": d.fields,
+             "pdf_file": d.pdf_file,
+             "field_sources": d.field_sources or {}}
             for d in task.documents
         ],
         result_counts=counts,

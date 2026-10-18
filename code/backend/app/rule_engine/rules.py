@@ -98,19 +98,23 @@ class R_DrawdownCurrencyInFacilityScope(Rule):
         dd_ccy = _norm(dd.get("currency"))
         tranche = _norm(dd.get("tranche"))
         allowed = fol.get("allowed_currencies") or []
+        # 定位信息：提款币种来自提款指令、授信段/币种范围来自 FOL
+        loc_ccy = docs.locate("DRAWDOWN_INSTRUCTION", "currency")
+        loc_tranche = docs.locate("DRAWDOWN_INSTRUCTION", "tranche")
+        loc_allowed = docs.locate("FACILITY_LETTER", "allowed_currencies")
         if dd_ccy in allowed:
             return RuleResult(
                 self.id, self.name, self.dimension, Status.PASS,
                 why=f"提款币种 {dd_ccy} 在授信段“{tranche}”允许范围内。",
-                detail=[["提款币种", dd_ccy, ""], ["FOL 授信段", tranche, ""],
-                        ["该段币种范围", "/".join(allowed), ""]],
+                detail=[["提款币种", dd_ccy, "", loc_ccy], ["FOL 授信段", tranche, "", loc_tranche],
+                        ["该段币种范围", "/".join(allowed), "", loc_allowed]],
             )
         return RuleResult(
             self.id, self.name, self.dimension, Status.FAIL,
             why=f"提款指令选定授信段“{tranche}”限 {'/'.join(allowed) or '—'}，提款币种填 {dd_ccy} 超出条款范围。",
             suggestion="要求客户改用允许币种提款，或改选可用该币种的授信段后重新提交。",
-            detail=[["提款币种", dd_ccy, "bad"], ["FOL 授信段", tranche, ""],
-                    ["该段币种范围", "/".join(allowed) or "—", "bad"]],
+            detail=[["提款币种", dd_ccy, "bad", loc_ccy], ["FOL 授信段", tranche, "", loc_tranche],
+                    ["该段币种范围", "/".join(allowed) or "—", "bad", loc_allowed]],
         )
 
 
@@ -128,18 +132,20 @@ class R_DrawdownAmountWithinFacility(Rule):
         amt = _dec(dd.get("amount"))
         facility = _dec(fol.get("facility_amount"))
         remaining = facility - amt
+        loc_amt = docs.locate("DRAWDOWN_INSTRUCTION", "amount")
+        loc_fac = docs.locate("FACILITY_LETTER", "facility_amount")
         if amt <= facility:
             return RuleResult(
                 self.id, self.name, self.dimension, Status.PASS,
                 why=f"提款金额落在授信额度内，扣减后剩余可用 {remaining:,.2f}。",
-                detail=[["提款金额", f"{amt:,.2f}", ""], ["授信额度", f"{facility:,.2f}", ""],
+                detail=[["提款金额", f"{amt:,.2f}", "", loc_amt], ["授信额度", f"{facility:,.2f}", "", loc_fac],
                         ["剩余可用", f"{remaining:,.2f}", ""]],
             )
         return RuleResult(
             self.id, self.name, self.dimension, Status.FAIL,
             why=f"提款金额 {amt:,.2f} 超过授信额度 {facility:,.2f}，构成超额提款。",
             suggestion="要求客户下调提款金额或申请提额。",
-            detail=[["提款金额", f"{amt:,.2f}", "bad"], ["授信额度", f"{facility:,.2f}", "bad"]],
+            detail=[["提款金额", f"{amt:,.2f}", "bad", loc_amt], ["授信额度", f"{facility:,.2f}", "bad", loc_fac]],
         )
 
 

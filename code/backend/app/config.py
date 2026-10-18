@@ -10,6 +10,10 @@ from pathlib import Path
 _BACKEND_DIR = Path(__file__).resolve().parent.parent
 _DEFAULT_SQLITE = f"sqlite:///{_BACKEND_DIR / 'loan_review.db'}"
 
+# 样本 PDF（随仓库分发） / 上传件（运行时落盘）目录
+SAMPLE_PDF_DIR = _BACKEND_DIR / "sample_pdfs"
+UPLOAD_DIR = _BACKEND_DIR / "uploads"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

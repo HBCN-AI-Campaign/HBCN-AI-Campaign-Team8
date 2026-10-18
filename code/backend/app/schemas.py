@@ -15,6 +15,8 @@ class DocumentIn(BaseModel):
     doc_code: str
     type_code: str
     fields: dict = {}
+    pdf_file: str | None = None       # 原件 PDF 文件名（/pdf/<file> 可预览）
+    field_sources: dict = {}          # {field_key: {page, bbox}} 字段定位
 
 
 class DocumentOut(DocumentIn):
@@ -85,6 +87,12 @@ class TaskDetail(TaskOut):
 
 
 # --- 文件解析 Agent（mock）返回 ---
+class FieldSource(BaseModel):
+    """字段在原件 PDF 中的位置（归一化 bbox，左上角原点）。"""
+    page: int = 1
+    bbox: list[float]              # [x0, y0, x1, y1]，各值 0~1
+
+
 class ParsedField(BaseModel):
     """解析出的单个字段。前端据此渲染可编辑表单。"""
     key: str                       # 字段英文 key（写库用）
@@ -92,6 +100,7 @@ class ParsedField(BaseModel):
     value: str | float | int | list | None = None
     kind: str = "text"             # text / number / currency / list —— 前端控件类型
     confidence: float = 1.0        # 识别置信度（<0.8 前端高亮提醒复核）
+    source: FieldSource | None = None   # 定位信息（可空）
 
 
 class ParsedDocument(BaseModel):
@@ -100,6 +109,7 @@ class ParsedDocument(BaseModel):
     type_code: str                 # 8 类之一
     type_label: str                # 中文类型名
     source_filename: str           # 上传的原始文件名
+    pdf_file: str | None = None    # 原件 PDF 文件名（/pdf/<file> 预览）
     fields: list[ParsedField]
 
 

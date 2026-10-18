@@ -98,6 +98,10 @@ class Document(Base):
     type_code: Mapped[DocumentType] = mapped_column(Enum(DocumentType))
     # 结构化抽取字段（OCR 产物）。切片阶段由种子数据直接填充。
     fields: Mapped[dict] = mapped_column(JSON, default=dict)
+    # 原件 PDF 文件名（前端经 /pdf/<pdf_file> 预览），可空
+    pdf_file: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # 字段级定位信息 {field_key: {page, bbox:[x0,y0,x1,y1]}}，供「定位原文」高亮
+    field_sources: Mapped[dict] = mapped_column(JSON, default=dict)
 
     task: Mapped["ReviewTask"] = relationship(back_populates="documents")
 

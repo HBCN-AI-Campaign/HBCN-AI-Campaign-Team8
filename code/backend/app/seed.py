@@ -48,23 +48,48 @@ def seed():
             status=TaskStatus.CREATED,
         )
         task.documents.extend([
-            Document(doc_code="F1", type_code=DocumentType.FACILITY_LETTER, fields={
-                "borrower": BORROWER,
-                "facility_amount": 30_000_000,
-                "allowed_currencies": ["CNY"],          # 该授信段仅人民币
-                "utilization_currency": "CNY-only",
-            }),
-            Document(doc_code="F2", type_code=DocumentType.DRAWDOWN_INSTRUCTION, fields={
-                "currency": "USD",                      # ← 故意超范围
-                "amount": 10_000_000,
-                "tranche": "人民币循环贷款授信",
-            }),
-            Document(doc_code="PI-01", type_code=DocumentType.PAYMENT_INSTRUCTION, fields={
-                "payee": "上海XX纸业贸易", "remitter_name": BORROWER, "amount": 4_000_000,
-            }),
-            Document(doc_code="PI-02", type_code=DocumentType.PAYMENT_INSTRUCTION, fields={
-                "payee": "XX Technology", "remitter_name": BORROWER, "amount": 2_000_000,
-            }),
+            Document(doc_code="F1", type_code=DocumentType.FACILITY_LETTER,
+                     pdf_file="facility_letter.pdf",
+                     field_sources={
+                         "allowed_currencies": {"page": 2, "bbox": [0.12, 0.42, 0.45, 0.46]},
+                         "facility_amount": {"page": 2, "bbox": [0.12, 0.36, 0.50, 0.40]},
+                     },
+                     fields={
+                         "borrower": BORROWER,
+                         "facility_amount": 30_000_000,
+                         "allowed_currencies": ["CNY"],          # 该授信段仅人民币
+                         "utilization_currency": "CNY-only",
+                     }),
+            Document(doc_code="F2", type_code=DocumentType.DRAWDOWN_INSTRUCTION,
+                     pdf_file="drawdown_instruction_zn.pdf",
+                     field_sources={
+                         "currency": {"page": 1, "bbox": [0.12, 0.30, 0.38, 0.34]},
+                         "amount": {"page": 1, "bbox": [0.12, 0.36, 0.50, 0.40]},
+                         "tranche": {"page": 1, "bbox": [0.12, 0.42, 0.58, 0.46]},
+                     },
+                     fields={
+                         "currency": "USD",                      # ← 故意超范围
+                         "amount": 10_000_000,
+                         "tranche": "人民币循环贷款授信",
+                     }),
+            Document(doc_code="PI-01", type_code=DocumentType.PAYMENT_INSTRUCTION,
+                     pdf_file="payment_instruction.pdf",
+                     field_sources={
+                         "remitter_name": {"page": 1, "bbox": [0.12, 0.58, 0.60, 0.62]},
+                         "amount": {"page": 1, "bbox": [0.12, 0.34, 0.48, 0.38]},
+                     },
+                     fields={
+                         "payee": "上海XX纸业贸易", "remitter_name": BORROWER, "amount": 4_000_000,
+                     }),
+            Document(doc_code="PI-02", type_code=DocumentType.PAYMENT_INSTRUCTION,
+                     pdf_file="payment_instruction.pdf",
+                     field_sources={
+                         "remitter_name": {"page": 1, "bbox": [0.12, 0.58, 0.60, 0.62]},
+                         "amount": {"page": 1, "bbox": [0.12, 0.34, 0.48, 0.38]},
+                     },
+                     fields={
+                         "payee": "XX Technology", "remitter_name": BORROWER, "amount": 2_000_000,
+                     }),
         ])
         db.add(task)
         db.commit()

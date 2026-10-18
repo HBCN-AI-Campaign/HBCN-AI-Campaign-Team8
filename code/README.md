@@ -16,7 +16,7 @@
 code/
 ├── backend/            FastAPI + SQLAlchemy + SQLite 后端
 │   ├── app/
-│   │   ├── main.py             应用入口（CORS / 建表 / 路由挂载）
+│   │   ├── main.py             应用入口（CORS / 建表 / 路由挂载 / PDF 静态托管）
 │   │   ├── config.py           配置（DB、JWT）
 │   │   ├── database.py         SQLAlchemy engine / session
 │   │   ├── models.py           ORM 模型
@@ -27,11 +27,15 @@ code/
 │   │   ├── review_agent.py     📌 专项审核 Agent（流程编排，待协作实现）
 │   │   ├── rule_engine/        规则引擎（注册表模式，27 条规则）
 │   │   └── routers/            auth / tasks 路由
+│   ├── sample_pdfs/            样本单据 PDF（随仓库分发，经 /pdf/<file> 访问）
+│   ├── uploads/                经办人上传的真实 PDF（运行时按批次落盘，不入库，经 /uploads/<批次>/<file> 访问）
 │   ├── requirements.txt
 │   └── .env.example
 └── frontend/           Vite + Vue 3 + TS + Element Plus 前端
     ├── src/
     │   ├── views/              登录 / 仪表盘 / 创建任务 / 任务审核
+    │   ├── components/
+    │   │   └── PdfSourceViewer.vue  PDF 预览 + 出错点高亮（pdfjs-dist）
     │   ├── stores/             Pinia 状态
     │   ├── router/             路由 + 鉴权守卫
     │   └── api.ts              axios 封装（/api 代理到后端）
@@ -43,11 +47,78 @@ code/
 
 | 模块 | 文件 | 说明 |
 |---|---|---|
-| **解析 Agent** | `backend/app/parse_agent.py` | 上传单据 → 结构化字段识别（OCR/LLM）。当前为 Mock 桩实现，由对应成员替换为真实解析逻辑。 |
+| **解析 Agent** | `backend/app/parse_agent.py` | 上传单据 → 结构化字段识别（OCR/LLM），**并记录每个字段在原件 PDF 中的位置**。当前为 Mock 桩实现，由对应成员替换为真实解析逻辑。 |
 | **专项审核 Agent** | `backend/app/review_agent.py` | 承接规则引擎移交的 `[专项]` 项（节假日、汇率、提单验真、制裁名单、法规检索、语义翻译），调用外部能力/LLM。当前为 Mock，由对应成员实现。 |
 | 规则引擎 / API / 前端 | `rule_engine/` · `routers/` · `frontend/` | 已就绪，可直接运行。 |
 
 > 两个 Agent 的输入/输出契约见各文件顶部的 docstring；替换实现时保持接口不变即可无缝对接。
+
+---
+
+## � 多文件上传与「一键载入模板」
+
+创建任务第一步支持**一次上传多个 PDF**，前后端用标准 **multipart/form-data** 传输——
+与真人手动选文件上传完全同一条链路。
+
+**传输机制：**
+
+```
+前端 (api.ts · parseFiles)                后端 (routers/tasks.py · /parse)
+─────────────────────────                ────────────────────────────────
+const form = new FormData()              files: list[UploadFile] = File(...)
+files.forEach(f =>                        # 同名字段 files 自动收成文件数组
+  form.append('files', f))               for f in files: await f.read()
+POST /api/tasks/parse                     → 落盘 uploads/<批次>/<文件名>
+  Content-Type: multipart/form-data       → 返回每单据 pdf_file 指向上传件
+```
+
+- **文件个数不限**：N 个文件都以**同名字段 `files`** 逐个 `append`，FastAPI 用
+  `list[UploadFile]` 自动收成数组。8 个、20 个都一样。
+- **落盘**：每次解析生成一个批次目录 `uploads/<batch_id>/`，保存本次上传的真实 PDF；
+  `pdf_file` 记为 `uploads/<batch_id>/<文件名>`，「定位原文」预览到的即本次真实上传件。
+- `uploads/` 已在 `.gitignore` 中忽略（运行时产物，不入库）。
+
+**「一键载入模板 8 个文件」**（`CreateTaskView.vue · loadTemplate`）：
+为方便演示，该按钮会**真的 `fetch` `/pdf/` 下的 8 个样本 PDF 二进制**，封装成 `File`
+（文件名用中文模板名）后放进上传列表——**走和真人上传完全一致的 multipart 流程**，
+不是占位空文件。因此后续「定位原文」高亮的就是真实 PDF 内容。
+
+> 接真实场景：`/parse` 已把上传的二进制落盘。当前 Mock 仅按文件名推断单据类型、
+> 不解析内容；替换 `parse_agent.parse_files` 为真实 OCR/LLM 时，可直接读取
+> `uploads/<批次>/` 下的文件二进制。
+
+---
+
+## �🔍 定位原文（字段级 PDF 高亮）
+
+规则核对出的每一项、以及解析出的每个字段，都能**一键跳回原件 PDF 并高亮出错位置**，
+便于审核人员核验证据、经办人复核识别结果。
+
+**数据链路：**
+
+```
+解析 Agent                规则引擎                   前端
+──────────               ──────────                ──────────
+每字段记录 source  ──►  detail 行附带 source  ──►  pdfjs 渲染 PDF
+{page, bbox}            {pdf_file, page, bbox}     + 红框高亮定位
+```
+
+**字段定位结构（归一化坐标，与分辨率无关）：**
+
+```python
+# parse_agent.py 中每个字段的 source：
+source = {
+    "page": 1,                        # 1-based 页码
+    "bbox": [0.12, 0.30, 0.38, 0.34], # [x0,y0,x1,y1] 归一化 0~1，左上角原点
+}
+```
+
+- 后端把 PDF 静态托管：仓库样本在 `/pdf/<file>`（`backend/sample_pdfs/`），
+  经办人上传件在 `/uploads/<批次>/<file>`（`backend/uploads/`）。`PdfSourceViewer.vue`
+  依据 `pdf_file` 是否以 `uploads/` 开头自动选对应路径。
+- 前端组件 `PdfSourceViewer.vue` 用 `pdfjs-dist` 渲染指定页，并按 bbox 叠加高亮框。
+- **接真实 OCR 时**：Azure Document Intelligence / AWS Textract / PaddleOCR 等都会返回字段级坐标，
+  把 Mock 里手工标注的 `bbox` 换成服务返回值（归一化到 0~1）即可，前端无需改动。
 
 ---
 

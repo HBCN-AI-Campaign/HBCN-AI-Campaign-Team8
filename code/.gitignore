@@ -8,6 +8,8 @@ env/
 .env
 backend/loan_review.db
 backend/*.db
+# 经办人运行时上传的 PDF（按批次落盘，不进仓库；样本 sample_pdfs/ 仍随仓库分发）
+backend/uploads/
 
 # ---------- Node / frontend ----------
 node_modules/
