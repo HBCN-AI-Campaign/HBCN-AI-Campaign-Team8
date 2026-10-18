@@ -1,0 +1,345 @@
+"""任务路由：创建任务、触发核对、查询结果。体现权限雏形。"""
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from sqlalchemy.orm import Session
+
+from .. import models
+from ..database import get_db
+from ..models import Role, TaskStatus, User
+from ..parse_agent import parse_files
+from ..review_agent import build_session
+from ..rule_engine import run_all, summarize
+from ..schemas import (
+    AIResolveIn,
+    AIResolveOut,
+    AISession,
+    CheckResultOut,
+    DashboardStats,
+    ParseResult,
+    RunSummary,
+    StatusAction,
+    TaskCreate,
+    TaskDetail,
+    TaskOut,
+)
+from ..security import get_current_user, require_role
+
+router = APIRouter(prefix="/api/tasks", tags=["tasks"])
+
+
+@router.post("/parse", response_model=ParseResult)
+async def parse_documents(
+    files: list[UploadFile] = File(...),
+    # 仅业务经办人可上传解析
+    user: User = Depends(require_role(Role.OPERATOR)),
+):
+    """上传材料 → 调用文件解析 Agent（当前为 mock）→ 返回 8 类单据识别字段。
+
+    真实环境这里会把文件二进制转发给 OCR/LLM 解析服务；
+    目前仅读取文件名用于演示，内容不落盘。
+    """
+    names = [f.filename or "未命名文件" for f in files]
+    # 触发一次读取以消费上传流（避免客户端悬挂），内容丢弃
+    for f in files:
+        await f.read()
+    if not names:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="未收到任何文件")
+    return parse_files(names)
+
+
+@router.get("/dashboard", response_model=DashboardStats)
+def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    q = db.query(models.ReviewTask)
+    # 经办人只统计自己提交的任务；审核人统计全部
+    if user.role == Role.OPERATOR:
+        q = q.filter_by(submitted_by=user.id)
+    return DashboardStats(
+        total_tasks=q.count(),
+        created=q.filter_by(status=TaskStatus.CREATED).count(),
+        reviewing=q.filter_by(status=TaskStatus.REVIEWING).count(),
+        need_supplement=q.filter_by(status=TaskStatus.NEED_SUPPLEMENT).count(),
+        completed=q.filter_by(status=TaskStatus.COMPLETED).count(),
+    )
+
+
+@router.post("", response_model=TaskOut, status_code=201)
+def create_task(
+    payload: TaskCreate,
+    db: Session = Depends(get_db),
+    # 仅业务经办人可创建任务
+    user: User = Depends(require_role(Role.OPERATOR)),
+):
+    if db.query(models.ReviewTask).filter_by(task_code=payload.task_code).first():
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="任务编号已存在")
+
+    task = models.ReviewTask(
+        task_code=payload.task_code,
+        borrower=payload.borrower,
+        drawdown_currency=payload.drawdown_currency,
+        drawdown_amount=payload.drawdown_amount,
+        submitted_by=user.id,
+    )
+    for d in payload.documents:
+        task.documents.append(
+            models.Document(doc_code=d.doc_code, type_code=d.type_code, fields=d.fields)
+        )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    return TaskOut(
+        id=task.id, task_code=task.task_code, borrower=task.borrower,
+        drawdown_currency=task.drawdown_currency,
+        drawdown_amount=float(task.drawdown_amount), status=task.status.value,
+    )
+
+
+@router.get("", response_model=list[TaskOut])
+def list_tasks(
+    mine: bool = False,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    q = db.query(models.ReviewTask)
+    # mine=true：仅返回当前经办人提交的任务（工作台 tab 筛选用）
+    if mine:
+        q = q.filter_by(submitted_by=user.id)
+    tasks = q.order_by(models.ReviewTask.id.desc()).all()
+    return [
+        TaskOut(
+            id=t.id, task_code=t.task_code, borrower=t.borrower,
+            drawdown_currency=t.drawdown_currency,
+            drawdown_amount=float(t.drawdown_amount), status=t.status.value,
+        )
+        for t in tasks
+    ]
+
+
+def _get_task(db: Session, task_code: str) -> models.ReviewTask:
+    task = db.query(models.ReviewTask).filter_by(task_code=task_code).first()
+    if not task:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="任务不存在")
+    return task
+
+
+def _handoff_meta(task: models.ReviewTask, rule_id: str) -> dict | None:
+    """按 rule_id 取专项审核项（规则引擎 [专项] 移交）的元数据，用于首次处置时补建记录。"""
+    from ..rule_engine import run_all
+    from ..rule_engine.rules import HANDOFF
+    for r in run_all(task.documents):
+        if r.rule_id == rule_id and r.status.value == "skip" and (r.why or "").startswith(HANDOFF):
+            return {
+                "rule_id": r.rule_id, "rule_name": r.rule_name, "dimension": r.dimension,
+                "why": (r.why or "").removeprefix(HANDOFF).strip(), "suggestion": r.suggestion or "",
+            }
+    return None
+
+
+@router.get("/{task_code}", response_model=TaskDetail)
+def get_task_detail(
+    task_code: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+):
+    task = _get_task(db, task_code)
+    counts = {"pass": 0, "fail": 0, "warn": 0}
+    for r in task.results:
+        key = r.status.value if hasattr(r.status, "value") else str(r.status)
+        if key in counts:
+            counts[key] += 1
+    return TaskDetail(
+        id=task.id, task_code=task.task_code, borrower=task.borrower,
+        drawdown_currency=task.drawdown_currency,
+        drawdown_amount=float(task.drawdown_amount), status=task.status.value,
+        documents=[
+            {"id": d.id, "doc_code": d.doc_code,
+             "type_code": d.type_code.value if hasattr(d.type_code, "value") else str(d.type_code),
+             "fields": d.fields}
+            for d in task.documents
+        ],
+        result_counts=counts,
+    )
+
+
+@router.post("/{task_code}/run", response_model=RunSummary)
+def run_checks(
+    task_code: str,
+    db: Session = Depends(get_db),
+    # 审核人员触发核对
+    user: User = Depends(require_role(Role.REVIEWER)),
+):
+    task = _get_task(db, task_code)
+
+    # 清空历史结果后重跑（幂等）
+    db.query(models.CheckResult).filter_by(task_id=task.id).delete()
+
+    results = run_all(task.documents)
+    persisted = []
+    for r in results:
+        if r.status.value == "skip":
+            continue  # 不落库 skip，仅保留实际判定
+        row = models.CheckResult(
+            task_id=task.id, rule_id=r.rule_id, rule_name=r.rule_name,
+            dimension=r.dimension, status=r.status.value,
+            why=r.why, suggestion=r.suggestion, detail=r.detail,
+        )
+        db.add(row)
+        persisted.append(r)
+
+    task.status = models.TaskStatus.REVIEWING
+    db.commit()
+
+    return RunSummary(
+        task_code=task_code,
+        counts=summarize(results),
+        results=[
+            CheckResultOut(
+                rule_id=r.rule_id, rule_name=r.rule_name, dimension=r.dimension,
+                status=r.status.value, why=r.why, suggestion=r.suggestion, detail=r.detail,
+            )
+            for r in persisted
+        ],
+    )
+
+
+@router.post("/{task_code}/return", response_model=TaskOut)
+def return_for_supplement(
+    task_code: str,
+    payload: StatusAction,
+    db: Session = Depends(get_db),
+    # 审核人退回，催促经办人补件
+    user: User = Depends(require_role(Role.REVIEWER)),
+):
+    task = _get_task(db, task_code)
+    task.status = models.TaskStatus.NEED_SUPPLEMENT
+    db.commit()
+    db.refresh(task)
+    return TaskOut(
+        id=task.id, task_code=task.task_code, borrower=task.borrower,
+        drawdown_currency=task.drawdown_currency,
+        drawdown_amount=float(task.drawdown_amount), status=task.status.value,
+    )
+
+
+@router.post("/{task_code}/complete", response_model=TaskOut)
+def complete_task(
+    task_code: str,
+    payload: StatusAction,
+    db: Session = Depends(get_db),
+    # 审核人确认通过，归档
+    user: User = Depends(require_role(Role.REVIEWER)),
+):
+    task = _get_task(db, task_code)
+    task.status = models.TaskStatus.COMPLETED
+    db.commit()
+    db.refresh(task)
+    return TaskOut(
+        id=task.id, task_code=task.task_code, borrower=task.borrower,
+        drawdown_currency=task.drawdown_currency,
+        drawdown_amount=float(task.drawdown_amount), status=task.status.value,
+    )
+
+
+# ======================= 智能审核 Agent =======================
+@router.post("/{task_code}/ai/start", response_model=AISession)
+def ai_start(
+    task_code: str,
+    db: Session = Depends(get_db),
+    # 智能审核由审核人员发起
+    user: User = Depends(require_role(Role.REVIEWER)),
+):
+    """启动 / 重跑智能处理：返回归集树、思考流与待处置项。
+
+    若该任务尚无规则结果，则先执行一次规则核对（后端完成），
+    再据此合成智能处理会话。真实环境此处会驱动 LLM/推理引擎流式输出。
+    """
+    task = _get_task(db, task_code)
+
+    # 无结果则先跑规则，保证思考流有内容
+    if not task.results:
+        db.query(models.CheckResult).filter_by(task_id=task.id).delete()
+        for r in run_all(task.documents):
+            if r.status.value == "skip":
+                continue
+            db.add(models.CheckResult(
+                task_id=task.id, rule_id=r.rule_id, rule_name=r.rule_name,
+                dimension=r.dimension, status=r.status.value,
+                why=r.why, suggestion=r.suggestion, detail=r.detail,
+            ))
+        task.status = models.TaskStatus.REVIEWING
+        db.commit()
+        db.refresh(task)
+
+    session = build_session(task)
+    return AISession(task_code=task_code, **session)
+
+
+@router.post("/{task_code}/ai/resolve", response_model=AIResolveOut)
+def ai_resolve(
+    task_code: str,
+    payload: AIResolveIn,
+    db: Session = Depends(get_db),
+    # 审核人对挂起项回复意见，智能处理方可继续
+    user: User = Depends(require_role(Role.REVIEWER)),
+):
+    """审核人处置某待处理项：
+      - accept：确认无实质影响 → 该项判定为 pass（保留原始差异留痕于 why）
+      - keep  ：保留异常 → 维持 fail
+      - ack   ：已知悉提示 → warn 保持不变
+    专项审核项（规则引擎移交、库中原本无记录）在首次处置时按审核人意见落库，
+    并同步到「规则审核结果」。返回处置后的最新计数，前端据此继续播放思考流。
+    """
+    task = _get_task(db, task_code)
+    row = (
+        db.query(models.CheckResult)
+        .filter_by(task_id=task.id, rule_id=payload.pending_id)
+        .first()
+    )
+    if not row:
+        # 可能是专项审核项（run_all 中以 [专项] SKIP 移交、未落库）——据实时规则元数据补建
+        meta = _handoff_meta(task, payload.pending_id)
+        if not meta:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="待处置项不存在")
+        row = models.CheckResult(
+            task_id=task.id, rule_id=meta["rule_id"], rule_name=meta["rule_name"],
+            dimension=meta["dimension"], status="warn",
+            why=f"【专项审核】{meta['why']}", suggestion=meta["suggestion"], detail=[],
+        )
+        db.add(row)
+
+    if payload.kind == "accept":
+        row.status = "pass"
+        note = f"【人工判定】审核人确认该处异常无实质影响，判定为通过。"
+        if payload.comment:
+            note += f" 审核意见：{payload.comment}"
+        row.why = note + f"（原始判定：{row.why}）"
+    # keep / ack 不改变 status，仅记录意见
+    elif payload.comment:
+        row.why = f"{row.why}【审核意见：{payload.comment}】"
+
+    db.commit()
+
+    # 最新计数
+    counts = {"pass": 0, "fail": 0, "warn": 0}
+    for r in task.results:
+        key = r.status.value if hasattr(r.status, "value") else str(r.status)
+        if key in counts:
+            counts[key] += 1
+
+    return AIResolveOut(
+        pending_id=payload.pending_id,
+        kind=payload.kind,
+        new_status=row.status if isinstance(row.status, str) else row.status.value,
+        counts=counts,
+    )
+
+
+@router.get("/{task_code}/results", response_model=list[CheckResultOut])
+def get_results(
+    task_code: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+):
+    task = _get_task(db, task_code)
+    rows = db.query(models.CheckResult).filter_by(task_id=task.id).all()
+    return [
+        CheckResultOut(
+            rule_id=r.rule_id, rule_name=r.rule_name, dimension=r.dimension,
+            status=r.status.value, why=r.why, suggestion=r.suggestion, detail=r.detail,
+        )
+        for r in rows
+    ]
