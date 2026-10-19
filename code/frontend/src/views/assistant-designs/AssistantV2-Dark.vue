@@ -1,1183 +1,879 @@
+<!--
+  AI 助手 V2：暗色专业版
+  参考：Lobe Chat 暗色主题 + 金融终端风格
+  特点：深蓝配色、护眼设计、专业感强
+-->
 <template>
-  <div class="assistant-v2 dark-theme">
-    <!-- 顶部栏 -->
-    <header class="app-header">
-      <div class="header-left">
-        <div class="logo">
-          <div class="logo-icon">
-            <el-icon><MagicStick /></el-icon>
-          </div>
-          <span class="logo-text">慧眼</span>
+  <div class="assistant-dark">
+    <!-- 左侧会话栏 -->
+    <aside class="sidebar-dark">
+      <div class="brand-dark">
+        <div class="brand-mark-dark">
+          <el-icon :size="26"><ChatDotRound /></el-icon>
         </div>
-        <el-divider direction="vertical" />
-        <el-select v-model="taskCode" placeholder="选择任务" clearable size="small" class="task-picker">
-          <el-option label="FOL LN-008 · 华为技术" value="FOL_LN_008" />
-          <el-option label="FOL LN-009 · 中兴通讯" value="FOL_LN_009" />
-        </el-select>
+        <div class="brand-info">
+          <div class="brand-title">慧眼</div>
+          <div class="brand-badge">智能助理</div>
+        </div>
       </div>
-      <div class="header-right">
-        <el-button text size="small">审核员</el-button>
-        <el-button text size="small" :icon="ArrowLeft" @click="$router.push('/')">返回</el-button>
+
+      <el-button type="primary" class="new-btn-dark" @click="handleNewChat">
+        <el-icon><Plus /></el-icon>
+        新建会话
+      </el-button>
+
+      <div class="sessions-dark">
+        <div
+          v-for="s in sessions"
+          :key="s.id"
+          :class="['session-dark', { active: currentId === s.id }]"
+          @click="currentId = s.id"
+        >
+          <div class="session-dot"></div>
+          <div class="session-info">
+            <div class="session-name">{{ s.title }}</div>
+            <div class="session-time">{{ formatTime(s.updatedAt) }}</div>
+          </div>
+        </div>
       </div>
-    </header>
 
-    <!-- 主容器 -->
-    <div class="app-container">
-      <!-- 左侧：会话 -->
-      <aside class="sessions-panel">
-        <div class="panel-header">
-          <el-button type="primary" :icon="Plus" size="small" class="new-btn">新会话</el-button>
+      <div class="sidebar-foot">
+        <div class="user-card-dark">
+          <el-avatar :size="36">{{ profile.name[0] }}</el-avatar>
+          <span class="user-label">{{ profile.name }}</span>
         </div>
+      </div>
+    </aside>
 
-        <div class="sessions-list">
-          <div class="session-card active">
-            <div class="session-indicator"></div>
-            <div class="session-content">
-              <div class="session-title">单据LN-008审核</div>
-              <div class="session-info">
-                <span>3 条</span>
-                <span class="dot">·</span>
-                <span>2 分钟前</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="session-card">
-            <div class="session-indicator"></div>
-            <div class="session-content">
-              <div class="session-title">制裁名单核查</div>
-              <div class="session-info">
-                <span>5 条</span>
-                <span class="dot">·</span>
-                <span>1 小时前</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="session-card">
-            <div class="session-indicator"></div>
-            <div class="session-content">
-              <div class="session-title">汇率核验任务</div>
-              <div class="session-info">
-                <span>12 条</span>
-                <span class="dot">·</span>
-                <span>昨天</span>
-              </div>
-            </div>
-          </div>
+    <!-- 主对话区 -->
+    <main class="main-dark">
+      <header class="header-dark">
+        <div class="header-left">
+          <h1 class="chat-label">{{ currentSession?.title || '新对话' }}</h1>
+          <el-select v-model="taskCode" placeholder="选择任务" size="small" class="task-select-dark">
+            <el-option v-for="t in tasks" :key="t.code" :label="t.code" :value="t.code" />
+          </el-select>
         </div>
-
-        <div class="panel-footer">
-          <div class="status-indicator">
-            <span class="status-light active"></span>
-            <span class="status-text">GPT-4 在线</span>
-          </div>
+        <div class="header-right">
+          <el-button text @click="showSettings = true">
+            <el-icon color="#94a3b8"><Setting /></el-icon>
+          </el-button>
         </div>
-      </aside>
+      </header>
 
-      <!-- 中间：对话 -->
-      <main class="chat-panel">
-        <!-- 欢迎屏幕 -->
-        <div class="welcome-view">
-          <div class="welcome-header">
-            <div class="welcome-avatar">
-              <el-icon><MagicStick /></el-icon>
-            </div>
-            <h1 class="welcome-title">让审核工作更快一步</h1>
-            <p class="welcome-subtitle">解析单据、验证规则、检索证据，为你提供专业的审核辅助</p>
+      <div class="chat-area-dark" ref="chatRef">
+        <!-- 欢迎界面 -->
+        <div v-if="!messages.length" class="welcome-dark">
+          <div class="welcome-avatar">
+            <el-icon :size="72" color="#3b82f6"><Histogram /></el-icon>
           </div>
-
+          <h2 class="welcome-h2">让审核工作更快一步</h2>
+          <p class="welcome-p">解析单据、验证规则、检索证据</p>
           <div class="quick-prompts">
-            <div class="prompt-chip">
-              <el-icon><DocumentChecked /></el-icon>
-              <span>梳理风险点</span>
-            </div>
-            <div class="prompt-chip">
-              <el-icon><Search /></el-icon>
-              <span>解释不通过项</span>
-            </div>
-            <div class="prompt-chip">
-              <el-icon><FolderOpened /></el-icon>
-              <span>核对材料字段</span>
-            </div>
-          </div>
-
-          <div class="features-grid">
-            <div class="feature-card">
-              <el-icon class="feature-icon"><Reading /></el-icon>
-              <div class="feature-title">知识库检索</div>
-              <div class="feature-desc">查找业务规则、法规条款和历史案例</div>
-            </div>
-            <div class="feature-card">
-              <el-icon class="feature-icon"><DataLine /></el-icon>
-              <div class="feature-title">智能分析</div>
-              <div class="feature-desc">对比单据字段，识别不一致和风险</div>
-            </div>
-            <div class="feature-card">
-              <el-icon class="feature-icon"><DocumentCopy /></el-icon>
-              <div class="feature-title">证据引用</div>
-              <div class="feature-desc">每个结论都标注材料来源和页码</div>
+            <div v-for="(p, i) in prompts" :key="i" class="quick-item" @click="sendQuick(p.text)">
+              <span class="quick-emoji">{{ p.emoji }}</span>
+              <span class="quick-label">{{ p.label }}</span>
             </div>
           </div>
         </div>
 
-        <!-- 消息示例 (v-if="false" 表示默认隐藏,实际使用时根据数据渲染) -->
-        <div v-if="false" class="messages-flow">
-          <!-- 用户消息 -->
-          <div class="message user-msg">
-            <div class="msg-content">
-              <div class="msg-text">为什么单据 LN-008 被驳回？</div>
+        <!-- 消息列表 -->
+        <div v-else class="msg-list-dark">
+          <div v-for="m in messages" :key="m.id" :class="['msg-row-dark', `msg-${m.role}`]">
+            <div v-if="m.role === 'user'" class="user-msg-dark">
+              {{ m.content }}
             </div>
-            <div class="msg-avatar user">我</div>
-          </div>
 
-          <!-- 助手消息 -->
-          <div class="message assistant-msg">
-            <div class="msg-avatar assistant">
-              <el-icon><MagicStick /></el-icon>
-            </div>
-            <div class="msg-content">
-              <!-- 执行轨迹 -->
-              <div class="execution-trace">
-                <div class="trace-header" @click="traceExpanded = !traceExpanded">
-                  <el-icon class="trace-icon"><Loading class="spin" /></el-icon>
-                  <div class="trace-title">
-                    <div class="trace-main">执行中</div>
-                    <div class="trace-sub">读取材料 → 检索知识库 → 生成建议</div>
-                  </div>
-                  <el-icon class="trace-toggle" :class="{ expanded: traceExpanded }"><ArrowRight /></el-icon>
-                </div>
-                <div v-show="traceExpanded" class="trace-body">
-                  <div class="trace-step done">
-                    <el-icon class="step-status"><CircleCheck /></el-icon>
-                    <div class="step-text">
-                      <div class="step-name">读取任务材料</div>
-                      <div class="step-detail">已加载 5 份单据</div>
-                    </div>
-                  </div>
-                  <div class="trace-step running">
-                    <el-icon class="step-status spin"><Loading /></el-icon>
-                    <div class="step-text">
-                      <div class="step-name">检索知识库</div>
-                      <div class="step-detail">找到 3 条证据</div>
-                    </div>
-                  </div>
-                  <div class="trace-step pending">
-                    <div class="step-status"></div>
-                    <div class="step-text">
-                      <div class="step-name">组织审核建议</div>
-                    </div>
-                  </div>
-                </div>
+            <div v-else class="asst-msg-dark">
+              <div class="asst-head">
+                <el-avatar :size="36" class="asst-avatar">
+                  <el-icon><ChatDotRound /></el-icon>
+                </el-avatar>
+                <span class="asst-label">慧眼助手</span>
+                <el-tag v-if="m.streaming" size="small" type="info" effect="dark">
+                  <el-icon class="is-loading"><Loading /></el-icon>
+                  思考中
+                </el-tag>
               </div>
 
-              <!-- 回答内容 -->
-              <div class="msg-text">
-                <p>单据 LN-008 被驳回的主要原因：</p>
-                <ol>
-                  <li><strong>贷款用途不符（R001）</strong><br>提款申请书用途为"设备采购"，但合同约定为"项目建设"</li>
-                  <li><strong>金额超限（R003）</strong><br>申请金额 500 万美元，超过单次上限 300 万美元</li>
-                </ol>
-              </div>
+              <!-- 步骤轨迹 -->
+              <el-collapse v-if="m.steps?.length" class="steps-dark">
+                <el-collapse-item name="1">
+                  <template #title>
+                    <el-icon><Operation /></el-icon>
+                    <span>执行轨迹（{{ m.steps.length }} 步）</span>
+                  </template>
+                  <div class="step-track">
+                    <div v-for="(st, idx) in m.steps" :key="idx" :class="['step-row', `step-${st.status}`]">
+                      <el-icon v-if="st.status === 'completed'" color="#10b981"><CircleCheckFilled /></el-icon>
+                      <el-icon v-else-if="st.status === 'running'" class="is-loading" color="#3b82f6"><Loading /></el-icon>
+                      <el-icon v-else color="#475569"><CircleFilled /></el-icon>
+                      <span class="step-desc">{{ st.description }}</span>
+                      <span v-if="st.result" class="step-res">{{ st.result }}</span>
+                    </div>
+                  </div>
+                </el-collapse-item>
+              </el-collapse>
 
-              <!-- 引用 -->
-              <div class="references">
-                <div class="ref-label">证据来源</div>
-                <div class="ref-tags">
-                  <span class="ref-tag rule">R001 贷款用途</span>
-                  <span class="ref-tag doc">提款申请书 · p.3</span>
-                  <span class="ref-tag kb">业务规则 · 89%</span>
+              <!-- 内容 -->
+              <div class="asst-content" v-html="renderMd(m.content)"></div>
+
+              <!-- 证据 -->
+              <div v-if="m.citations?.length" class="citations-dark">
+                <div class="cite-label">证据来源</div>
+                <div class="cite-tags">
+                  <el-popover v-for="(c, i) in m.citations" :key="i" placement="top" :width="300">
+                    <template #reference>
+                      <el-tag size="small" class="cite-tag-dark">
+                        {{ c.docName }} · p.{{ c.page }}
+                        <span class="cite-score">{{ Math.round(c.score * 100) }}%</span>
+                      </el-tag>
+                    </template>
+                    <div class="cite-preview-dark">
+                      <div class="cite-preview-title">{{ c.docName }}</div>
+                      <div class="cite-preview-text">{{ c.content.slice(0, 80) }}...</div>
+                    </div>
+                  </el-popover>
                 </div>
               </div>
 
               <!-- 操作 -->
-              <div class="msg-actions">
-                <el-button text size="small" :icon="CopyDocument">复制</el-button>
-                <el-button text size="small" :icon="Refresh">重新生成</el-button>
+              <div class="asst-actions">
+                <el-button text size="small" @click="copy(m.content)">
+                  <el-icon><DocumentCopy /></el-icon>
+                  复制
+                </el-button>
+                <el-button text size="small">
+                  <el-icon><RefreshRight /></el-icon>
+                  重新生成
+                </el-button>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- 输入框 -->
-        <div class="chat-input">
-          <div class="input-wrapper">
-            <el-input
-              v-model="userInput"
-              type="textarea"
-              :rows="1"
-              :autosize="{ minRows: 1, maxRows: 4 }"
-              placeholder="描述你想核对的规则、材料或风险..."
-              class="input-field"
-            />
-            <el-button type="primary" circle :icon="Promotion" class="send-btn"></el-button>
-          </div>
-          <div class="input-footer">
-            <span class="input-hint">受控只读 · 结论由审核人员确认</span>
-          </div>
-        </div>
-      </main>
+        <!-- 滚动按钮 -->
+        <transition name="el-fade-in">
+          <el-button v-show="!atBottom" class="scroll-btn-dark" circle @click="scrollDown">
+            <el-icon><ArrowDown /></el-icon>
+          </el-button>
+        </transition>
+      </div>
 
-      <!-- 右侧：技能 -->
-      <aside class="skills-panel">
-        <div class="panel-header">
-          <span class="panel-title">审核技能</span>
-          <el-button text size="small" @click="storeVisible = true">全部</el-button>
-        </div>
+      <!-- 输入框 -->
+      <div class="input-zone-dark">
+        <el-input
+          v-model="inputVal"
+          type="textarea"
+          :autosize="{ minRows: 1, maxRows: 5 }"
+          placeholder="描述你想核对的规则..."
+          @keydown.enter.exact.prevent="send"
+          class="input-dark"
+        />
+        <el-button
+          type="primary"
+          :loading="generating"
+          :disabled="!inputVal.trim()"
+          @click="send"
+          class="send-dark"
+        >
+          <el-icon v-if="!generating"><Promotion /></el-icon>
+          发送
+        </el-button>
+      </div>
+    </main>
 
-        <div class="skills-group">
-          <div class="group-label">常用</div>
-          <div class="skill-item">
-            <div class="skill-badge">
-              <el-icon><Ship /></el-icon>
-            </div>
-            <div class="skill-text">
-              <div class="skill-name">提单验真</div>
-              <div class="skill-hint">核验提单关键信息</div>
-            </div>
-            <el-button size="small" type="primary" round>运行</el-button>
-          </div>
+    <!-- 右侧技能栏 -->
+    <aside class="skills-dark">
+      <div class="skills-head">
+        <h3>审核技能</h3>
+        <el-button text size="small" @click="showAll = !showAll">
+          {{ showAll ? '收起' : '全部' }}
+        </el-button>
+      </div>
 
-          <div class="skill-item">
-            <div class="skill-badge">
-              <el-icon><Lock /></el-icon>
-            </div>
-            <div class="skill-text">
-              <div class="skill-name">制裁筛查</div>
-              <div class="skill-hint">检查制裁名单</div>
-            </div>
-            <el-button size="small" type="primary" round>运行</el-button>
+      <div class="skills-scroll">
+        <div v-for="sk in (showAll ? skills : skills.slice(0, 3))" :key="sk.id" class="skill-dark" @click="useSk(sk)">
+          <div class="skill-cover-dark" :style="{ background: sk.grad }">
+            <div class="skill-emoji">{{ sk.emoji }}</div>
           </div>
-
-          <div class="skill-item">
-            <div class="skill-badge">
-              <el-icon><Coin /></el-icon>
-            </div>
-            <div class="skill-text">
-              <div class="skill-name">汇率换算</div>
-              <div class="skill-hint">核对币种折算</div>
-            </div>
-            <el-button size="small" type="primary" round>运行</el-button>
-          </div>
-        </div>
-
-        <div class="skills-group">
-          <div class="group-label">本周热门</div>
-          <div class="hot-skill">
-            <span class="hot-name">汇率换算</span>
-            <span class="hot-count">89 次</span>
-          </div>
-          <div class="hot-skill">
-            <span class="hot-name">节假日核验</span>
-            <span class="hot-count">67 次</span>
-          </div>
-          <div class="hot-skill">
-            <span class="hot-name">提单验真</span>
-            <span class="hot-count">54 次</span>
-          </div>
-        </div>
-      </aside>
-    </div>
-
-    <!-- 技能商店 -->
-    <el-dialog v-model="storeVisible" title="审核技能商店" fullscreen class="skill-store-dialog">
-      <div class="store-container">
-        <div class="store-toolbar">
-          <el-input :prefix-icon="Search" placeholder="搜索技能..." class="store-search" />
-          <el-radio-group v-model="category" class="store-filters">
-            <el-radio-button label="all">全部</el-radio-button>
-            <el-radio-button label="doc">单据核验</el-radio-button>
-            <el-radio-button label="risk">风险识别</el-radio-button>
-            <el-radio-button label="law">法规检索</el-radio-button>
-            <el-radio-button label="data">数据处理</el-radio-button>
-          </el-radio-group>
-        </div>
-
-        <div class="store-grid">
-          <div class="store-card">
-            <div class="card-cover blue">
-              <el-icon class="cover-icon"><Ship /></el-icon>
-              <div class="cover-badge">推荐</div>
-            </div>
-            <div class="card-body">
-              <div class="card-header">
-                <h3 class="card-title">提单验真</h3>
-                <el-tag size="small" effect="plain">#单据核验</el-tag>
-              </div>
-              <p class="card-desc">核验海运提单的真实性，检测伪造或篡改</p>
-              <div class="card-meta">
-                <span class="meta-item"><el-icon><TrendCharts /></el-icon> 本周 67 次</span>
-              </div>
-              <div class="card-actions">
-                <el-button text size="small">详情</el-button>
-                <el-button type="primary" size="small">立即运行</el-button>
-              </div>
-            </div>
-          </div>
-
-          <div class="store-card">
-            <div class="card-cover orange">
-              <el-icon class="cover-icon"><Lock /></el-icon>
-              <div class="cover-badge new">新</div>
-            </div>
-            <div class="card-body">
-              <div class="card-header">
-                <h3 class="card-title">制裁名单筛查</h3>
-                <el-tag size="small" effect="plain" type="warning">#风险识别</el-tag>
-              </div>
-              <p class="card-desc">检查借款人/担保人是否在国际制裁名单中</p>
-              <div class="card-meta">
-                <span class="meta-item"><el-badge value="新" type="success" /></span>
-              </div>
-              <div class="card-actions">
-                <el-button text size="small">详情</el-button>
-                <el-button type="primary" size="small">立即运行</el-button>
-              </div>
-            </div>
-          </div>
-
-          <div class="store-card">
-            <div class="card-cover purple">
-              <el-icon class="cover-icon"><Coin /></el-icon>
-              <div class="cover-badge hot">热门</div>
-            </div>
-            <div class="card-body">
-              <div class="card-header">
-                <h3 class="card-title">汇率换算</h3>
-                <el-tag size="small" effect="plain" type="info">#数据处理</el-tag>
-              </div>
-              <p class="card-desc">自动获取实时汇率，计算多币种金额</p>
-              <div class="card-meta">
-                <span class="meta-item"><el-icon><TrendCharts /></el-icon> 本周 89 次</span>
-              </div>
-              <div class="card-actions">
-                <el-button text size="small">详情</el-button>
-                <el-button type="primary" size="small">立即运行</el-button>
-              </div>
-            </div>
+          <div class="skill-detail">
+            <h4 class="skill-h4">{{ sk.name }}</h4>
+            <p class="skill-p">{{ sk.desc }}</p>
+            <el-tag size="small" type="info" effect="dark">🔥 {{ sk.use }}次</el-tag>
           </div>
         </div>
       </div>
-    </el-dialog>
+
+      <div class="skills-hot">
+        <div class="hot-title">热门技能</div>
+        <div class="hot-list">
+          <div v-for="h in hotSkills" :key="h" class="hot-item" @click="useSkById(h)">
+            {{ skills.find(s => s.id === h)?.emoji }} {{ skills.find(s => s.id === h)?.name }}
+          </div>
+        </div>
+      </div>
+    </aside>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, nextTick } from 'vue'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import {
-  ArrowLeft, ArrowRight, CircleCheck, Coin, CopyDocument, DataLine,
-  DocumentChecked, DocumentCopy, FolderOpened, Loading, Lock, MagicStick,
-  Plus, Promotion, Reading, Refresh, Search, Ship, TrendCharts
+  ChatDotRound, Plus, Setting, Histogram, Loading, Operation,
+  CircleCheckFilled, CircleFilled, DocumentCopy, RefreshRight,
+  ArrowDown, Promotion
 } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 
-const router = useRouter()
+interface Msg {
+  id: number
+  role: 'user' | 'assistant'
+  content: string
+  streaming?: boolean
+  steps?: Array<{ description: string; status: string; result?: string }>
+  citations?: Array<{ docName: string; page: number; score: number; content: string }>
+}
+
+const profile = ref({ name: '李四' })
+const sessions = ref([
+  { id: 1, title: 'LN0823', updatedAt: '2026-10-20T10:30:00' },
+  { id: 2, title: '制裁筛查', updatedAt: '2026-10-19T15:00:00' }
+])
+const currentId = ref(1)
+const currentSession = computed(() => sessions.value.find(s => s.id === currentId.value))
+
+const messages = ref<Msg[]>([])
+const inputVal = ref('')
+const generating = ref(false)
+const atBottom = ref(true)
+const showSettings = ref(false)
+const showAll = ref(false)
+
 const taskCode = ref('')
-const userInput = ref('')
-const traceExpanded = ref(true)
-const storeVisible = ref(false)
-const category = ref('all')
+const tasks = ref([{ code: 'LN0823', borrower: '某公司' }])
+
+const prompts = [
+  { emoji: '📋', label: '梳理风险', text: '梳理当前任务的主要风险点' },
+  { emoji: '🔍', label: '驳回原因', text: '为什么被驳回？' },
+  { emoji: '📄', label: '文件核对', text: '检查必备文件是否齐全' },
+  { emoji: '⚖️', label: '法规检索', text: '这种用途符合哪些法规？' }
+]
+
+const skills = ref([
+  { id: 'bill', name: '提单验真', desc: '核验海运提单真实性', emoji: '🚢', grad: 'linear-gradient(135deg, #3b82f6, #1e40af)', use: 67 },
+  { id: 'sanc', name: '制裁筛查', desc: '检查制裁名单', emoji: '🔒', grad: 'linear-gradient(135deg, #f59e0b, #d97706)', use: 54 },
+  { id: 'exch', name: '汇率换算', desc: '验证汇率合理性', emoji: '💱', grad: 'linear-gradient(135deg, #10b981, #059669)', use: 43 },
+  { id: 'holi', name: '节假日核查', desc: '检查日期冲突', emoji: '📅', grad: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', use: 31 }
+])
+
+const hotSkills = ref(['bill', 'sanc', 'exch'])
+
+const chatRef = ref<HTMLElement>()
+
+function renderMd(text: string): string {
+  const html = marked.parse(text) as string
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: ['p', 'strong', 'em', 'ul', 'ol', 'li', 'code', 'pre', 'br']
+  })
+}
+
+function formatTime(iso: string): string {
+  const date = new Date(iso)
+  return `${date.getMonth() + 1}/${date.getDate()}`
+}
+
+function handleNewChat() {
+  const newId = Math.max(...sessions.value.map(s => s.id)) + 1
+  sessions.value.unshift({ id: newId, title: '新对话', updatedAt: new Date().toISOString() })
+  currentId.value = newId
+  messages.value = []
+}
+
+function send() {
+  if (!inputVal.value.trim() || generating.value) return
+
+  messages.value.push({ id: Date.now(), role: 'user', content: inputVal.value.trim() })
+  inputVal.value = ''
+
+  nextTick(scrollDown)
+
+  // 模拟回复
+  generating.value = true
+  const asst: Msg = {
+    id: Date.now() + 1,
+    role: 'assistant',
+    content: '',
+    streaming: true,
+    steps: [
+      { description: '读取材料', status: 'completed', result: '3份' },
+      { description: '检索知识库', status: 'running' }
+    ]
+  }
+  messages.value.push(asst)
+
+  setTimeout(() => {
+    asst.steps![1].status = 'completed'
+    asst.steps![1].result = '2条'
+    asst.streaming = false
+    asst.content = '根据规则，驳回原因：\n\n1. 借款用途不明确\n2. 授信函缺失'
+    asst.citations = [
+      { docName: '比对要求.xlsx', page: 1, score: 0.89, content: '借款用途必须详细说明' }
+    ]
+    generating.value = false
+  }, 2000)
+}
+
+function sendQuick(text: string) {
+  inputVal.value = text
+  send()
+}
+
+function copy(text: string) {
+  navigator.clipboard.writeText(text)
+  ElMessage.success('已复制')
+}
+
+function useSk(sk: any) {
+  inputVal.value = `使用「${sk.name}」`
+  send()
+}
+
+function useSkById(id: string) {
+  const sk = skills.value.find(s => s.id === id)
+  if (sk) useSk(sk)
+}
+
+function scrollDown() {
+  nextTick(() => {
+    if (chatRef.value) chatRef.value.scrollTop = chatRef.value.scrollHeight
+  })
+}
 </script>
 
 <style scoped>
-/* V2 版本：暗色专业风格 - 金融终端感 */
-.assistant-v2.dark-theme {
+/* 暗色全局 */
+.assistant-dark {
+  display: grid;
+  grid-template-columns: 260px 1fr 300px;
   height: 100vh;
   background: #0f172a;
   color: #cbd5e1;
-  display: flex;
-  flex-direction: column;
 }
 
-/* 顶部栏 */
-.app-header {
+/* 左侧栏 */
+.sidebar-dark {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #1e293b;
+  background: #0a0f1e;
+}
+
+.brand-dark {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 16px;
+  border-bottom: 1px solid #1e293b;
+}
+
+.brand-mark-dark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #3b82f6, #1e40af);
+  color: white;
+}
+
+.brand-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.brand-badge {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.new-btn-dark {
+  margin: 16px;
+  width: calc(100% - 32px);
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  border: none;
+}
+
+.sessions-dark {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px;
+}
+
+.session-dark {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .2s;
+}
+
+.session-dark:hover {
+  background: #1e293b;
+}
+
+.session-dark.active {
+  background: #1e3a5f;
+}
+
+.session-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3b82f6;
+}
+
+.session-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.session-time {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.sidebar-foot {
+  padding: 16px;
+  border-top: 1px solid #1e293b;
+}
+
+.user-card-dark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.user-card-dark:hover {
+  background: #1e293b;
+}
+
+.user-label {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* 主区 */
+.main-dark {
+  display: flex;
+  flex-direction: column;
+  background: #0f172a;
+}
+
+.header-dark {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 20px;
-  background: #1e293b;
-  border-bottom: 1px solid #334155;
+  padding: 16px 24px;
+  border-bottom: 1px solid #1e293b;
+  background: #0a0f1e;
 }
 
-.header-left, .header-right {
+.header-left {
   display: flex;
   align-items: center;
   gap: 16px;
 }
 
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.logo-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  background: linear-gradient(135deg, #3b82f6, #1e40af);
-  color: white;
-  display: grid;
-  place-items: center;
+.chat-label {
+  margin: 0;
   font-size: 18px;
-}
-
-.logo-text {
-  font-size: 17px;
-  font-weight: 700;
-  color: #f1f5f9;
-  letter-spacing: 1px;
-}
-
-.task-picker {
-  width: 220px;
-}
-
-/* 主容器 */
-.app-container {
-  display: grid;
-  grid-template-columns: 240px 1fr 280px;
-  flex: 1;
-  min-height: 0;
-  gap: 1px;
-  background: #1e293b;
-}
-
-/* 左侧会话面板 */
-.sessions-panel {
-  background: #1e293b;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.panel-header {
-  padding: 16px;
-  border-bottom: 1px solid #334155;
-}
-
-.new-btn {
-  width: 100%;
-}
-
-.sessions-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px;
-}
-
-.session-card {
-  display: flex;
-  gap: 10px;
-  padding: 12px;
-  margin-bottom: 6px;
-  border-radius: 8px;
-  background: #0f172a;
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.session-card:hover {
-  background: #1e293b;
-  border-color: #475569;
-}
-
-.session-card.active {
-  background: #1e3a8a;
-  border-color: #3b82f6;
-}
-
-.session-indicator {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: #64748b;
-  margin-top: 8px;
-  flex-shrink: 0;
-}
-
-.session-card.active .session-indicator {
-  background: #3b82f6;
-  box-shadow: 0 0 8px #3b82f6;
-}
-
-.session-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.session-title {
-  font-size: 13px;
   font-weight: 600;
-  color: #e2e8f0;
-  margin-bottom: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: #f1f5f9;
 }
 
-.session-info {
-  font-size: 11px;
-  color: #64748b;
+.task-select-dark {
+  width: 180px;
 }
 
-.dot {
-  margin: 0 4px;
-}
-
-.panel-footer {
-  padding: 12px 16px;
-  border-top: 1px solid #334155;
-}
-
-.status-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: #64748b;
-}
-
-.status-light {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #64748b;
-}
-
-.status-light.active {
-  background: #10b981;
-  box-shadow: 0 0 8px #10b981;
-}
-
-/* 中间对话面板 */
-.chat-panel {
-  background: #0f172a;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.welcome-view {
+.chat-area-dark {
   flex: 1;
   overflow-y: auto;
-  padding: 60px 40px;
+  padding: 24px;
+  position: relative;
+}
+
+.welcome-dark {
   display: flex;
   flex-direction: column;
   align-items: center;
-}
-
-.welcome-header {
-  text-align: center;
-  max-width: 600px;
-  margin-bottom: 40px;
+  padding: 80px 24px;
 }
 
 .welcome-avatar {
-  width: 72px;
-  height: 72px;
-  margin: 0 auto 24px;
-  border-radius: 16px;
-  background: linear-gradient(135deg, #3b82f6, #1e40af);
-  display: grid;
-  place-items: center;
-  font-size: 36px;
-  color: white;
-  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3);
+  margin-bottom: 24px;
+  padding: 20px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
 }
 
-.welcome-title {
-  font-size: 32px;
+.welcome-h2 {
+  margin: 0 0 12px;
+  font-size: 28px;
   font-weight: 700;
   color: #f1f5f9;
-  margin: 0 0 16px;
-  letter-spacing: 0.5px;
 }
 
-.welcome-subtitle {
-  font-size: 15px;
+.welcome-p {
+  margin: 0 0 40px;
+  font-size: 16px;
   color: #94a3b8;
-  line-height: 1.6;
-  margin: 0;
 }
 
 .quick-prompts {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 12px;
-  margin-bottom: 40px;
+  max-width: 600px;
 }
 
-.prompt-chip {
+.quick-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border-radius: 20px;
-  background: #1e293b;
-  border: 1px solid #334155;
-  color: #cbd5e1;
-  font-size: 13px;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  background: #0a0f1e;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all .2s;
 }
 
-.prompt-chip:hover {
-  background: #334155;
+.quick-item:hover {
   border-color: #3b82f6;
+  background: #1e3a8a;
   transform: translateY(-2px);
 }
 
-.features-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-  max-width: 800px;
-  width: 100%;
+.quick-emoji {
+  font-size: 24px;
 }
 
-.feature-card {
-  padding: 24px;
-  border-radius: 12px;
-  background: #1e293b;
-  border: 1px solid #334155;
-  text-align: center;
-  transition: all 0.3s;
+.quick-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #e2e8f0;
 }
 
-.feature-card:hover {
-  border-color: #3b82f6;
-  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.15);
-  transform: translateY(-4px);
-}
-
-.feature-icon {
-  font-size: 32px;
-  color: #3b82f6;
-  margin-bottom: 16px;
-}
-
-.feature-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #f1f5f9;
-  margin-bottom: 8px;
-}
-
-.feature-desc {
-  font-size: 12px;
-  color: #64748b;
-  line-height: 1.5;
-}
-
-/* 消息流 */
-.messages-flow {
-  flex: 1;
-  overflow-y: auto;
-  padding: 24px;
-}
-
-.message {
+.msg-list-dark {
   display: flex;
-  gap: 12px;
-  margin-bottom: 24px;
-  max-width: 900px;
+  flex-direction: column;
+  gap: 20px;
 }
 
-.user-msg {
-  flex-direction: row-reverse;
-  margin-left: auto;
+.msg-row-dark {
+  display: flex;
 }
 
-.assistant-msg {
-  margin-right: auto;
+.msg-user {
+  justify-content: flex-end;
 }
 
-.msg-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  font-size: 12px;
-  font-weight: 600;
+.msg-assistant {
+  justify-content: flex-start;
 }
 
-.msg-avatar.user {
-  background: #1e3a8a;
-  color: #93c5fd;
+.user-msg-dark {
+  max-width: 70%;
+  padding: 12px 18px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
-.msg-avatar.assistant {
-  background: #1e293b;
-  color: #3b82f6;
-  font-size: 18px;
-  border: 1px solid #334155;
-}
-
-.msg-content {
-  flex: 1;
-  padding: 16px;
+.asst-msg-dark {
+  max-width: 85%;
+  padding: 18px;
+  border: 1px solid #1e293b;
   border-radius: 12px;
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: #0a0f1e;
 }
 
-.user-msg .msg-content {
-  background: #1e3a8a;
-  border-color: #1e40af;
+.asst-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
-.msg-text {
+.asst-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.steps-dark {
+  margin-bottom: 14px;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  background: #0f172a;
+}
+
+.step-track {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+}
+
+.step-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.step-desc {
+  flex: 1;
+  font-size: 13px;
+  color: #cbd5e1;
+}
+
+.step-res {
+  font-size: 12px;
+  color: #10b981;
+}
+
+.asst-content {
   font-size: 14px;
   line-height: 1.7;
   color: #cbd5e1;
 }
 
-.msg-text p {
+.asst-content :deep(p) {
   margin: 0 0 12px;
 }
 
-.msg-text ol, .msg-text ul {
-  margin: 0;
-  padding-left: 20px;
-}
-
-.msg-text li {
-  margin-bottom: 10px;
-}
-
-.msg-text strong {
-  color: #f1f5f9;
-}
-
-/* 执行轨迹 */
-.execution-trace {
-  margin-bottom: 16px;
-  border-radius: 8px;
-  background: #0f172a;
-  border: 1px solid #334155;
-  overflow: hidden;
-}
-
-.trace-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  cursor: pointer;
-}
-
-.trace-icon {
-  font-size: 20px;
+.asst-content :deep(code) {
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: #1e293b;
   color: #3b82f6;
 }
 
-.trace-title {
-  flex: 1;
+.citations-dark {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #1e293b;
 }
 
-.trace-main {
-  font-size: 13px;
-  font-weight: 600;
-  color: #e2e8f0;
-}
-
-.trace-sub {
-  font-size: 11px;
-  color: #64748b;
-  margin-top: 2px;
-}
-
-.trace-toggle {
-  font-size: 14px;
-  color: #64748b;
-  transition: transform 0.3s;
-}
-
-.trace-toggle.expanded {
-  transform: rotate(90deg);
-}
-
-.trace-body {
-  padding: 0 12px 12px;
-}
-
-.trace-step {
-  display: flex;
-  gap: 12px;
-  padding: 8px 0;
-}
-
-.step-status {
-  font-size: 14px;
-  color: #10b981;
-  margin-top: 2px;
-}
-
-.step-status.spin {
-  color: #3b82f6;
-}
-
-.trace-step.pending .step-status {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #475569;
-  border: 2px dashed #64748b;
-  margin-top: 6px;
-}
-
-.step-text {
-  flex: 1;
-}
-
-.step-name {
+.cite-label {
+  margin-bottom: 8px;
   font-size: 12px;
   font-weight: 600;
-  color: #cbd5e1;
-}
-
-.step-detail {
-  font-size: 11px;
   color: #64748b;
-  margin-top: 2px;
 }
 
-.spin {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-/* 引用 */
-.references {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid #334155;
-}
-
-.ref-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: #64748b;
-  margin-bottom: 8px;
-}
-
-.ref-tags {
+.cite-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
-.ref-tag {
-  padding: 4px 10px;
-  border-radius: 4px;
-  font-size: 11px;
-  border: 1px solid;
-}
-
-.ref-tag.rule {
-  background: rgba(59, 130, 246, 0.1);
-  border-color: #3b82f6;
-  color: #93c5fd;
-}
-
-.ref-tag.doc {
-  background: rgba(100, 116, 139, 0.1);
-  border-color: #64748b;
-  color: #94a3b8;
-}
-
-.ref-tag.kb {
-  background: rgba(16, 185, 129, 0.1);
-  border-color: #10b981;
-  color: #6ee7b7;
-}
-
-/* 操作 */
-.msg-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid #334155;
-}
-
-/* 输入框 */
-.chat-input {
-  padding: 16px 24px;
-  border-top: 1px solid #334155;
+.cite-tag-dark {
+  cursor: pointer;
   background: #1e293b;
+  border-color: #334155;
 }
 
-.input-wrapper {
-  display: flex;
-  gap: 12px;
-  align-items: flex-end;
-}
-
-.input-field {
-  flex: 1;
-}
-
-.send-btn {
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-}
-
-.input-footer {
-  margin-top: 8px;
-  text-align: center;
-}
-
-.input-hint {
-  font-size: 11px;
-  color: #475569;
-}
-
-/* 右侧技能面板 */
-.skills-panel {
-  background: #1e293b;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.panel-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: #e2e8f0;
-}
-
-.skills-group {
-  padding: 16px;
-  border-bottom: 1px solid #334155;
-}
-
-.group-label {
-  font-size: 11px;
+.cite-score {
+  margin-left: 4px;
+  color: #10b981;
   font-weight: 600;
-  color: #64748b;
-  margin-bottom: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
-.skill-item {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
+.cite-preview-dark {
   padding: 12px;
-  margin-bottom: 8px;
-  border-radius: 8px;
   background: #0f172a;
-  border: 1px solid #334155;
-  transition: all 0.2s;
-}
-
-.skill-item:hover {
-  border-color: #3b82f6;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
-}
-
-.skill-badge {
-  width: 36px;
-  height: 36px;
   border-radius: 8px;
-  background: #1e3a8a;
-  color: #3b82f6;
-  display: grid;
-  place-items: center;
-  font-size: 18px;
-  flex-shrink: 0;
 }
 
-.skill-text {
-  flex: 1;
-  min-width: 0;
-}
-
-.skill-name {
+.cite-preview-title {
+  margin-bottom: 8px;
   font-size: 13px;
   font-weight: 600;
   color: #e2e8f0;
-  margin-bottom: 2px;
 }
 
-.skill-hint {
-  font-size: 11px;
-  color: #64748b;
-  line-height: 1.3;
-}
-
-.hot-skill {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 12px;
-  margin-bottom: 6px;
-  border-radius: 6px;
-  background: #0f172a;
+.cite-preview-text {
   font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.6;
 }
 
-.hot-name {
+.asst-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #1e293b;
+}
+
+.scroll-btn-dark {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  background: #1e293b;
+  border-color: #334155;
+}
+
+.input-zone-dark {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid #1e293b;
+  background: #0a0f1e;
+}
+
+.input-dark {
+  flex: 1;
+}
+
+.input-dark :deep(.el-textarea__inner) {
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  padding: 14px 18px;
+  background: #0f172a;
   color: #cbd5e1;
 }
 
-.hot-count {
-  color: #f59e0b;
-  font-weight: 600;
+.send-dark {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  border: none;
 }
 
-/* 技能商店 */
-.skill-store-dialog :deep(.el-dialog__body) {
-  padding: 0;
-}
-
-.store-container {
-  padding: 24px;
-  background: #0f172a;
-  min-height: 100vh;
-}
-
-.store-toolbar {
+/* 右侧栏 */
+.skills-dark {
   display: flex;
-  gap: 16px;
-  margin-bottom: 24px;
+  flex-direction: column;
+  border-left: 1px solid #1e293b;
+  background: #0a0f1e;
+  overflow-y: auto;
 }
 
-.store-search {
-  width: 300px;
+.skills-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 16px;
+  border-bottom: 1px solid #1e293b;
 }
 
-.store-filters {
+.skills-head h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.skills-scroll {
   flex: 1;
+  padding: 16px;
+  overflow-y: auto;
 }
 
-.store-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 20px;
-}
-
-.store-card {
+.skill-dark {
+  margin-bottom: 12px;
+  border: 1px solid #1e293b;
   border-radius: 12px;
-  background: #1e293b;
-  border: 1px solid #334155;
   overflow: hidden;
-  transition: all 0.3s;
+  cursor: pointer;
+  transition: all .2s;
 }
 
-.store-card:hover {
+.skill-dark:hover {
   border-color: #3b82f6;
-  box-shadow: 0 12px 28px rgba(59, 130, 246, 0.2);
-  transform: translateY(-8px);
+  transform: translateY(-2px);
 }
 
-.card-cover {
-  height: 140px;
+.skill-cover-dark {
   display: grid;
   place-items: center;
-  position: relative;
+  height: 90px;
 }
 
-.card-cover.blue {
-  background: linear-gradient(135deg, #3b82f6, #1e40af);
+.skill-emoji {
+  font-size: 36px;
 }
 
-.card-cover.orange {
-  background: linear-gradient(135deg, #f59e0b, #dc2626);
+.skill-detail {
+  padding: 14px;
 }
 
-.card-cover.purple {
-  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
-}
-
-.cover-icon {
-  font-size: 48px;
-  color: rgba(255, 255, 255, 0.95);
-}
-
-.cover-badge {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  padding: 4px 12px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(8px);
-  font-size: 11px;
+.skill-h4 {
+  margin: 0 0 6px;
+  font-size: 15px;
   font-weight: 600;
-  color: white;
+  color: #e2e8f0;
 }
 
-.card-body {
-  padding: 16px;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.card-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: #f1f5f9;
-  margin: 0;
-}
-
-.card-desc {
-  font-size: 13px;
+.skill-p {
+  margin: 0 0 10px;
+  font-size: 12px;
   color: #94a3b8;
   line-height: 1.5;
-  margin: 0 0 12px;
 }
 
-.card-meta {
+.skills-hot {
+  padding: 16px;
+  border-top: 1px solid #1e293b;
+}
+
+.hot-title {
   margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
 }
 
-.meta-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: #f59e0b;
-}
-
-.card-actions {
+.hot-list {
   display: flex;
+  flex-direction: column;
   gap: 8px;
-  justify-content: space-between;
 }
 
-/* 响应式 */
+.hot-item {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #1e293b;
+  font-size: 13px;
+  color: #cbd5e1;
+  cursor: pointer;
+  transition: background .2s;
+}
+
+.hot-item:hover {
+  background: #334155;
+}
+
 @media (max-width: 1200px) {
-  .app-container {
-    grid-template-columns: 220px 1fr;
+  .assistant-dark {
+    grid-template-columns: 240px 1fr;
   }
-  .skills-panel {
+  .skills-dark {
     display: none;
-  }
-}
-
-@media (max-width: 768px) {
-  .app-container {
-    grid-template-columns: 1fr;
-  }
-  .sessions-panel {
-    display: none;
-  }
-  .features-grid {
-    grid-template-columns: 1fr;
   }
 }
 </style>

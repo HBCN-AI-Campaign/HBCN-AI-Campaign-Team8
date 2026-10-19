@@ -1,470 +1,439 @@
+<!--
+  AI 助手 V3：卡片极简版
+  参考：Open WebUI + 移动优先设计
+  特点：单栏布局、大卡片、Emoji 图标、极简优雅
+-->
 <template>
-  <div class="assistant-v3">
-    <!-- 简洁顶栏 -->
-    <nav class="top-nav">
-      <div class="nav-brand">
-        <span class="brand-logo">✨</span>
-        <span class="brand-name">慧眼助手</span>
+  <div class="assistant-minimal">
+    <!-- 顶部栏 -->
+    <header class="top-bar">
+      <div class="logo-group">
+        <div class="logo-circle">✨</div>
+        <span class="logo-text">慧眼助手</span>
       </div>
-      <div class="nav-actions">
-        <el-button text size="small" @click="$router.push('/')">← 返回</el-button>
-      </div>
-    </nav>
+      <el-button text @click="$router.push('/tasks')">
+        <el-icon><Close /></el-icon>
+      </el-button>
+    </header>
 
-    <!-- 单栏布局 -->
-    <div class="main-view">
-      <!-- 顶部：任务选择 + 技能快捷方式 -->
-      <div class="control-bar">
-        <el-select v-model="taskCode" placeholder="选择关联任务" clearable class="task-select">
-          <el-option label="FOL LN-008 · 华为技术有限公司" value="FOL_LN_008" />
-          <el-option label="FOL LN-009 · 中兴通讯股份" value="FOL_LN_009" />
-        </el-select>
-        <el-button @click="skillsDrawerVisible = true">审核技能</el-button>
-        <el-button @click="sessionsDrawerVisible = true">会话列表</el-button>
-      </div>
+    <!-- 工具栏 -->
+    <div class="toolbar">
+      <el-select v-model="taskCode" placeholder="关联任务" size="small" style="width: 180px">
+        <el-option v-for="t in tasks" :key="t.code" :label="t.code" :value="t.code" />
+      </el-select>
+      <el-button text size="small" @click="skillDrawer = true">
+        <el-icon><Grid /></el-icon>
+        审核技能
+      </el-button>
+      <el-button text size="small" @click="sessionDrawer = true">
+        <el-icon><ChatDotRound /></el-icon>
+        会话列表
+      </el-button>
+    </div>
 
-      <!-- 对话内容区 -->
-      <div class="conversation-area">
-        <!-- 欢迎卡片 -->
-        <div class="welcome-card">
-          <div class="welcome-emoji">🤖</div>
-          <h1 class="welcome-heading">让审核工作更快一步</h1>
-          <p class="welcome-text">我可以帮你解释不通过项、检索法规证据、执行专项审核技能</p>
-
-          <div class="starter-prompts">
-            <button class="starter-btn">
-              <span class="starter-emoji">📋</span>
-              <span class="starter-text">梳理风险点</span>
-            </button>
-            <button class="starter-btn">
-              <span class="starter-emoji">🔍</span>
-              <span class="starter-text">解释不通过项</span>
-            </button>
-            <button class="starter-btn">
-              <span class="starter-emoji">📄</span>
-              <span class="starter-text">核对材料字段</span>
-            </button>
+    <!-- 对话区 -->
+    <div class="chat-container" ref="containerRef">
+      <!-- 空态 -->
+      <div v-if="!messages.length" class="empty-state">
+        <div class="hero-card">
+          <div class="hero-icon">🤖</div>
+          <h2 class="hero-title">让审核工作更快一步</h2>
+          <p class="hero-desc">解析单据、验证规则、检索证据</p>
+          <div class="hero-actions">
+            <el-button @click="sendQuick('梳理风险点')" round>📋 梳理风险</el-button>
+            <el-button @click="sendQuick('为什么被驳回？')" round>🔍 解释驳回</el-button>
+            <el-button @click="sendQuick('核对文件')" round>📄 核对文件</el-button>
           </div>
         </div>
 
-        <!-- 消息卡片示例 (v-if="false" 默认隐藏) -->
-        <div v-if="false" class="message-cards">
+        <div class="hint-text">或者直接输入你的问题...</div>
+      </div>
+
+      <!-- 消息卡片 -->
+      <div v-else class="message-cards">
+        <div v-for="m in messages" :key="m.id" :class="['card-item', `card-${m.role}`]">
           <!-- 用户消息 -->
-          <div class="message-card user-card">
-            <div class="card-header">
-              <span class="author-badge">你</span>
-              <span class="time-badge">刚刚</span>
-            </div>
-            <div class="card-body">
-              为什么单据 LN-008 被驳回？
-            </div>
+          <div v-if="m.role === 'user'" class="user-card">
+            <div class="user-avatar">你</div>
+            <div class="user-text">{{ m.content }}</div>
           </div>
 
           <!-- 助手消息 -->
-          <div class="message-card assistant-card">
-            <div class="card-header">
-              <span class="author-badge">慧眼助手</span>
-              <span class="status-badge streaming">生成中...</span>
+          <div v-else class="asst-card">
+            <div class="asst-header">
+              <div class="asst-avatar">🤖</div>
+              <div class="asst-meta">
+                <span class="asst-name">慧眼助手</span>
+                <el-tag v-if="m.streaming" size="small" type="info">
+                  <el-icon class="is-loading"><Loading /></el-icon>
+                  思考中
+                </el-tag>
+              </div>
             </div>
 
             <!-- 步骤折叠 -->
-            <details class="steps-accordion" open>
-              <summary class="steps-summary">
-                <span class="summary-icon">⚡</span>
-                <span class="summary-text">执行步骤 (3 个)</span>
-                <span class="summary-arrow">›</span>
-              </summary>
-              <div class="steps-list">
-                <div class="step-row done">
-                  <span class="step-bullet">✓</span>
-                  <div class="step-content">
-                    <div class="step-name">读取任务材料</div>
-                    <div class="step-info">已加载 5 份单据</div>
+            <el-collapse v-if="m.steps?.length" class="steps-collapse">
+              <el-collapse-item name="1">
+                <template #title>
+                  <span class="steps-title">🔄 执行轨迹（{{ m.steps.length }} 步）</span>
+                </template>
+                <div class="steps-body">
+                  <div v-for="(st, i) in m.steps" :key="i" class="step-line">
+                    <span v-if="st.status === 'completed'" class="step-mark">✓</span>
+                    <span v-else-if="st.status === 'running'" class="step-mark spin">⏳</span>
+                    <span v-else class="step-mark">○</span>
+                    <span class="step-label">{{ st.description }}</span>
+                    <span v-if="st.result" class="step-val">{{ st.result }}</span>
                   </div>
                 </div>
-                <div class="step-row active">
-                  <span class="step-bullet spinner">⏳</span>
-                  <div class="step-content">
-                    <div class="step-name">检索知识库</div>
-                    <div class="step-info">找到 3 条证据</div>
-                  </div>
-                </div>
-                <div class="step-row">
-                  <span class="step-bullet">○</span>
-                  <div class="step-content">
-                    <div class="step-name">组织审核建议</div>
+              </el-collapse-item>
+            </el-collapse>
+
+            <!-- 内容 -->
+            <div class="asst-body" v-html="renderMarkdown(m.content)"></div>
+
+            <!-- 证据 -->
+            <div v-if="m.citations?.length" class="evidence-box">
+              <div class="evidence-title">📎 证据来源</div>
+              <div class="evidence-list">
+                <div v-for="(c, i) in m.citations" :key="i" class="evidence-item" @click="previewEvidence(c)">
+                  <div class="evidence-name">{{ c.docName }}</div>
+                  <div class="evidence-detail">
+                    第 {{ c.page }} 页 · 相关度 <span class="evidence-score">{{ Math.round(c.score * 100) }}%</span>
                   </div>
                 </div>
               </div>
-            </details>
-
-            <div class="card-body">
-              <p>单据 LN-008 被驳回的主要原因：</p>
-              <ol class="reason-list">
-                <li>
-                  <strong>贷款用途不符（R001）</strong><br>
-                  提款申请书用途为"设备采购"，但合同约定为"项目建设"
-                </li>
-                <li>
-                  <strong>金额超限（R003）</strong><br>
-                  申请金额 500 万美元，超过单次上限 300 万美元
-                </li>
-              </ol>
             </div>
 
-            <!-- 证据标签 -->
-            <div class="evidence-tags">
-              <span class="tag-label">证据：</span>
-              <span class="evidence-tag">R001 贷款用途</span>
-              <span class="evidence-tag">提款申请书 · p.3</span>
-              <span class="evidence-tag">业务规则 · 89%</span>
-            </div>
-
-            <!-- 卡片底部操作 -->
-            <div class="card-footer">
-              <button class="action-btn"><span>📋</span> 复制</button>
-              <button class="action-btn"><span>🔄</span> 重新生成</button>
+            <!-- 操作 -->
+            <div class="asst-actions">
+              <el-button text size="small" @click="copy(m.content)">
+                <el-icon><DocumentCopy /></el-icon>
+                复制
+              </el-button>
+              <el-button text size="small" @click="regen(m.id)">
+                <el-icon><RefreshRight /></el-icon>
+                重新生成
+              </el-button>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- 底部输入 -->
-      <div class="input-zone">
-        <div class="input-container">
-          <textarea
-            v-model="userInput"
-            class="input-textarea"
-            placeholder="描述你想核对的规则、材料或风险..."
-            rows="2"
-          ></textarea>
-          <button class="send-button" :disabled="!userInput.trim()">
-            <span>→</span>
-          </button>
-        </div>
-        <div class="input-hint">受控只读 · 结论由审核人员确认</div>
-      </div>
+      <!-- 滚动按钮 -->
+      <transition name="el-fade-in">
+        <el-button v-show="!atBottom" class="float-scroll" circle @click="scrollDown">
+          <el-icon><ArrowDown /></el-icon>
+        </el-button>
+      </transition>
     </div>
 
-    <!-- 左侧抽屉：会话列表 -->
-    <el-drawer v-model="sessionsDrawerVisible" title="会话列表" direction="ltr" size="320px">
-      <div class="drawer-content">
-        <el-button type="primary" :icon="Plus" class="drawer-action">新建会话</el-button>
+    <!-- 输入框 -->
+    <div class="input-bar">
+      <el-input
+        v-model="input"
+        type="textarea"
+        :autosize="{ minRows: 1, maxRows: 4 }"
+        placeholder="描述你想核对的规则..."
+        @keydown.enter.exact.prevent="send"
+        class="input-field"
+      />
+      <el-button
+        type="primary"
+        :loading="generating"
+        :disabled="!input.trim()"
+        @click="send"
+        circle
+        class="send-btn"
+      >
+        <el-icon v-if="!generating"><Promotion /></el-icon>
+      </el-button>
+    </div>
 
-        <div class="sessions-list">
-          <div class="session-group">
-            <div class="group-heading">今日</div>
-            <div class="session-row active">
-              <div class="session-main">
-                <div class="session-title">单据LN-008审核</div>
-                <div class="session-meta">3 条消息 · 2 分钟前</div>
-              </div>
-            </div>
-            <div class="session-row">
-              <div class="session-main">
-                <div class="session-title">制裁名单核查</div>
-                <div class="session-meta">5 条消息 · 1 小时前</div>
-              </div>
-            </div>
+    <!-- 技能抽屉 -->
+    <el-drawer v-model="skillDrawer" title="审核技能" size="360px">
+      <div class="skill-cards">
+        <div v-for="sk in skills" :key="sk.id" class="skill-item" @click="useSk(sk)">
+          <div class="skill-top" :style="{ background: sk.grad }">
+            <div class="skill-emoji-lg">{{ sk.emoji }}</div>
           </div>
-
-          <div class="session-group">
-            <div class="group-heading">本周</div>
-            <div class="session-row">
-              <div class="session-main">
-                <div class="session-title">汇率核验任务</div>
-                <div class="session-meta">12 条消息 · 昨天</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </el-drawer>
-
-    <!-- 右侧抽屉：审核技能 -->
-    <el-drawer v-model="skillsDrawerVisible" title="审核技能" direction="rtl" size="360px">
-      <div class="drawer-content">
-        <el-button @click="storeVisible = true" class="drawer-action">✨ 浏览全部技能</el-button>
-
-        <div class="skills-section">
-          <div class="section-heading">常用技能</div>
-          <div class="skill-grid">
-            <div class="skill-box">
-              <div class="skill-emoji">🚢</div>
-              <div class="skill-label">提单验真</div>
-              <button class="skill-run-btn">运行</button>
-            </div>
-            <div class="skill-box">
-              <div class="skill-emoji">🔒</div>
-              <div class="skill-label">制裁筛查</div>
-              <button class="skill-run-btn">运行</button>
-            </div>
-            <div class="skill-box">
-              <div class="skill-emoji">💱</div>
-              <div class="skill-label">汇率换算</div>
-              <button class="skill-run-btn">运行</button>
-            </div>
-            <div class="skill-box">
-              <div class="skill-emoji">📅</div>
-              <div class="skill-label">节假日核验</div>
-              <button class="skill-run-btn">运行</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="skills-section">
-          <div class="section-heading">本周热门</div>
-          <div class="hot-list">
-            <div class="hot-row">
-              <span class="hot-name">汇率换算</span>
-              <span class="hot-count">89 次</span>
-            </div>
-            <div class="hot-row">
-              <span class="hot-name">节假日核验</span>
-              <span class="hot-count">67 次</span>
-            </div>
-            <div class="hot-row">
-              <span class="hot-name">提单验真</span>
-              <span class="hot-count">54 次</span>
-            </div>
+          <div class="skill-content">
+            <h4 class="skill-title">{{ sk.name }}</h4>
+            <p class="skill-text">{{ sk.desc }}</p>
+            <el-tag size="small" type="info">🔥 本周 {{ sk.use }} 次</el-tag>
           </div>
         </div>
       </div>
     </el-drawer>
 
-    <!-- 全屏技能商店 -->
-    <el-dialog v-model="storeVisible" title="审核技能商店" fullscreen>
-      <div class="store-view">
-        <div class="store-search-bar">
-          <el-input :prefix-icon="Search" placeholder="搜索技能..." class="search-box" />
-          <el-radio-group v-model="category" class="category-tabs">
-            <el-radio-button label="all">全部</el-radio-button>
-            <el-radio-button label="doc">单据核验</el-radio-button>
-            <el-radio-button label="risk">风险识别</el-radio-button>
-            <el-radio-button label="law">法规检索</el-radio-button>
-            <el-radio-button label="data">数据处理</el-radio-button>
-          </el-radio-group>
-        </div>
-
-        <div class="store-catalog">
-          <div class="catalog-card">
-            <div class="catalog-cover blue-gradient">
-              <span class="cover-emoji">🚢</span>
-              <span class="cover-badge">推荐</span>
-            </div>
-            <div class="catalog-info">
-              <h3 class="catalog-title">提单验真</h3>
-              <p class="catalog-desc">核验海运提单的真实性，检测伪造或篡改</p>
-              <div class="catalog-stats">
-                <span class="stat-badge">📊 本周 67 次</span>
-                <span class="stat-badge">#单据核验</span>
-              </div>
-              <div class="catalog-actions">
-                <button class="catalog-btn detail">查看详情</button>
-                <button class="catalog-btn primary">立即运行</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="catalog-card">
-            <div class="catalog-cover orange-gradient">
-              <span class="cover-emoji">🔒</span>
-              <span class="cover-badge new">新</span>
-            </div>
-            <div class="catalog-info">
-              <h3 class="catalog-title">制裁名单筛查</h3>
-              <p class="catalog-desc">检查借款人/担保人是否在国际制裁名单中</p>
-              <div class="catalog-stats">
-                <span class="stat-badge">🆕 新上架</span>
-                <span class="stat-badge">#风险识别</span>
-              </div>
-              <div class="catalog-actions">
-                <button class="catalog-btn detail">查看详情</button>
-                <button class="catalog-btn primary">立即运行</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="catalog-card">
-            <div class="catalog-cover purple-gradient">
-              <span class="cover-emoji">💱</span>
-              <span class="cover-badge hot">热门</span>
-            </div>
-            <div class="catalog-info">
-              <h3 class="catalog-title">汇率换算</h3>
-              <p class="catalog-desc">自动获取实时汇率，计算多币种金额</p>
-              <div class="catalog-stats">
-                <span class="stat-badge">🔥 本周 89 次</span>
-                <span class="stat-badge">#数据处理</span>
-              </div>
-              <div class="catalog-actions">
-                <button class="catalog-btn detail">查看详情</button>
-                <button class="catalog-btn primary">立即运行</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="catalog-card">
-            <div class="catalog-cover green-gradient">
-              <span class="cover-emoji">📅</span>
-            </div>
-            <div class="catalog-info">
-              <h3 class="catalog-title">节假日核验</h3>
-              <p class="catalog-desc">检查提款日/还款日是否为借款国节假日</p>
-              <div class="catalog-stats">
-                <span class="stat-badge">📊 本周 54 次</span>
-                <span class="stat-badge">#风险识别</span>
-              </div>
-              <div class="catalog-actions">
-                <button class="catalog-btn detail">查看详情</button>
-                <button class="catalog-btn primary">立即运行</button>
-              </div>
-            </div>
-          </div>
+    <!-- 会话抽屉 -->
+    <el-drawer v-model="sessionDrawer" title="会话列表" size="320px">
+      <el-button type="primary" @click="newChat" style="width: 100%; margin-bottom: 16px">
+        <el-icon><Plus /></el-icon>
+        新建会话
+      </el-button>
+      <div class="session-list">
+        <div
+          v-for="s in sessions"
+          :key="s.id"
+          :class="['session-row', { active: currentId === s.id }]"
+          @click="selectSession(s.id)"
+        >
+          <div class="session-title">{{ s.title }}</div>
+          <div class="session-time">{{ formatTime(s.updatedAt) }}</div>
         </div>
       </div>
-    </el-dialog>
+    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { Plus, Search } from '@element-plus/icons-vue'
+import { ref, nextTick } from 'vue'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
+import {
+  Close, Grid, ChatDotRound, Loading, DocumentCopy,
+  RefreshRight, ArrowDown, Promotion, Plus
+} from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 
-const router = useRouter()
+interface Msg {
+  id: number
+  role: 'user' | 'assistant'
+  content: string
+  streaming?: boolean
+  steps?: Array<{ description: string; status: string; result?: string }>
+  citations?: Array<{ docName: string; page: number; score: number; content: string }>
+}
+
 const taskCode = ref('')
-const userInput = ref('')
-const sessionsDrawerVisible = ref(false)
-const skillsDrawerVisible = ref(false)
-const storeVisible = ref(false)
-const category = ref('all')
+const tasks = ref([{ code: 'LN0823', borrower: '某公司' }])
+
+const messages = ref<Msg[]>([])
+const input = ref('')
+const generating = ref(false)
+const atBottom = ref(true)
+
+const skillDrawer = ref(false)
+const sessionDrawer = ref(false)
+
+const currentId = ref(1)
+const sessions = ref([
+  { id: 1, title: 'LN0823 审核', updatedAt: '2026-10-20T10:30:00' },
+  { id: 2, title: '制裁筛查', updatedAt: '2026-10-19T15:00:00' }
+])
+
+const skills = ref([
+  { id: 'bill', name: '提单验真', desc: '核验海运提单真实性和有效性', emoji: '🚢', grad: 'linear-gradient(135deg, #3b82f6, #1e40af)', use: 67 },
+  { id: 'sanc', name: '制裁筛查', desc: '检查借款人是否在制裁名单', emoji: '🔒', grad: 'linear-gradient(135deg, #f59e0b, #d97706)', use: 54 },
+  { id: 'exch', name: '汇率换算', desc: '验证单据汇率是否合理', emoji: '💱', grad: 'linear-gradient(135deg, #10b981, #059669)', use: 43 },
+  { id: 'holi', name: '节假日核查', desc: '检查贷款日期与法定节假日冲突', emoji: '📅', grad: 'linear-gradient(135deg, #8b5cf6, #6d28d9)', use: 31 }
+])
+
+const containerRef = ref<HTMLElement>()
+
+function renderMarkdown(text: string): string {
+  const html = marked.parse(text) as string
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: ['p', 'strong', 'em', 'ul', 'ol', 'li', 'code', 'pre', 'br']
+  })
+}
+
+function formatTime(iso: string): string {
+  const date = new Date(iso)
+  return `${date.getMonth() + 1}月${date.getDate()}日`
+}
+
+function send() {
+  if (!input.value.trim() || generating.value) return
+
+  messages.value.push({ id: Date.now(), role: 'user', content: input.value.trim() })
+  input.value = ''
+
+  nextTick(scrollDown)
+
+  // 模拟回复
+  generating.value = true
+  const asst: Msg = {
+    id: Date.now() + 1,
+    role: 'assistant',
+    content: '',
+    streaming: true,
+    steps: [
+      { description: '读取材料', status: 'completed', result: '3份' },
+      { description: '检索知识库', status: 'running' }
+    ]
+  }
+  messages.value.push(asst)
+
+  setTimeout(() => {
+    asst.steps![1].status = 'completed'
+    asst.steps![1].result = '2条'
+    asst.streaming = false
+    asst.content = '根据规则，驳回原因：\n\n1. **借款用途不明确**\n2. **授信函缺失**'
+    asst.citations = [
+      { docName: '贷款文件比对要求.xlsx', page: 1, score: 0.89, content: '借款用途必须详细说明' }
+    ]
+    generating.value = false
+  }, 2000)
+}
+
+function sendQuick(text: string) {
+  input.value = text
+  send()
+}
+
+function copy(text: string) {
+  navigator.clipboard.writeText(text)
+  ElMessage.success('已复制')
+}
+
+function regen(msgId: number) {
+  ElMessage.info('重新生成功能开发中...')
+}
+
+function previewEvidence(cite: any) {
+  ElMessage.info(`证据预览：${cite.docName}`)
+}
+
+function useSk(sk: any) {
+  input.value = `使用「${sk.name}」`
+  skillDrawer.value = false
+  send()
+}
+
+function newChat() {
+  const newId = Math.max(...sessions.value.map(s => s.id)) + 1
+  sessions.value.unshift({ id: newId, title: '新对话', updatedAt: new Date().toISOString() })
+  currentId.value = newId
+  messages.value = []
+  sessionDrawer.value = false
+}
+
+function selectSession(id: number) {
+  currentId.value = id
+  messages.value = []
+  sessionDrawer.value = false
+}
+
+function scrollDown() {
+  nextTick(() => {
+    if (containerRef.value) {
+      containerRef.value.scrollTop = containerRef.value.scrollHeight
+    }
+  })
+}
 </script>
 
 <style scoped>
-/* V3 版本：卡片式极简风格 - 强调内容，弱化边框 */
-.assistant-v3 {
-  height: 100vh;
-  background: #fafbfc;
+/* 全局 */
+.assistant-minimal {
   display: flex;
   flex-direction: column;
+  height: 100vh;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
 }
 
-/* 顶栏 */
-.top-nav {
+/* 顶部栏 */
+.top-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 24px;
+  padding: 14px 20px;
   background: white;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e2e8f0;
 }
 
-.nav-brand {
+.logo-group {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
-.brand-logo {
-  font-size: 28px;
-}
-
-.brand-name {
+.logo-circle {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #10b981, #059669);
   font-size: 20px;
+}
+
+.logo-text {
+  font-size: 17px;
   font-weight: 700;
-  color: #111827;
+  color: #0f172a;
 }
 
-/* 主视图 */
-.main-view {
-  flex: 1;
+/* 工具栏 */
+.toolbar {
   display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  max-width: 900px;
-  margin: 0 auto;
-  width: 100%;
-  padding: 0 20px;
-}
-
-/* 控制栏 */
-.control-bar {
-  display: flex;
+  justify-content: center;
+  align-items: center;
   gap: 12px;
-  padding: 20px 0;
+  padding: 12px 20px;
+  background: white;
+  border-bottom: 1px solid #e2e8f0;
 }
 
-.task-select {
-  flex: 1;
-}
-
-/* 对话区域 */
-.conversation-area {
+/* 对话容器 */
+.chat-container {
   flex: 1;
   overflow-y: auto;
-  padding: 20px 0;
+  padding: 24px 20px;
+  position: relative;
 }
 
-/* 欢迎卡片 */
-.welcome-card {
+/* 空态 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 16px;
+}
+
+.hero-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 500px;
+  padding: 40px 32px;
+  border-radius: 20px;
   background: white;
-  border-radius: 16px;
-  padding: 48px 32px;
-  text-align: center;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, .08);
 }
 
-.welcome-emoji {
-  font-size: 64px;
+.hero-icon {
+  font-size: 56px;
   margin-bottom: 20px;
 }
 
-.welcome-heading {
-  font-size: 32px;
-  font-weight: 700;
-  color: #111827;
+.hero-title {
   margin: 0 0 12px;
+  font-size: 26px;
+  font-weight: 700;
+  color: #0f172a;
 }
 
-.welcome-text {
+.hero-desc {
+  margin: 0 0 28px;
   font-size: 16px;
-  color: #6b7280;
-  margin: 0 0 32px;
-  line-height: 1.6;
+  color: #64748b;
+  text-align: center;
 }
 
-.starter-prompts {
+.hero-actions {
   display: flex;
-  gap: 12px;
-  justify-content: center;
   flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
 }
 
-.starter-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 20px;
-  border: 1px solid #e5e7eb;
-  border-radius: 24px;
-  background: white;
-  color: #374151;
+.hint-text {
+  margin-top: 24px;
   font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.starter-btn:hover {
-  border-color: #3b82f6;
-  background: #eff6ff;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
-}
-
-.starter-emoji {
-  font-size: 18px;
+  color: #94a3b8;
 }
 
 /* 消息卡片 */
@@ -472,150 +441,120 @@ const category = ref('all')
   display: flex;
   flex-direction: column;
   gap: 16px;
+  max-width: 800px;
+  margin: 0 auto;
 }
 
-.message-card {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+.card-item {
+  display: flex;
+}
+
+.card-user {
+  justify-content: flex-end;
+}
+
+.card-assistant {
+  justify-content: flex-start;
 }
 
 .user-card {
-  margin-left: auto;
-  max-width: 80%;
-  background: #eff6ff;
-  border: 1px solid #dbeafe;
-}
-
-.assistant-card {
-  margin-right: auto;
-  max-width: 100%;
-  border: 1px solid #e5e7eb;
-}
-
-.card-header {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.author-badge {
-  font-size: 12px;
-  font-weight: 600;
-  color: #374151;
-}
-
-.time-badge {
-  font-size: 11px;
-  color: #9ca3af;
-}
-
-.status-badge {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: #e5e7eb;
-  color: #6b7280;
-}
-
-.status-badge.streaming {
-  background: #dbeafe;
-  color: #3b82f6;
-}
-
-.card-body {
-  font-size: 15px;
-  line-height: 1.7;
-  color: #1f2937;
-}
-
-.card-body p {
-  margin: 0 0 12px;
-}
-
-.reason-list {
-  margin: 0;
-  padding-left: 20px;
-}
-
-.reason-list li {
-  margin-bottom: 12px;
-}
-
-.reason-list strong {
-  color: #111827;
-}
-
-/* 步骤折叠 */
-.steps-accordion {
-  margin-bottom: 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fafbfc;
-  overflow: hidden;
-}
-
-.steps-summary {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  cursor: pointer;
-  list-style: none;
-  user-select: none;
+  gap: 12px;
+  max-width: 75%;
+  padding: 14px 18px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, .25);
 }
 
-.steps-summary::-webkit-details-marker {
-  display: none;
-}
-
-.summary-icon {
-  font-size: 18px;
-}
-
-.summary-text {
-  flex: 1;
+.user-avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .3);
   font-size: 13px;
   font-weight: 600;
-  color: #374151;
 }
 
-.summary-arrow {
-  font-size: 16px;
-  color: #9ca3af;
-  transition: transform 0.2s;
+.user-text {
+  flex: 1;
+  font-size: 15px;
+  line-height: 1.6;
 }
 
-details[open] .summary-arrow {
-  transform: rotate(90deg);
+.asst-card {
+  max-width: 90%;
+  padding: 20px;
+  border-radius: 16px;
+  background: white;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, .08);
 }
 
-.steps-list {
-  padding: 0 16px 12px;
-}
-
-.step-row {
+.asst-header {
   display: flex;
+  align-items: center;
   gap: 12px;
+  margin-bottom: 16px;
+}
+
+.asst-avatar {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  font-size: 22px;
+}
+
+.asst-meta {
+  flex: 1;
+}
+
+.asst-name {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 2px;
+}
+
+.steps-collapse {
+  margin-bottom: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.steps-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.steps-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   padding: 8px 0;
 }
 
-.step-bullet {
-  font-size: 16px;
-  color: #9ca3af;
+.step-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
 }
 
-.step-row.done .step-bullet {
-  color: #10b981;
+.step-mark {
+  width: 20px;
+  text-align: center;
+  font-size: 14px;
 }
 
-.step-row.active .step-bullet {
-  color: #3b82f6;
-}
-
-.spinner {
+.step-mark.spin {
   animation: spin 1s linear infinite;
 }
 
@@ -623,465 +562,224 @@ details[open] .summary-arrow {
   to { transform: rotate(360deg); }
 }
 
-.step-content {
+.step-label {
   flex: 1;
-}
-
-.step-name {
   font-size: 13px;
-  font-weight: 600;
-  color: #374151;
+  color: #334155;
 }
 
-.step-info {
+.step-val {
   font-size: 12px;
-  color: #6b7280;
-  margin-top: 2px;
+  color: #10b981;
+  font-weight: 600;
 }
 
-/* 证据标签 */
-.evidence-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
+.asst-body {
+  font-size: 15px;
+  line-height: 1.7;
+  color: #334155;
+}
+
+.asst-body :deep(p) {
+  margin: 0 0 14px;
+}
+
+.asst-body :deep(strong) {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.asst-body :deep(code) {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #3b82f6;
+  font-size: 14px;
+}
+
+.evidence-box {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid #f1f5f9;
 }
 
-.tag-label {
-  font-size: 12px;
+.evidence-title {
+  margin-bottom: 10px;
+  font-size: 13px;
   font-weight: 600;
-  color: #6b7280;
+  color: #64748b;
 }
 
-.evidence-tag {
-  padding: 4px 10px;
-  border-radius: 6px;
-  background: #f3f4f6;
-  color: #374151;
+.evidence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.evidence-item {
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  cursor: pointer;
+  transition: all .2s;
+}
+
+.evidence-item:hover {
+  border-color: #10b981;
+  background: #f0fdf4;
+}
+
+.evidence-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+
+.evidence-detail {
   font-size: 12px;
-  border: 1px solid #e5e7eb;
+  color: #64748b;
 }
 
-/* 卡片底部 */
-.card-footer {
+.evidence-score {
+  color: #10b981;
+  font-weight: 600;
+}
+
+.asst-actions {
   display: flex;
   gap: 8px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid #e5e7eb;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #f8fafc;
 }
 
-.action-btn {
+.float-scroll {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .2);
+}
+
+/* 输入框 */
+.input-bar {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: 0;
-  background: transparent;
-  color: #6b7280;
-  font-size: 13px;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: all 0.2s;
-}
-
-.action-btn:hover {
-  background: #f3f4f6;
-  color: #374151;
-}
-
-/* 输入区域 */
-.input-zone {
-  padding: 20px 0;
-  background: white;
-  border-top: 1px solid #e5e7eb;
-}
-
-.input-container {
-  display: flex;
-  gap: 12px;
   align-items: flex-end;
-  padding: 12px;
-  border: 2px solid #e5e7eb;
-  border-radius: 12px;
+  gap: 10px;
+  padding: 14px 20px;
   background: white;
-  transition: border-color 0.2s;
+  border-top: 1px solid #e2e8f0;
 }
 
-.input-container:focus-within {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.input-textarea {
+.input-field {
   flex: 1;
-  border: 0;
-  outline: none;
-  resize: none;
+}
+
+.input-field :deep(.el-textarea__inner) {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 12px 16px;
   font-size: 15px;
-  color: #111827;
-  font-family: inherit;
-  line-height: 1.5;
 }
 
-.input-textarea::placeholder {
-  color: #9ca3af;
-}
-
-.send-button {
-  width: 40px;
-  height: 40px;
-  border: 0;
-  border-radius: 10px;
-  background: #3b82f6;
-  color: white;
-  font-size: 20px;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all 0.2s;
-}
-
-.send-button:hover:not(:disabled) {
-  background: #2563eb;
-  transform: scale(1.05);
-}
-
-.send-button:disabled {
-  background: #e5e7eb;
-  color: #9ca3af;
-  cursor: not-allowed;
-}
-
-.input-hint {
-  text-align: center;
-  font-size: 11px;
-  color: #9ca3af;
-  margin-top: 8px;
+.send-btn {
+  width: 44px;
+  height: 44px;
 }
 
 /* 抽屉内容 */
-.drawer-content {
-  padding: 20px;
-}
-
-.drawer-action {
-  width: 100%;
-  margin-bottom: 20px;
-}
-
-.sessions-list {
+.skill-cards {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 14px;
 }
 
-.session-group {
+.skill-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all .2s;
+}
+
+.skill-item:hover {
+  border-color: #10b981;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, .15);
+  transform: translateY(-2px);
+}
+
+.skill-top {
+  display: grid;
+  place-items: center;
+  height: 100px;
+}
+
+.skill-emoji-lg {
+  font-size: 48px;
+}
+
+.skill-content {
+  padding: 14px;
+}
+
+.skill-title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.skill-text {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.session-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.group-heading {
-  font-size: 12px;
-  font-weight: 600;
-  color: #6b7280;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 4px;
 }
 
 .session-row {
   padding: 12px;
-  border-radius: 8px;
-  background: #f9fafb;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all .2s;
 }
 
 .session-row:hover {
-  background: #f3f4f6;
+  background: #f8fafc;
 }
 
 .session-row.active {
-  background: #eff6ff;
-  border: 2px solid #3b82f6;
+  border-color: #10b981;
+  background: #f0fdf4;
 }
 
 .session-title {
   font-size: 14px;
   font-weight: 600;
-  color: #111827;
+  color: #0f172a;
   margin-bottom: 4px;
 }
 
-.session-meta {
+.session-time {
   font-size: 12px;
-  color: #6b7280;
+  color: #94a3b8;
 }
 
-/* 技能区域 */
-.skills-section {
-  margin-bottom: 24px;
-}
-
-.section-heading {
-  font-size: 13px;
-  font-weight: 600;
-  color: #374151;
-  margin-bottom: 12px;
-}
-
-.skill-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
-
-.skill-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  background: white;
-  transition: all 0.2s;
-  cursor: pointer;
-}
-
-.skill-box:hover {
-  border-color: #3b82f6;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
-  transform: translateY(-2px);
-}
-
-.skill-emoji {
-  font-size: 32px;
-}
-
-.skill-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: #374151;
-  text-align: center;
-}
-
-.skill-run-btn {
-  padding: 4px 12px;
-  border: 1px solid #3b82f6;
-  border-radius: 12px;
-  background: white;
-  color: #3b82f6;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.skill-run-btn:hover {
-  background: #3b82f6;
-  color: white;
-}
-
-.hot-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.hot-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border-radius: 6px;
-  background: #f9fafb;
-  font-size: 13px;
-}
-
-.hot-name {
-  color: #374151;
-}
-
-.hot-count {
-  color: #f59e0b;
-  font-weight: 600;
-}
-
-/* 技能商店 */
-.store-view {
-  padding: 24px;
-  background: #fafbfc;
-  min-height: 100vh;
-}
-
-.store-search-bar {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-.search-box {
-  width: 300px;
-}
-
-.category-tabs {
-  flex: 1;
-}
-
-.store-catalog {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
-}
-
-.catalog-card {
-  background: white;
-  border-radius: 16px;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s;
-}
-
-.catalog-card:hover {
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.15);
-  transform: translateY(-8px);
-}
-
-.catalog-cover {
-  height: 140px;
-  display: grid;
-  place-items: center;
-  position: relative;
-}
-
-.blue-gradient {
-  background: linear-gradient(135deg, #3b82f6, #1e40af);
-}
-
-.orange-gradient {
-  background: linear-gradient(135deg, #f59e0b, #dc2626);
-}
-
-.purple-gradient {
-  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
-}
-
-.green-gradient {
-  background: linear-gradient(135deg, #10b981, #047857);
-}
-
-.cover-emoji {
-  font-size: 56px;
-  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
-}
-
-.cover-badge {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  padding: 4px 12px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.25);
-  backdrop-filter: blur(8px);
-  font-size: 11px;
-  font-weight: 700;
-  color: white;
-  text-transform: uppercase;
-}
-
-.cover-badge.new {
-  background: rgba(16, 185, 129, 0.9);
-}
-
-.cover-badge.hot {
-  background: rgba(245, 158, 11, 0.9);
-}
-
-.catalog-info {
-  padding: 20px;
-}
-
-.catalog-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: #111827;
-  margin: 0 0 8px;
-}
-
-.catalog-desc {
-  font-size: 14px;
-  color: #6b7280;
-  line-height: 1.5;
-  margin: 0 0 16px;
-}
-
-.catalog-stats {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-
-.stat-badge {
-  padding: 4px 10px;
-  border-radius: 6px;
-  background: #f3f4f6;
-  color: #374151;
-  font-size: 12px;
-  border: 1px solid #e5e7eb;
-}
-
-.catalog-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.catalog-btn {
-  flex: 1;
-  padding: 10px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: white;
-  color: #374151;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.catalog-btn.detail:hover {
-  background: #f9fafb;
-  border-color: #d1d5db;
-}
-
-.catalog-btn.primary {
-  background: #3b82f6;
-  border-color: #3b82f6;
-  color: white;
-}
-
-.catalog-btn.primary:hover {
-  background: #2563eb;
-  border-color: #2563eb;
-}
-
-/* 响应式 */
 @media (max-width: 768px) {
-  .main-view {
-    padding: 0 16px;
+  .toolbar {
+    flex-wrap: wrap;
   }
-  .control-bar {
-    flex-direction: column;
+  .chat-container {
+    padding: 16px 12px;
   }
-  .starter-prompts {
-    flex-direction: column;
-  }
-  .skill-grid {
-    grid-template-columns: 1fr;
+  .message-cards {
+    padding: 0;
   }
 }
 </style>

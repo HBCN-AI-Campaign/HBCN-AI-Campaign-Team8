@@ -1,7 +1,8 @@
+import ipaddress
 import secrets
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile, status
+from fastapi import Cookie, Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
 from fastapi.responses import HTMLResponse
 
 from .config import settings
@@ -24,11 +25,16 @@ ALLOWED_EXTENSIONS = {
 }
 
 
-def require_service_token(authorization: str | None = Header(default=None)) -> None:
+def require_service_token(
+    authorization: str | None = Header(default=None),
+    rag_ui_session: str | None = Cookie(default=None),
+) -> None:
     if not settings.SERVICE_TOKEN:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "SERVICE_TOKEN 尚未配置")
     expected = f"Bearer {settings.SERVICE_TOKEN}"
-    if authorization is None or not secrets.compare_digest(authorization, expected):
+    token_matches = authorization is not None and secrets.compare_digest(authorization, expected)
+    session_matches = rag_ui_session is not None and secrets.compare_digest(rag_ui_session, settings.SERVICE_TOKEN)
+    if not (token_matches or session_matches):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "服务凭证无效")
 
 
@@ -176,7 +182,26 @@ _STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 @app.get("/ui", include_in_schema=False)
 @app.get("/ui/", include_in_schema=False)
-def trial_ui():
-    """Serve the static workbench without exposing the service token in HTML."""
-    index = (_STATIC_DIR / "index.html").read_text(encoding="utf-8")
-    return HTMLResponse(index)
+def trial_ui(request: Request):
+    """Issue a local-only browser session; the token stays out of page content."""
+    host = request.client.host if request.client else ""
+    try:
+        is_loopback = ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        is_loopback = host.lower() == "localhost"
+    if not is_loopback:
+        raise HTTPException(status.HTTP_404_NOT_FOUND)
+
+    page = (_STATIC_DIR / "workbench.html").read_text(encoding="utf-8")
+    response = HTMLResponse(page)
+    if settings.SERVICE_TOKEN:
+        response.set_cookie(
+            "rag_ui_session",
+            settings.SERVICE_TOKEN,
+            httponly=True,
+            secure=request.url.scheme == "https",
+            samesite="strict",
+            path="/api/v1",
+            max_age=8 * 60 * 60,
+        )
+    return response

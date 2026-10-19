@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>V1 现代简约风 - RAG 知识库管理</title>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus@2.9.1/dist/index.css">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f8fafc;
+      color: #1e293b;
+    }
+
+    /* 顶部导航 */
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .header h1 { font-size: 1.25rem; font-weight: 600; }
+    .header-right { display: flex; gap: 1rem; align-items: center; }
+    .header-btn {
+      background: rgba(255,255,255,0.2);
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      color: white;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .header-btn:hover { background: rgba(255,255,255,0.3); }
+
+    /* 主容器 */
+    .container {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      height: calc(100vh - 60px);
+    }
+
+    /* 侧边栏 */
+    .sidebar {
+      background: white;
+      border-right: 1px solid #e2e8f0;
+      padding: 1.5rem 0;
+    }
+    .nav-item {
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      color: #64748b;
+      border-left: 3px solid transparent;
+    }
+    .nav-item:hover { background: #f1f5f9; color: #334155; }
+    .nav-item.active {
+      background: #eef2ff;
+      color: #667eea;
+      border-left-color: #667eea;
+      font-weight: 500;
+    }
+    .nav-icon { font-size: 1.25rem; }
+
+    /* 主内容区 */
+    .main {
+      overflow-y: auto;
+      padding: 2rem;
+    }
+
+    /* 统计卡片 */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .stat-card {
+      background: white;
+      padding: 1.5rem;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      transition: all 0.3s;
+    }
+    .stat-card:hover {
+      box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+      transform: translateY(-2px);
+    }
+    .stat-label {
+      font-size: 0.875rem;
+      color: #64748b;
+      margin-bottom: 0.5rem;
+    }
+    .stat-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #1e293b;
+    }
+    .stat-trend {
+      font-size: 0.875rem;
+      margin-top: 0.5rem;
+    }
+    .trend-up { color: #10b981; }
+    .trend-down { color: #ef4444; }
+
+    /* 内容卡片 */
+    .content-card {
+      background: white;
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    .card-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #1e293b;
+    }
+    .card-actions {
+      display: flex;
+      gap: 0.75rem;
+    }
+
+    /* 按钮 */
+    .btn {
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    .btn-primary:hover {
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    .btn-secondary {
+      background: #f1f5f9;
+      color: #475569;
+    }
+    .btn-secondary:hover { background: #e2e8f0; }
+
+    /* 文档列表 */
+    .doc-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .doc-item {
+      display: grid;
+      grid-template-columns: 40px 1fr auto;
+      gap: 1rem;
+      padding: 1rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    .doc-item:hover {
+      border-color: #667eea;
+      background: #f8faff;
+    }
+    .doc-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+    }
+    .doc-icon.pdf { background: #fee2e2; color: #dc2626; }
+    .doc-icon.xlsx { background: #dcfce7; color: #16a34a; }
+    .doc-icon.md { background: #e0e7ff; color: #4f46e5; }
+    .doc-info {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .doc-name {
+      font-weight: 500;
+      color: #1e293b;
+    }
+    .doc-meta {
+      font-size: 0.875rem;
+      color: #64748b;
+    }
+    .doc-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .badge {
+      padding: 0.25rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 500;
+    }
+    .badge-success { background: #dcfce7; color: #16a34a; }
+    .badge-warning { background: #fef3c7; color: #d97706; }
+    .badge-error { background: #fee2e2; color: #dc2626; }
+
+    /* 空状态 */
+    .empty-state {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: #94a3b8;
+    }
+    .empty-icon {
+      font-size: 4rem;
+      margin-bottom: 1rem;
+      opacity: 0.5;
+    }
+    .empty-text {
+      font-size: 1.125rem;
+      margin-bottom: 0.5rem;
+    }
+    .empty-hint {
+      font-size: 0.875rem;
+      margin-bottom: 1.5rem;
+    }
+
+    /* 上传区域 */
+    .upload-area {
+      border: 2px dashed #cbd5e1;
+      border-radius: 12px;
+      padding: 3rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-bottom: 2rem;
+    }
+    .upload-area:hover {
+      border-color: #667eea;
+      background: #f8faff;
+    }
+    .upload-icon {
+      font-size: 3rem;
+      color: #667eea;
+      margin-bottom: 1rem;
+    }
+    .upload-text {
+      font-size: 1rem;
+      color: #475569;
+      margin-bottom: 0.5rem;
+    }
+    .upload-hint {
+      font-size: 0.875rem;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+  <!-- 顶部导航 -->
+  <div class="header">
+    <h1>🚀 RAG 知识库管理中心</h1>
+    <div class="header-right">
+      <button class="header-btn">📊 数据分析</button>
+      <button class="header-btn">⚙️ 设置</button>
+      <button class="header-btn">👤 admin</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- 侧边栏 -->
+    <div class="sidebar">
+      <div class="nav-item active">
+        <span class="nav-icon">📂</span>
+        <span>文档库</span>
+      </div>
+      <div class="nav-item">
+        <span class="nav-icon">🔍</span>
+        <span>检索测试</span>
+      </div>
+      <div class="nav-item">
+        <span class="nav-icon">📊</span>
+        <span>处理流水线</span>
+      </div>
+      <div class="nav-item">
+        <span class="nav-icon">📜</span>
+        <span>审计日志</span>
+      </div>
+    </div>
+
+    <!-- 主内容 -->
+    <div class="main">
+      <!-- 统计卡片 -->
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-label">总文档</div>
+          <div class="stat-value">42</div>
+          <div class="stat-trend trend-up">↑ 12% 本周</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">总片段</div>
+          <div class="stat-value">1,285</div>
+          <div class="stat-trend trend-up">↑ 5.3% 本周</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">检索准确率</div>
+          <div class="stat-value">96.2%</div>
+          <div class="stat-trend trend-up">↑ 2.1% 本周</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">引擎状态</div>
+          <div class="stat-value" style="font-size: 1.25rem;">RAGFlow</div>
+          <div class="stat-trend" style="color: #10b981;">🟢 运行中</div>
+        </div>
+      </div>
+
+      <!-- 上传区域 -->
+      <div class="upload-area">
+        <div class="upload-icon">☁️</div>
+        <div class="upload-text">拖拽文件到此处，或点击上传</div>
+        <div class="upload-hint">支持 PDF、Word、Excel、Markdown 等格式</div>
+      </div>
+
+      <!-- 文档列表 -->
+      <div class="content-card">
+        <div class="card-header">
+          <h2 class="card-title">文档列表</h2>
+          <div class="card-actions">
+            <button class="btn btn-secondary">🔍 搜索</button>
+            <button class="btn btn-secondary">筛选</button>
+            <button class="btn btn-primary">+ 上传</button>
+          </div>
+        </div>
+
+        <div class="doc-list">
+          <div class="doc-item">
+            <div class="doc-icon pdf">📄</div>
+            <div class="doc-info">
+              <div class="doc-name">贷款审核规则v2.3.pdf</div>
+              <div class="doc-meta">42 片段 · 业务规则 · 2024-10-19 14:30</div>
+            </div>
+            <div class="doc-status">
+              <span class="badge badge-success">✓ 可检索</span>
+            </div>
+          </div>
+
+          <div class="doc-item">
+            <div class="doc-icon xlsx">📊</div>
+            <div class="doc-info">
+              <div class="doc-name">项目需求书v1.2.xlsx</div>
+              <div class="doc-meta">28 片段 · 项目设计 · 2024-10-19 15:05</div>
+            </div>
+            <div class="doc-status">
+              <span class="badge badge-warning">🔄 处理中 85%</span>
+            </div>
+          </div>
+
+          <div class="doc-item">
+            <div class="doc-icon md">📝</div>
+            <div class="doc-info">
+              <div class="doc-name">技术方案.md</div>
+              <div class="doc-meta">15 片段 · 项目设计 · 2024-10-18 10:12</div>
+            </div>
+            <div class="doc-status">
+              <span class="badge badge-error">❌ 解析失败</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 导航切换
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelector('.nav-item.active')?.classList.remove('active');
+        item.classList.add('active');
+      });
+    });
+
+    // 文档项悬停效果
+    document.querySelectorAll('.doc-item').forEach(item => {
+      item.addEventListener('click', () => {
+        alert('查看文档详情');
+      });
+    });
+
+    // 上传区域
+    document.querySelector('.upload-area').addEventListener('click', () => {
+      alert('打开文件选择器');
+    });
+  </script>
+</body>
+</html>

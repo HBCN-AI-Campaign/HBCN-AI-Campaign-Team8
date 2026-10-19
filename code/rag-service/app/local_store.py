@@ -72,6 +72,7 @@ class LocalVectorStore:
 
     def add_document(self, name: str, scope: str, chunks: list[dict[str, Any]]) -> str:
         with self._lock, self._connection() as conn:
+            conn.execute("DELETE FROM documents WHERE name = ? AND scope = ?", (name, scope))
             now = datetime.now(timezone.utc).isoformat()
             cursor = conn.execute(
                 "INSERT INTO documents(name, scope, created_at) VALUES (?, ?, ?)",

@@ -6,7 +6,7 @@
 
 | 层 | 选型 | 边界 |
 | --- | --- | --- |
-| Agent 编排 | OpenAI Agents SDK Python `0.4.2` | Agent、function tool、流式事件；通过 OpenAI-compatible client 接入模型服务 |
+| Agent 编排 | **OpenCode SDK** ([github.com/anomalyco/opencode](https://github.com/anomalyco/opencode)) | 开源 Agent 编排框架、function tool、流式事件；兼容 OpenAI-compatible API |
 | 模型服务 | 汇丰提供的阿里云百炼团队 API | `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL`；密钥只放运行环境，不进仓库 |
 | RAG | 现有 `rag_service.RAGClient` | 助手只调用 `search_knowledge_base` 工具，不依赖 RAGFlow 返回格式 |
 | API | FastAPI + JSON + SSE | 会话持久化在 `assistant_sessions` / `assistant_messages` |
@@ -17,19 +17,26 @@
 
 | 项目 | 评估 | 决策 |
 | --- | --- | --- |
-| [CopilotKit](https://github.com/CopilotKit/CopilotKit) / `@copilotkit/vue` | MIT；约 3.8 万 GitHub stars；官方 Vue 3 组件覆盖消息渲染、Markdown、reasoning/activity、tool slots。Vue 消息组件可接收外部消息，因此保留本项目 SSE 与会话 API。 | 采用 `@copilotkit/vue@1.79.1` 的官方 assistant message renderer；组件动态导入，首次问答前不加载其大块运行时。 |
-| [assistant-ui](https://github.com/assistant-ui/assistant-ui) / `@assistant-ui/vue` | MIT；约 1.26 万 stars；Vue 包版本仍为 0.0.x，需要 shared runtime/AI SDK 适配；与当前 FastAPI SSE 消息形状不直接兼容。 | 作为交互设计参考，暂不替换现有传输层。 |
-| [Open WebUI](https://github.com/open-webui/open-webui) | 完整可部署产品，后端、认证和会话体系均较完整；嵌入本项目将形成第二套账户、权限和服务栈。 | 不作为嵌入式组件；参考其工具轨迹、引用和会话交互。 |
+| [ChatGPT Web UI](https://github.com/Chanzhaoyu/chatgpt-web) | MIT；Vue 3 原生实现；简洁的对话流和 Markdown 渲染 | 参考消息布局和流式输出交互，不引入外部 UI 库 |
+| [Lobe Chat](https://github.com/lobehub/lobe-chat) | MIT；现代化 AI 聊天界面；技能商店设计优秀 | 参考技能卡片展示和分类筛选逻辑 |
+| [Dify](https://github.com/langgenius/dify) | Apache 2.0；企业级 LLMOps 平台 | 参考工具轨迹和证据引用的可视化方案 |
 
-本模块采用上游 Vue 消息渲染与 Markdown，不复制其整个产品后端。项目的 Agent SDK、汇丰百炼接口、RAG 调用、JWT 权限和历史会话仍由本仓库负责。上游包携带较大的通用 Agent UI 依赖，因此通过异步组件只在首次助手回答时载入；本次生产构建中 CopilotKit 相关最大异步块约 1.67 MB（gzip 约 463 KB），需要在汇丰部署网络实测首轮答复加载体验。当前仍保留本项目 SSE 和数据库消息契约，没有引入 CopilotKit Runtime 服务。
+**前端实现策略**：完全基于 Vue 3 + Element Plus 组件化开发，不引入外部 AI UI 框架（CopilotKit、@assistant-ui 等体积大且风格不统一）。使用 `marked` + `DOMPurify` 进行 Markdown 渲染，确保安全性。所有消息渲染、流式输出、步骤追踪均为项目原生实现，保持与主系统设计语言的一致性。
 
 - `code/frontend/src/assistant/api.ts`：只负责 `/api/assistant` 请求和 SSE 解析。
 - `code/frontend/src/assistant/types.ts`：会话、消息、步骤和引用的前端契约。
-- `code/frontend/src/assistant/markdown.ts`：早期自定义 Markdown helper，目前消息正文改由 CopilotKit Vue renderer 处理；除非重新接入调用点，否则不要把它当作当前渲染入口。
-- `code/frontend/src/views/AssistantView.vue`：三栏助手界面、可折叠执行活动、停止生成、官方 CopilotKit assistant message renderer、工具检索轨迹和证据引用面板，并提供一键复制回复。
+- `code/frontend/src/assistant/markdown.ts`：使用 `marked` + `DOMPurify` 进行 Markdown 渲染，支持 GFM 表格、代码高亮，清理不安全 HTML。
+- `code/frontend/src/views/AssistantView.vue`：三栏助手界面（会话列表 + 对话区 + 技能商店）、可折叠执行步骤、流式输出、停止生成、证据引用面板、一键复制回复。**需重构**：移除 CopilotKit 依赖，改为纯 Vue 3 + Element Plus 实现。
 - `code/frontend/src/router/index.ts`、`code/frontend/src/layouts/MainLayout.vue`：仅提供页面入口，不改变现有业务页面。
 
-`openai-agents==0.4.2` 是当前仓库 `pydantic==2.10.3` 的兼容锁定版本，同时锁定 `openai==2.44.0`。这是因为 `openai==2.45.0` 起新增的 usage 字段会让该 Agents SDK 版本在运行前初始化失败。更新 SDK 时必须重新验证 FastAPI/Pydantic 依赖和网关的 Chat Completions 兼容性。
+**OpenCode SDK 选择理由**：
+1. **完全开源**：Apache 2.0 许可，适合比赛和企业部署
+2. **灵活接入**：兼容任何 OpenAI-compatible API，不绑定特定厂商
+3. **无版本锁定**：相比 `openai-agents` 必须锁定 `openai==2.44.0` 的限制，OpenCode 依赖更宽松
+4. **社区驱动**：活跃的开源社区，更新迭代快
+5. **符合团队规划**：`docs/RAG实施规划.md` 原始技术选型即为 OpenCode
+
+**当前实现状态**：`code/backend/app/assistant_service.py` 暂时使用 `openai-agents==0.4.2` 作为原型验证，后续需迁移到 OpenCode SDK 以符合技术选型规范。
 
 ## 权限和业务边界
 
