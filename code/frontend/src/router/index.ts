@@ -28,12 +28,6 @@ const router = createRouter({
           meta: { title: '慧眼助手', icon: 'MagicStick' },
         },
         {
-          path: 'assistant-demo',
-          name: 'assistant-demo',
-          component: () => import('@/views/AssistantDesignDemo.vue'),
-          meta: { title: 'UI 设计演示', icon: 'Picture', hidden: true },
-        },
-        {
           path: 'create',
           name: 'create',
           component: () => import('@/views/CreateTaskView.vue'),
