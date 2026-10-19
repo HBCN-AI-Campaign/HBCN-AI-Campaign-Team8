@@ -1,0 +1,40 @@
+sequenceDiagram
+    autonumber
+    participant API as FastAPI tasks 路由
+    participant Parse as parse_agent / OCR 适配层
+    participant RAG as RAG 服务适配层
+    participant Embed as Embedding API
+    participant Index as 文档与向量索引
+    participant Agent as review_agent
+    participant LLM as LLM API
+    participant Rule as rule_engine
+    actor H as 审核人员
+
+    API->>Parse: 解析上传文件
+    Parse-->>API: 字段、置信度、页码、bbox、标准化文本
+    API->>RAG: 写入任务文档与版本元数据
+    RAG->>Embed: 对文本切片生成向量
+    Embed-->>RAG: 向量与模型版本
+    RAG->>Index: 保存关键词索引、向量和原文锚点
+    Index-->>RAG: 索引就绪
+
+    API->>Rule: 执行确定性规则
+    Rule-->>API: pass / fail / warn / [专项] skip
+    API->>Agent: 启动专项审核并传入事实、权限和规则结果
+    Agent->>RAG: 发送受限检索请求
+    RAG->>LLM: 生成检索计划和有限子问题
+    LLM-->>RAG: 检索计划
+    loop 最多 N 轮
+        RAG->>Index: 混合检索法规、任务材料和术语
+        Index-->>RAG: 片段、版本、页码、bbox
+        RAG->>LLM: 检查证据覆盖、冲突和是否补检索
+        LLM-->>RAG: 完整 / 补检索 / 证据不足
+    end
+    RAG-->>Agent: 带引用证据包与检索轨迹
+    Agent->>LLM: 结构化专项审核输出
+    LLM-->>Agent: 风险、结论、依据、未决项
+    Agent-->>API: 专项结果与待处置项
+    API-->>H: 展示结果、原文定位和人工处置入口
+    H->>API: 通过 / 保留 / 已知悉 / 补件
+
+    Note over RAG,LLM: RAG 提供证据与检索编排，不直接决定硬规则结论

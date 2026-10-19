@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HBCN 知识库检索 · 试用</title>
+  <style>
+    :root { --brand:#0f62fe; --bg:#f4f6f9; --card:#fff; --line:#e3e8ef; --text:#1a2333; --muted:#6b7787; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif; background:var(--bg); color:var(--text); }
+    header { background:var(--brand); color:#fff; padding:16px 24px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+    header h1 { font-size:18px; margin:0; font-weight:600; }
+    header .badge { background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.35); border-radius:999px; padding:3px 12px; font-size:12px; }
+    main { max-width:960px; margin:20px auto; padding:0 16px; display:grid; gap:16px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; }
+    .card h2 { margin:0 0 12px; font-size:15px; }
+    label { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
+    input[type=text], input[type=password], textarea, select, input[type=file] {
+      width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:8px; font-size:14px; font-family:inherit;
+    }
+    textarea { min-height:72px; resize:vertical; }
+    .row { display:flex; gap:12px; flex-wrap:wrap; }
+    .row > div { flex:1; min-width:160px; }
+    button { background:var(--brand); color:#fff; border:0; border-radius:8px; padding:10px 18px; font-size:14px; cursor:pointer; margin-top:14px; }
+    button.secondary { background:#eef2f7; color:var(--text); }
+    button:disabled { opacity:.55; cursor:not-allowed; }
+    .status { font-size:13px; color:var(--muted); margin-top:8px; min-height:18px; }
+    .status.error { color:#c0392b; }
+    .hit { border:1px solid var(--line); border-radius:8px; padding:12px; margin-top:10px; }
+    .hit .meta { font-size:12px; color:var(--muted); margin-top:6px; display:flex; gap:12px; flex-wrap:wrap; }
+    .hit pre { white-space:pre-wrap; font-family:inherit; font-size:14px; margin:0; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); }
+    .token-line { display:flex; gap:8px; align-items:center; }
+    .token-line input { flex:1; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>HBCN 知识库检索 · 试用</h1>
+    <span class="badge" id="engineBadge">连接中…</span>
+    <span class="badge" id="scopeBadge"></span>
+  </header>
+
+  <main>
+    <div class="card">
+      <h2>服务 Token</h2>
+      <div class="token-line">
+        <input type="password" id="token" placeholder="粘贴 SERVICE_TOKEN（与 rag-service/.env 一致）" />
+        <button class="secondary" onclick="saveToken()">保存并连接</button>
+      </div>
+      <div class="status" id="capStatus"></div>
+    </div>
+
+    <div class="card">
+      <h2>文件导入（自动 OCR + Embedding）</h2>
+      <div class="row">
+        <div>
+          <label>知识库范围</label>
+          <select id="importScope">
+            <option value="business_rules">business_rules（业务规则）</option>
+            <option value="project_design">project_design（方案设计）</option>
+          </select>
+        </div>
+        <div>
+          <label>选择文件（支持 PDF / Word / Excel / 图片 / 文本）</label>
+          <input type="file" id="file" />
+        </div>
+      </div>
+      <button onclick="importFile()">导入并建立索引</button>
+      <div class="status" id="importStatus"></div>
+    </div>
+
+    <div class="card">
+      <h2>知识库查询</h2>
+      <div class="row">
+        <div>
+          <label>知识库范围</label>
+          <select id="queryScope">
+            <option value="business_rules">business_rules（业务规则）</option>
+            <option value="project_design">project_design（方案设计）</option>
+          </select>
+        </div>
+        <div>
+          <label>返回条数 top_k</label>
+          <input type="text" id="topK" value="5" />
+        </div>
+      </div>
+      <label>问题</label>
+      <textarea id="query" placeholder="例如：境外贷款单据支持性文件包含哪些内容？"></textarea>
+      <button onclick="runQuery()">查询</button>
+      <div class="status" id="queryStatus"></div>
+      <div id="results"></div>
+    </div>
+
+    <div class="card">
+      <h2>已入库文档</h2>
+      <button class="secondary" onclick="loadDocuments()">刷新列表</button>
+      <div id="docs"></div>
+    </div>
+  </main>
+
+  <script>
+    let token = window.__SERVICE_TOKEN__ || localStorage.getItem('hbcn_rag_token') || '';
+    document.getElementById('token').value = token;
+
+    function saveToken() {
+      token = document.getElementById('token').value.trim();
+      localStorage.setItem('hbcn_rag_token', token);
+      loadCapabilities();
+    }
+
+    async function api(path, options = {}) {
+      const headers = options.headers || {};
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const resp = await fetch(path, { ...options, headers });
+      const text = await resp.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = { raw: text }; }
+      if (!resp.ok) {
+        const msg = data.detail || data.message || text.slice(0, 200) || ('HTTP ' + resp.status);
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    async function loadCapabilities() {
+      const el = document.getElementById('capStatus');
+      try {
+        const cap = await api('/api/v1/capabilities');
+        document.getElementById('engineBadge').textContent = '引擎：' + (cap.engine || 'none');
+        document.getElementById('scopeBadge').textContent = '范围：' + (cap.supported_scopes || []).join(', ');
+        el.textContent = cap.retrieval ? '已就绪，可以查询与导入。' : '引擎未配置：请检查 .env 的 BAILIAN 或 RAGFLOW 配置。';
+        el.classList.remove('error');
+      } catch (e) {
+        el.textContent = '连接失败：' + e.message + '（请先填写正确的 Service Token）';
+        el.classList.add('error');
+      }
+    }
+
+    async function importFile() {
+      const fileInput = document.getElementById('file');
+      const scope = document.getElementById('importScope').value;
+      const el = document.getElementById('importStatus');
+      if (!fileInput.files.length) { el.textContent = '请先选择文件'; el.classList.add('error'); return; }
+      el.textContent = '导入中（OCR + Embedding，较大文件可能较慢）…';
+      el.classList.remove('error');
+      try {
+        const form = new FormData();
+        form.append('scope', scope);
+        form.append('file', fileInput.files[0]);
+        const headers = {};
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        const resp = await fetch('/api/v1/documents', { method: 'POST', headers, body: form });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || data.message || ('HTTP ' + resp.status));
+        el.textContent = '导入成功，document_ids：' + (data.document_ids || []).join(', ');
+        loadDocuments();
+      } catch (e) {
+        el.textContent = '导入失败：' + e.message;
+        el.classList.add('error');
+      }
+    }
+
+    async function runQuery() {
+      const el = document.getElementById('queryStatus');
+      const results = document.getElementById('results');
+      results.innerHTML = '';
+      el.textContent = '查询中…';
+      el.classList.remove('error');
+      try {
+        const data = await api('/api/v1/query', {
+          method: 'POST',
+          body: JSON.stringify({
+            query: document.getElementById('query').value,
+            scope: document.getElementById('queryScope').value,
+            top_k: parseInt(document.getElementById('topK').value || '5', 10),
+          }),
+        });
+        el.textContent = '共 ' + data.evidence.length + ' 条证据' + (data.warnings.length ? '；提示：' + data.warnings.join('；') : '');
+        if (!data.evidence.length) { results.innerHTML = '<p>没有检索到证据，不应据此生成确定性审核结论。</p>'; return; }
+        for (const item of data.evidence) {
+          const div = document.createElement('div');
+          div.className = 'hit';
+          const pre = document.createElement('pre');
+          pre.textContent = item.content || '';
+          const meta = document.createElement('div');
+          meta.className = 'meta';
+          const score = item.score != null ? Number(item.score).toFixed(3) : '—';
+          meta.innerHTML = '<span>文档：' + escapeHtml(item.document_name || '—') + '</span>'
+            + '<span>页码：' + (item.page != null ? item.page : '—') + '</span>'
+            + '<span>相似度：' + score + '</span>';
+          div.appendChild(pre);
+          div.appendChild(meta);
+          results.appendChild(div);
+        }
+      } catch (e) {
+        el.textContent = '查询失败：' + e.message;
+        el.classList.add('error');
+      }
+    }
+
+    async function loadDocuments() {
+      const box = document.getElementById('docs');
+      try {
+        const data = await api('/api/v1/documents');
+        const docs = data.documents || [];
+        if (!docs.length) { box.innerHTML = '<p>暂无文档</p>'; return; }
+        let html = '<table><tr><th>文档名</th><th>范围</th><th>切片数</th><th>时间</th></tr>';
+        for (const d of docs) {
+          html += '<tr><td>' + escapeHtml(d.name || '') + '</td><td>' + escapeHtml(d.scope || '') + '</td><td>' + (d.chunk_count != null ? d.chunk_count : '—') + '</td><td>' + escapeHtml(d.created_at || '') + '</td></tr>';
+        }
+        html += '</table>';
+        box.innerHTML = html;
+      } catch (e) {
+        box.innerHTML = '<p class="status error">' + escapeHtml(e.message) + '</p>';
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    loadCapabilities();
+    loadDocuments();
+  </script>
+</body>
+</html>
