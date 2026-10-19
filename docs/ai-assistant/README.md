@@ -82,25 +82,28 @@ sequenceDiagram
     participant DB as AssistantSession/Message
     participant Agent as OpenAI Agents SDK
     participant GW as 汇丰百炼 OpenAI-compatible API
-    participant RAG as 现有 RAG 适配层
+    participant RAG as RAG 知识库服务
     participant Task as 任务/规则只读数据
 
     U->>API: POST /sessions/{id}/messages/stream
     API->>DB: 校验 user_id 与 task_code 权限
-    API->>Task: 读取任务材料、规则结果
+    API->>Task: 读取授权任务材料、规则结果
     API-->>U: message_start + step(context)
     API->>Agent: Agent + 受控 search_knowledge_base tool
-    Agent->>RAG: 查询任务材料/知识库
-    RAG-->>Agent: 证据片段与来源
+    Agent->>RAG: 查询知识库（business_rules / project_design）
+    RAG-->>Agent: 知识库证据片段与来源
+    API->>API: 合并本地任务/规则证据与知识库证据
     Agent->>GW: OpenAI-compatible 流式请求
     loop 增量输出
         GW-->>Agent: 文本 delta
         Agent-->>API: delta / tool 事件
         API-->>U: SSE 事件
     end
-    API-->>U: citations + message_end
     API->>DB: 持久化用户消息和助手消息
+    API-->>U: citations + message_end
 ```
+
+任务材料和规则结果由助手后端按当前用户权限直接读取；RAG 仅负责知识库检索，不接收或替代任务权限校验。任务会话也只查询 `knowledge_base` 范围；RAG 暂不支持 `task_documents` 时，不会因此跳过知识库检索。
 
 ## 运行配置
 
