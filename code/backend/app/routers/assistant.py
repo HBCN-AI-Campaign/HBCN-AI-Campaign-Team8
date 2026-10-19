@@ -17,7 +17,7 @@ from ..assistant_schemas import (
     AssistantSessionDetail,
     AssistantSessionOut,
 )
-from ..assistant_service import sdk_configured, stream_assistant, task_for_user
+from ..assistant_service import _safe_final_answer, sdk_configured, stream_assistant, task_for_user
 from ..config import settings
 from ..database import get_db
 from ..security import get_current_user
@@ -41,6 +41,15 @@ def _session_out(session: models.AssistantSession) -> AssistantSessionOut:
         message_count=len(session.messages),
         updated_at=session.updated_at,
     )
+
+
+def _message_out(message: models.AssistantMessage) -> AssistantMessageOut:
+    result = AssistantMessageOut.model_validate(message, from_attributes=True)
+    if message.role == "assistant" and _safe_final_answer(message.content) is None:
+        return result.model_copy(update={
+            "content": "这条历史答复包含不可展示的内部过程，已隐藏。请重新发送问题以获取审核辅助答复。"
+        })
+    return result
 
 
 @router.get("/capabilities", response_model=AssistantCapabilities)
@@ -94,7 +103,7 @@ def get_session(
     session = _session_for_user(db, session_id, user)
     return AssistantSessionDetail(
         **_session_out(session).model_dump(),
-        messages=[AssistantMessageOut.model_validate(item, from_attributes=True) for item in session.messages],
+        messages=[_message_out(item) for item in session.messages],
     )
 
 

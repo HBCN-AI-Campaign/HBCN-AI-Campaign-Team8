@@ -63,24 +63,38 @@
             <div class="message-body">
               <div class="message-meta">
                 <strong>{{ message.role === 'assistant' ? '慧眼助手' : '你' }}</strong>
-                <span v-if="message.streaming" class="streaming-label">处理中</span>
-                <button v-if="message.role === 'assistant' && message.content && !message.streaming" class="copy-btn"
-                  @click="copyMessage(message)">复制</button>
+                <span v-if="message.streaming" class="streaming-label">正在生成</span>
+                <button v-if="message.role === 'assistant' && safeMessageContent(message) && !message.streaming" class="copy-btn"
+                  title="复制回答" aria-label="复制回答" @click="copyMessage(message)"><el-icon><CopyDocument /></el-icon></button>
               </div>
               <div class="message-card">
-                <div v-if="message.steps?.length" class="step-stack">
-                  <div v-for="step in message.steps" :key="step.key" class="step-line" :class="step.status">
-                    <span class="step-icon"><el-icon v-if="step.status === 'completed'"><Check /></el-icon><el-icon v-else-if="step.status === 'error'"><Close /></el-icon><el-icon v-else class="spin"><Loading /></el-icon></span>
-                    <span><b>{{ step.label }}</b><small v-if="step.detail">{{ step.detail }}</small></span>
-                  </div>
-                  <div v-if="message.streaming" v-for="tool in toolActivity" :key="tool.name" class="step-line" :class="tool.status">
-                    <span class="step-icon"><el-icon v-if="tool.status === 'completed'"><Check /></el-icon><el-icon v-else class="spin"><Loading /></el-icon></span>
-                    <span><b>检索证据</b><small>{{ tool.status === 'running' ? '检索任务材料与规则…' : `已检索 ${tool.result_count ?? 0} 条` }}</small></span>
+                <div v-if="message.steps?.length || message.streaming" class="activity-panel" :class="{ running: message.streaming }">
+                  <button class="activity-heading" :aria-expanded="activityExpanded(message)" @click="toggleActivity(message)">
+                    <span class="activity-spark"><el-icon v-if="message.streaming" class="spin"><Loading /></el-icon><el-icon v-else><CircleCheck /></el-icon></span>
+                    <span class="activity-heading-copy"><b>{{ activityTitle(message) }}</b><small>{{ activitySubtitle(message) }}</small></span>
+                    <el-icon class="activity-chevron" :class="{ expanded: activityExpanded(message) }"><ArrowRight /></el-icon>
+                  </button>
+                  <div v-if="activityExpanded(message)" class="activity-feed">
+                    <div v-for="step in message.steps" :key="step.key" class="activity-event" :class="step.status">
+                      <span class="event-marker"><el-icon v-if="step.status === 'completed'"><Check /></el-icon><el-icon v-else-if="step.status === 'error'"><Close /></el-icon><span v-else class="event-pulse"></span></span>
+                      <div class="event-copy"><b>{{ step.label }}</b><small v-if="step.detail">{{ step.detail }}</small></div>
+                    </div>
+                    <div v-for="(tool, index) in toolActivity" :key="`${tool.name}-${index}`" class="activity-event" :class="tool.status">
+                      <span class="event-marker"><el-icon v-if="tool.status === 'completed'"><Check /></el-icon><span v-else class="event-pulse"></span></span>
+                      <div class="event-copy"><b>{{ toolLabel(tool.name) }}</b><small>{{ tool.status === 'running' ? '正在检索授权材料与知识库' : `找到 ${tool.result_count ?? 0} 条相关证据` }}</small></div>
+                    </div>
+                    <div v-if="message.streaming" class="activity-event pending"><span class="event-marker"><span class="event-pulse"></span></span><div class="event-copy"><b>组织审核建议</b><small>正在整合材料、规则和知识库依据</small></div></div>
                   </div>
                 </div>
                 <div class="message-content">
-                  <div class="markdown-body" v-html="renderMarkdown(message.content)"></div>
-                  <span v-if="message.streaming" class="cursor"></span>
+                  <CopilotChatAssistantMessage
+                    v-if="message.role === 'assistant'"
+                    :message="toCopilotMessage(message)"
+                    :is-running="Boolean(message.streaming)"
+                    :toolbar-visible="false"
+                    class="copilot-answer"
+                  />
+                  <div v-else class="user-content">{{ message.content }}</div>
                 </div>
                 <div v-if="message.citations?.length" class="citation-wrap">
                   <div class="citation-label">证据引用</div>
@@ -95,16 +109,16 @@
               </div>
             </div>
           </article>
-          <div v-if="loading && !activeTrace.length" class="typing"><span></span><span></span><span></span></div>
         </div>
 
         <footer class="composer-wrap">
           <div v-if="runningSkill" class="skill-running"><el-icon class="spin"><Loading /></el-icon>正在执行：{{ runningSkill }}</div>
           <form class="composer" @submit.prevent="sendMessage">
             <el-input v-model="draft" type="textarea" :rows="1" :maxlength="8000" resize="none" :disabled="loading"
-              placeholder="询问规则、材料、风险或下一步人工动作…" @keydown.enter.exact.prevent="sendMessage" />
-            <el-button class="send-button" type="primary" circle :icon="loading ? Loading : Promotion"
-              :disabled="!draft.trim() || loading" native-type="submit" />
+              placeholder="描述你想核对的规则、材料或风险…" @keydown.enter.exact.prevent="sendMessage" />
+            <el-button v-if="!loading" class="send-button" type="primary" circle :icon="Promotion"
+              :disabled="!draft.trim()" native-type="submit" title="发送消息" aria-label="发送消息" />
+            <el-button v-else class="send-button stop-button" circle :icon="VideoPause" title="停止生成" aria-label="停止生成" @click.prevent="stopGeneration" />
           </form>
           <div class="composer-foot">受控只读 · 结论由审核人员确认</div>
         </footer>
@@ -145,17 +159,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 import { assistantApi } from '@/assistant/api'
-import { renderMarkdown } from '@/assistant/markdown'
+import '@copilotkit/vue/styles.css'
 import type { AssistantCapabilities, AssistantMessage, AssistantSession, AssistantSkill, AssistantStep, AssistantTaskOption, AssistantToolActivity } from '@/assistant/types'
-import { ArrowLeft, Calendar, ChatDotRound, Check, Close, Coin, DataLine, DocumentChecked, FolderOpened, Loading, Lock, MagicStick, Plus, Promotion, Reading, Search, Ship } from '@element-plus/icons-vue'
+import type { AssistantMessage as CopilotMessage } from '@ag-ui/core'
+import { ArrowLeft, ArrowRight, Calendar, ChatDotRound, Check, CircleCheck, Close, Coin, CopyDocument, DataLine, DocumentChecked, FolderOpened, Loading, Lock, MagicStick, Plus, Promotion, Reading, Search, Ship, VideoPause } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const auth = useAuthStore()
+const CopilotChatAssistantMessage = defineAsyncComponent(() => import('@copilotkit/vue/v2').then((module) => module.CopilotChatAssistantMessage))
 const sessions = ref<AssistantSession[]>([])
 const tasks = ref<AssistantTaskOption[]>([])
 const activeSessionId = ref<number | null>(null)
@@ -170,6 +186,8 @@ const toolActivity = ref<AssistantToolActivity[]>([])
 const runningSkill = ref('')
 const mobileSkillsVisible = ref(false)
 const mobileSessionsVisible = ref(false)
+const expandedActivityIds = ref(new Set<number | string>())
+const streamAbortController = ref<AbortController | null>(null)
 
 const prompts = [
   { title: '梳理风险', text: '帮我总结当前任务的风险和人工核对点', icon: DocumentChecked },
@@ -295,11 +313,14 @@ async function sendMessage() {
   const assistant: AssistantMessage = { id: `assistant-${Date.now()}`, role: 'assistant', content: '', status: 'running', steps: [], citations: [], streaming: true }
   messages.value.push(assistant)
   loading.value = true
+  const controller = new AbortController()
+  streamAbortController.value = controller
+  expandedActivityIds.value.add(assistant.id)
   activeTrace.value = []
   toolActivity.value = []
   scrollToBottom()
   try {
-    for await (const event of assistantApi.streamMessage(activeSessionId.value, content, activeSession.value?.task_code || undefined)) {
+    for await (const event of assistantApi.streamMessage(activeSessionId.value, content, activeSession.value?.task_code || undefined, controller.signal)) {
       if (event.event === 'step' && event.step) {
         const step = event.step
         const index = assistant.steps.findIndex((current) => current.key === step.key)
@@ -320,6 +341,7 @@ async function sendMessage() {
         assistant.citations = event.message.citations || assistant.citations
         assistant.status = 'completed'
         assistant.streaming = false
+        expandedActivityIds.value.delete(assistant.id)
       } else if (event.event === 'error') throw new Error(event.error_message || '助手执行失败')
       await nextTick()
       scrollToBottom()
@@ -329,16 +351,54 @@ async function sendMessage() {
   } catch (error) {
     assistant.status = 'error'
     assistant.streaming = false
-    assistant.content = error instanceof Error ? error.message : '助手执行失败，请重试'
+    assistant.content = controller.signal.aborted ? '本次生成已停止。你可以补充要求后重新发送。' : error instanceof Error ? error.message : '助手执行失败，请重试'
+    expandedActivityIds.value.delete(assistant.id)
     ElMessage.error(assistant.content)
   } finally {
+    streamAbortController.value = null
     loading.value = false
   }
 }
 
+function stopGeneration() { streamAbortController.value?.abort() }
+
+function activityExpanded(message: AssistantMessage) { return expandedActivityIds.value.has(message.id) }
+function toggleActivity(message: AssistantMessage) {
+  const next = new Set(expandedActivityIds.value)
+  if (next.has(message.id)) next.delete(message.id)
+  else next.add(message.id)
+  expandedActivityIds.value = next
+}
+function activityTitle(message: AssistantMessage) {
+  if (message.streaming) return '慧眼正在处理'
+  if (message.status === 'error') return '本次处理未完成'
+  return `完成 ${message.steps?.length ?? 0} 个执行步骤`
+}
+function activitySubtitle(message: AssistantMessage) {
+  const toolCount = toolActivity.value.length
+  return message.streaming ? `${toolCount ? `已调用 ${toolCount} 次证据检索` : '正在理解请求并准备检索'}` : '查看本轮执行轨迹'
+}
+function toolLabel(name: string) {
+  if (name.includes('knowledge')) return '检索知识库'
+  if (name.includes('task')) return '读取任务证据'
+  return name.split('_').join(' ')
+}
+function safeMessageContent(message: AssistantMessage) {
+  const markers = ['我们需要回答用户', '用户要求两句话', '需要引用任务材料或规则结果', '先调用 search_knowledge_base', 'let me think', 'we need to answer the user', 'analysis:', 'reasoning:']
+  const content = message.content || ''
+  if (markers.some((marker) => content.toLowerCase().includes(marker.toLowerCase()))) {
+    return '这条历史答复包含不可展示的内部过程，已隐藏。请重新发送问题以获取审核辅助答复。'
+  }
+  return content
+}
+
+function toCopilotMessage(message: AssistantMessage): CopilotMessage {
+  return { id: String(message.id), role: 'assistant', content: safeMessageContent(message) }
+}
+
 async function copyMessage(message: AssistantMessage) {
   try {
-    await navigator.clipboard.writeText(message.content)
+    await navigator.clipboard.writeText(safeMessageContent(message))
     ElMessage.success('已复制到剪贴板')
   } catch {
     ElMessage.error('复制失败，请手动选择文本')
@@ -407,30 +467,38 @@ onMounted(loadSessions)
 .copy-btn:hover { color: #4a7bd1; }
 .message-card { padding: 13px 15px; border: 1px solid #e4e9f1; border-radius: 4px 8px 8px 8px; background: #fff; box-shadow: 0 3px 12px rgba(35, 59, 91, .035); text-align: left; }
 .user .message-card { border: 0; border-radius: 8px 4px 8px 8px; background: #edf3fd; box-shadow: none; }
-.message-content { margin: 0; color: #435573; font-size: 13px; line-height: 1.75; }
-.user .message-content { color: #31568d; }
-.markdown-body p { margin: 0 0 8px; }.markdown-body p:last-child { margin-bottom: 0; }
-.markdown-body ul, .markdown-body ol { margin: 4px 0 8px; padding-left: 20px; }.markdown-body li { margin: 3px 0; }
-.markdown-body code { padding: 1px 5px; border-radius: 4px; background: #eef2f8; color: #c7254e; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
-.markdown-body pre { margin: 8px 0; padding: 12px; border-radius: 8px; background: #f6f8fb; overflow: auto; }.markdown-body pre code { padding: 0; background: transparent; color: #435573; }
-.markdown-body a { color: #4a7bd1; text-decoration: none; }.markdown-body a:hover { text-decoration: underline; }
-.markdown-body h1, .markdown-body h2, .markdown-body h3 { margin: 10px 0 6px; color: #1a2e50; }
-.markdown-body blockquote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid #cfe0f6; background: #f6f9fd; color: #5f7390; }
-.markdown-body table { width: 100%; margin: 8px 0 12px; border-collapse: collapse; font-size: 12px; }
-.markdown-body th, .markdown-body td { padding: 7px 9px; border: 1px solid #e4e9f1; text-align: left; }
-.markdown-body th { background: #f2f6fb; color: #344b6c; font-weight: 600; }
-.markdown-body tr:nth-child(even) td { background: #fbfcfe; }
-.cursor { display: inline-block; width: 6px; height: 15px; margin-left: 3px; vertical-align: -2px; background: #4d82da; animation: blink 1s infinite; }
-@keyframes blink { 50% { opacity: 0; } }
-.step-stack { display: grid; gap: 7px; margin: 0 0 11px; padding-bottom: 10px; border-bottom: 1px solid #edf1f5; }
-.step-line { display: flex; align-items: flex-start; gap: 8px; color: #60738d; }
-.step-icon { display: grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; background: #edf3fc; color: #4a7bd1; font-size: 10px; }
-.step-line.completed .step-icon { background: #e8f7f1; color: #28a879; }
-.step-line.error { color: #b94343; }
-.step-line.error .step-icon { background: #fdecec; color: #b94343; }
-.step-line > span:nth-child(2) { display: grid; gap: 1px; }
-.step-line b { font-size: 11px; font-weight: 600; }
-.step-line small { color: #95a3b6; font-size: 10px; }
+.message-content { margin: 0; color: #435573; font-size: 14px; line-height: 1.8; }
+.user-content { color: #31568d; white-space: pre-wrap; overflow-wrap: anywhere; }
+.copilot-answer :deep([data-copilotkit]) { margin: 0; color: inherit; font-size: inherit; line-height: inherit; }
+.copilot-answer :deep(.copilot-chat-assistant-markdown) { color: #354761; font-size: 14px; line-height: 1.8; }
+.copilot-answer :deep(.copilot-chat-assistant-markdown p) { margin: 0 0 10px; }
+.copilot-answer :deep(.copilot-chat-assistant-markdown p:last-child) { margin-bottom: 0; }
+.copilot-answer :deep(.copilot-chat-assistant-markdown table) { width: 100%; display: block; overflow-x: auto; border-collapse: collapse; }
+.copilot-answer :deep(.copilot-chat-assistant-markdown th), .copilot-answer :deep(.copilot-chat-assistant-markdown td) { padding: 7px 9px; border: 1px solid #e4e9f1; text-align: left; }
+.copilot-answer :deep(.copilot-chat-assistant-markdown th) { background: #f2f6fb; font-weight: 600; }
+.copilot-answer :deep(.copilot-chat-assistant-markdown pre) { max-width: 100%; overflow: auto; }
+.copilot-user :deep([data-copilotkit]) { color: #31568d; font-size: 13px; line-height: 1.7; }
+.activity-panel { margin: 0 0 12px; overflow: hidden; border: 1px solid #e2eaf4; border-radius: 8px; background: #f8fafd; }
+.activity-panel.running { border-color: #c8d9f2; background: #f7faff; }
+.activity-heading { display: flex; align-items: center; width: 100%; gap: 10px; padding: 10px 11px; border: 0; background: transparent; color: #344761; text-align: left; cursor: pointer; }
+.activity-spark { display: grid; place-items: center; width: 26px; height: 26px; flex: 0 0 auto; border-radius: 7px; background: #e8f0fc; color: #4875bd; }
+.activity-panel.running .activity-spark { background: #e5efff; color: #3979d6; }
+.activity-heading-copy { display: grid; flex: 1; gap: 2px; min-width: 0; }
+.activity-heading-copy b { color: #344761; font-size: 12px; font-weight: 650; }
+.activity-heading-copy small { color: #8292a8; font-size: 10px; }
+.activity-chevron { color: #8b9ab0; transition: transform .18s ease; }
+.activity-chevron.expanded { transform: rotate(90deg); }
+.activity-feed { display: grid; gap: 0; padding: 0 14px 10px 23px; }
+.activity-event { position: relative; display: grid; grid-template-columns: 17px minmax(0, 1fr); gap: 9px; min-height: 36px; }
+.activity-event:not(:last-child)::before { position: absolute; top: 17px; bottom: -2px; left: 7px; width: 1px; background: #dce5f1; content: ''; }
+.event-marker { z-index: 1; display: grid; place-items: center; width: 15px; height: 15px; border: 1px solid #cbd8e9; border-radius: 50%; background: #fff; color: #318e72; font-size: 9px; }
+.activity-event.running .event-marker { border-color: #8fb1e2; color: #4b81ce; }
+.event-pulse { width: 5px; height: 5px; border-radius: 50%; background: #5d8ed6; animation: pulse 1.2s ease-in-out infinite; }
+.event-copy { display: grid; align-content: start; gap: 2px; padding: 1px 0 9px; }
+.event-copy b { color: #526681; font-size: 11px; font-weight: 600; }
+.event-copy small { color: #8998ad; font-size: 10px; line-height: 1.4; }
+.activity-event.pending .event-marker { border-style: dashed; }
+@keyframes pulse { 50% { opacity: .4; transform: scale(.8); } }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .citation-wrap { margin-top: 13px; padding-top: 10px; border-top: 1px solid #edf1f5; }

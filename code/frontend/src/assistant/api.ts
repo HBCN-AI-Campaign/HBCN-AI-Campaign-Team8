@@ -53,11 +53,12 @@ export const assistantApi = {
     return request(`${base}/sessions/${id}`, { headers: headers() })
   },
 
-  async *streamMessage(id: number, content: string, taskCode?: string): AsyncGenerator<AssistantStreamEvent> {
+  async *streamMessage(id: number, content: string, taskCode?: string, signal?: AbortSignal): AsyncGenerator<AssistantStreamEvent> {
     const response = await fetch(`${base}/sessions/${id}/messages/stream`, {
       method: 'POST',
       headers: { ...headers(true), Accept: 'text/event-stream' },
       body: JSON.stringify({ content, task_code: taskCode || null }),
+      signal,
     })
     if (!response.ok || !response.body) {
       const body = await response.json().catch(() => ({})) as { detail?: string }

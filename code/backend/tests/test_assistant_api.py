@@ -1,4 +1,8 @@
+import asyncio
+import sys
+import types
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi import FastAPI
@@ -8,10 +12,14 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import models
-from app.assistant_service import _rag_search, _strip_tool_echo
+from app.assistant_service import _rag_search, _safe_final_answer, _strip_tool_echo, run_agent_events
 from app.database import Base, get_db
 from app.routers.assistant import router
 from app.security import create_access_token, hash_password
+
+
+async def _collect_events(stream):
+    return [event async for event in stream]
 
 
 class AssistantApiTests(unittest.TestCase):
@@ -105,6 +113,73 @@ class AssistantApiTests(unittest.TestCase):
         self.assertEqual(_strip_tool_echo("正常回答"), "正常回答")
         self.assertEqual(_strip_tool_echo('{"foo":1}保留'), '{"foo":1}保留')
         self.assertEqual(_strip_tool_echo('{"query":"只有json"}'), '{"query":"只有json"}')
+
+    def test_internal_reasoning_is_rejected_as_final_answer(self):
+        self.assertIsNone(_safe_final_answer("我们需要回答用户：先检索一下。最终答案是 OK。"))
+        self.assertEqual(_safe_final_answer("慧眼助手可整理材料并提示风险。"), "慧眼助手可整理材料并提示风险。")
+
+    def test_legacy_reasoning_is_redacted_from_session_api(self):
+        created = self.client.post(
+            "/api/assistant/sessions", headers=self.reviewer_headers, json={"title": "legacy"}
+        )
+        with self.session_factory() as db:
+            db.add(models.AssistantMessage(
+                session_id=created.json()["id"],
+                role="assistant",
+                content="我们需要回答用户：内部分析内容。最终答复。",
+                status="completed",
+            ))
+            db.commit()
+        detail = self.client.get(
+            f"/api/assistant/sessions/{created.json()['id']}", headers=self.reviewer_headers
+        )
+        self.assertIn("已隐藏", detail.json()["messages"][0]["content"])
+        self.assertNotIn("内部分析内容", detail.json()["messages"][0]["content"])
+
+    def test_agent_stream_never_exposes_raw_reasoning_delta(self):
+        class FakeAgent:
+            def __init__(self, **kwargs):
+                pass
+
+        class FakeRun:
+            final_output = "安全的审核辅助答复"
+
+            async def stream_events(self):
+                yield SimpleNamespace(
+                    type="raw_response_event",
+                    data=SimpleNamespace(delta="内部推理：不应发送给前端"),
+                )
+
+        class FakeRunner:
+            @staticmethod
+            def run_streamed(*args, **kwargs):
+                return FakeRun()
+
+        agents_module = types.ModuleType("agents")
+        agents_module.Agent = FakeAgent
+        agents_module.Runner = FakeRunner
+        agents_module.function_tool = lambda function: function
+        models_module = types.ModuleType("agents.models")
+        models_module.__path__ = []
+        chat_module = types.ModuleType("agents.models.openai_chatcompletions")
+        chat_module.OpenAIChatCompletionsModel = lambda **kwargs: object()
+        openai_module = types.ModuleType("openai")
+        openai_module.AsyncOpenAI = lambda **kwargs: object()
+        with patch("app.assistant_service.sdk_configured", return_value=True), patch(
+            "app.assistant_service.settings.AI_BASE_URL", "https://model.example/v1"
+        ), patch("app.assistant_service.settings.AI_API_KEY", "test-key"), patch(
+            "app.assistant_service.settings.AI_MODEL", "test-model"
+        ), patch.dict(sys.modules, {
+            "agents": agents_module,
+            "agents.models": models_module,
+            "agents.models.openai_chatcompletions": chat_module,
+            "openai": openai_module,
+        }):
+            events = asyncio.run(_collect_events(run_agent_events("test", {})))
+
+        deltas = [event["delta"] for event in events if event["event"] == "delta"]
+        self.assertEqual("".join(deltas), "安全的审核辅助答复")
+        self.assertNotIn("内部推理", "".join(deltas))
 
     def test_task_chat_queries_shared_knowledge_base(self):
         from app.rag_service import RAGClient

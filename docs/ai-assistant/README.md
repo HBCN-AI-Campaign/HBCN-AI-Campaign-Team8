@@ -11,7 +11,17 @@
 | RAG | 现有 `rag_service.RAGClient` | 助手只调用 `search_knowledge_base` 工具，不依赖 RAGFlow 返回格式 |
 | API | FastAPI + JSON + SSE | 会话持久化在 `assistant_sessions` / `assistant_messages` |
 
-前端沿用仓库已有的 Vue 3 + Element Plus，不新增 React、Tailwind 或另一套状态系统。组件形态参考官方成熟方案 [`@assistant-ui/vue`](https://www.assistant-ui.com/docs/vue) 的 runtime、tool event 和 streaming 设计，通信层则适配本项目已有的 FastAPI SSE 契约。助手页面的代码边界如下：
+前端沿用仓库已有的 Vue 3 + Element Plus，不新增 React 或另一套状态系统。问答体验按成熟 agent UI 的运行状态、工具轨迹和流式 Markdown 组织，通信层适配本项目已有的 FastAPI SSE 契约。助手页面的代码边界如下：
+
+### 开源 UI 选型记录
+
+| 项目 | 评估 | 决策 |
+| --- | --- | --- |
+| [CopilotKit](https://github.com/CopilotKit/CopilotKit) / `@copilotkit/vue` | MIT；约 3.8 万 GitHub stars；官方 Vue 3 组件覆盖消息渲染、Markdown、reasoning/activity、tool slots。Vue 消息组件可接收外部消息，因此保留本项目 SSE 与会话 API。 | 采用 `@copilotkit/vue@1.79.1` 的官方 assistant message renderer；组件动态导入，首次问答前不加载其大块运行时。 |
+| [assistant-ui](https://github.com/assistant-ui/assistant-ui) / `@assistant-ui/vue` | MIT；约 1.26 万 stars；Vue 包版本仍为 0.0.x，需要 shared runtime/AI SDK 适配；与当前 FastAPI SSE 消息形状不直接兼容。 | 作为交互设计参考，暂不替换现有传输层。 |
+| [Open WebUI](https://github.com/open-webui/open-webui) | 完整可部署产品，后端、认证和会话体系均较完整；嵌入本项目将形成第二套账户、权限和服务栈。 | 不作为嵌入式组件；参考其工具轨迹、引用和会话交互。 |
+
+本模块采用上游 Vue 消息渲染与 Markdown，不复制其整个产品后端。项目的 Agent SDK、汇丰百炼接口、RAG 调用、JWT 权限和历史会话仍由本仓库负责。上游包携带较大的通用 Agent UI 依赖，因此通过异步组件只在首次助手回答时载入；本次生产构建的助手异步块约 1.67 MB（gzip 约 463 KB），这项体积成本需要在部署网络上实测。
 
 - `code/frontend/src/assistant/api.ts`：只负责 `/api/assistant` 请求和 SSE 解析。
 - `code/frontend/src/assistant/types.ts`：会话、消息、步骤和引用的前端契约。

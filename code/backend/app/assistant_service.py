@@ -18,6 +18,7 @@ ASSISTANT_INSTRUCTIONS = (
     "你是境外贷款单据审核辅助助手。只能解释证据、检索知识、整理风险和起草人工复核意见。"
     "不得直接批准、拒绝或改变贷款审核结论；结论必须交给有权限的审核人员。"
     "回答要引用任务材料或规则结果，证据不足时明确说需要人工确认。"
+    "不得输出内部思维链、草稿推理或工具参数，只给用户可见的结论、依据和简洁的执行摘要。"
 )
 logger = logging.getLogger(__name__)
 
@@ -236,6 +237,24 @@ def _strip_tool_echo(text: str) -> str:
     return remainder
 
 
+def _safe_final_answer(text: str) -> str | None:
+    """Reject obvious analysis/tool-planning text before it reaches users or storage."""
+    answer = _strip_tool_echo(text).strip()
+    internal_markers = (
+        "我们需要回答用户",
+        "用户要求两句话",
+        "需要引用任务材料或规则结果",
+        "先调用 search_knowledge_base",
+        "let me think",
+        "we need to answer the user",
+        "analysis:",
+        "reasoning:",
+    )
+    if not answer or any(marker in answer.casefold() for marker in internal_markers):
+        return None
+    return answer
+
+
 async def run_agent_events(
     message: str,
     context: dict[str, Any],
@@ -249,7 +268,6 @@ async def run_agent_events(
     if not sdk_configured():
         yield {"event": "assistant_result", "answer": None, "citations": []}
         return
-    chunks: list[str] = []
     retrieved: list[dict[str, Any]] = []
     retrieval_warnings: list[str] = []
     try:
@@ -294,8 +312,9 @@ async def run_agent_events(
             if event.type == "raw_response_event":
                 delta = getattr(event.data, "delta", None)
                 if isinstance(delta, str):
-                    chunks.append(delta)
-                    yield {"event": "delta", "delta": delta}
+                    # OpenAI-compatible gateways may put internal reasoning in raw
+                    # deltas. Buffer them and publish only the completed final answer.
+                    pass
             elif event.type == "run_item_stream_event" and event.name == "tool_called":
                 yield {"event": "tool", "tool": {"name": "search_knowledge_base", "status": "running"}}
             elif event.type == "run_item_stream_event" and event.name == "tool_output":
@@ -310,14 +329,17 @@ async def run_agent_events(
                             "status": "error",
                         },
                     }
-        answer = _strip_tool_echo(
-            "".join(chunks).strip() or str(run.final_output or "").strip()
-        )
-        yield {"event": "assistant_result", "answer": answer or None, "citations": retrieved}
+        answer = _safe_final_answer(str(run.final_output or ""))
+        if answer:
+            for index in range(0, len(answer), 80):
+                yield {"event": "delta", "delta": answer[index:index + 80]}
+        yield {"event": "assistant_result", "answer": answer, "citations": retrieved}
     except Exception:
         # 网关、模型或 SDK 版本异常时，保留本地演示能力。
         yield {"event": "warning", "message": "模型网关暂不可用，正在使用本地演示回复"}
-        yield {"event": "assistant_result", "answer": _strip_tool_echo("".join(chunks).strip()) or None, "citations": retrieved}
+        # Raw deltas are deliberately discarded on errors: they may contain model
+        # analysis or incomplete tool-call payloads and are not safe user output.
+        yield {"event": "assistant_result", "answer": None, "citations": retrieved}
 
 
 async def stream_assistant(
