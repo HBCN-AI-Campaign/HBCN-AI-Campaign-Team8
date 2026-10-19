@@ -153,6 +153,36 @@ class AssistantApiTests(unittest.TestCase):
         self.assertEqual(len(warnings), 1)
         self.assertNotIn("private connection detail", warnings[0])
 
+    def test_capabilities_reports_configured_rag_and_model(self):
+        with patch("app.routers.assistant.sdk_configured", return_value=True), patch(
+            "app.routers.assistant.settings.AI_MODEL", "qwen3.8-flash"
+        ), patch("app.routers.assistant.settings.RAG_BASE_URL", "http://rag-service"):
+            response = self.client.get("/api/assistant/capabilities", headers=self.reviewer_headers)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["configured"])
+        self.assertTrue(response.json()["rag_available"])
+        self.assertEqual(response.json()["model"], "qwen3.8-flash")
+
+    def test_stream_error_hides_internal_exception_text(self):
+        async def failed_stream(*args, **kwargs):
+            raise RuntimeError("private endpoint detail")
+            yield
+
+        created = self.client.post(
+            "/api/assistant/sessions", headers=self.reviewer_headers, json={"title": "error"}
+        )
+        with patch("app.routers.assistant.stream_assistant", failed_stream):
+            response = self.client.post(
+                f"/api/assistant/sessions/{created.json()['id']}/messages/stream",
+                headers=self.reviewer_headers,
+                json={"content": "test"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("助手请求失败，请稍后重试", response.text)
+        self.assertNotIn("private endpoint detail", response.text)
+
     def test_tool_trace_is_persisted_in_session_history(self):
         async def fake_agent_events(*args, **kwargs):
             yield {"event": "tool", "tool": {"name": "search_knowledge_base", "status": "running"}}

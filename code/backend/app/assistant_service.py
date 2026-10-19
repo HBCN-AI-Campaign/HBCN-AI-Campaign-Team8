@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from collections.abc import AsyncIterator
 from typing import Any
@@ -18,6 +19,7 @@ ASSISTANT_INSTRUCTIONS = (
     "不得直接批准、拒绝或改变贷款审核结论；结论必须交给有权限的审核人员。"
     "回答要引用任务材料或规则结果，证据不足时明确说需要人工确认。"
 )
+logger = logging.getLogger(__name__)
 
 
 def sdk_configured() -> bool:
@@ -145,8 +147,9 @@ def _rag_search(
             agentic=True,
             include_external_law=False,
         )
-    except Exception:
+    except Exception as exc:
         # 网关或 RAG 服务异常时保留本地证据，不阻断助手。
+        logger.warning("Assistant RAG query failed (%s)", type(exc).__name__)
         warning = "知识库暂不可用；本次回复仅基于当前任务已加载的本地证据。"
         if warnings is not None and warning not in warnings:
             warnings.append(warning)
@@ -204,7 +207,7 @@ def fallback_answer(message: str, context: dict[str, Any]) -> str:
 def _strip_tool_echo(text: str) -> str:
     """去掉模型在真正调用工具前以纯文本形式回显的工具参数 JSON。
 
-    部分网关模型（如经 CCSwitch 路由的 gpt-6.1-sol）会在调用 function tool
+    部分 OpenAI-compatible 模型会在调用 function tool
     之前，把工具调用参数当作普通文本 delta 输出，例如
     ``{"query":"..."}``。这些字符不是给用户的答案，若直接拼进正文会在
     回复开头显示一串原始 JSON。

@@ -10,6 +10,8 @@ import httpx
 
 from .config import settings
 
+EMBEDDING_BATCH_SIZE = 20
+
 
 class EmbeddingError(RuntimeError):
     """Embedding 调用失败。"""
@@ -39,30 +41,36 @@ class EmbeddingClient:
         self._require_configured()
         if not texts:
             return []
-        try:
-            response = httpx.post(
-                f"{self.base_url}/embeddings",
-                json={"model": self.model, "input": texts},
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                timeout=self.timeout,
-            )
-        except httpx.HTTPError as exc:
-            raise EmbeddingError(f"Embedding 请求失败：{exc}") from exc
-        if response.status_code >= 400:
-            raise EmbeddingError(f"Embedding 返回 {response.status_code}：{response.text[:200]}")
-        try:
-            data = response.json()
-        except ValueError as exc:
-            raise EmbeddingError("Embedding 返回了无效 JSON") from exc
-
-        items = data.get("data") or []
         vectors: list[list[float]] = []
-        for item in sorted(items, key=lambda entry: entry.get("index", 0)):
-            vector = item.get("embedding")
-            if isinstance(vector, list):
-                vectors.append([float(value) for value in vector])
-        if len(vectors) != len(texts):
-            raise EmbeddingError(f"Embedding 返回数量不符：期望 {len(texts)}，实际 {len(vectors)}")
+        for offset in range(0, len(texts), EMBEDDING_BATCH_SIZE):
+            batch = texts[offset:offset + EMBEDDING_BATCH_SIZE]
+            try:
+                response = httpx.post(
+                    f"{self.base_url}/embeddings",
+                    json={"model": self.model, "input": batch},
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    timeout=self.timeout,
+                )
+            except httpx.HTTPError as exc:
+                raise EmbeddingError(f"Embedding 请求失败：{exc}") from exc
+            if response.status_code >= 400:
+                raise EmbeddingError(f"Embedding 返回 {response.status_code}：{response.text[:200]}")
+            try:
+                data = response.json()
+            except ValueError as exc:
+                raise EmbeddingError("Embedding 返回了无效 JSON") from exc
+
+            items = data.get("data") or []
+            batch_vectors = [
+                [float(value) for value in item["embedding"]]
+                for item in sorted(items, key=lambda entry: entry.get("index", 0))
+                if isinstance(item.get("embedding"), list)
+            ]
+            if len(batch_vectors) != len(batch):
+                raise EmbeddingError(
+                    f"Embedding 返回数量不符：期望 {len(batch)}，实际 {len(batch_vectors)}"
+                )
+            vectors.extend(batch_vectors)
         return vectors
 
     def embed_one(self, text: str) -> list[float]:

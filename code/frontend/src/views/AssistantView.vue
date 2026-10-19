@@ -36,6 +36,7 @@
             <span v-else class="task-hint">未关联任务</span>
           </div>
           <div class="head-actions">
+            <el-button class="mobile-session-trigger" circle :icon="ChatDotRound" title="会话列表" aria-label="会话列表" @click="mobileSessionsVisible = true" />
             <el-button class="mobile-skill-trigger" text @click="mobileSkillsVisible = true">审核技能</el-button>
             <el-button text :icon="ArrowLeft" @click="router.push({ name: 'dashboard' })">返回</el-button>
           </div>
@@ -121,6 +122,17 @@
         <div class="skill-foot">技能沉淀自审核专家经验，点击即可运行</div>
       </aside>
     </section>
+    <el-drawer v-model="mobileSessionsVisible" title="会话" direction="ltr" size="min(88vw, 360px)">
+      <el-button class="new-session" type="primary" :icon="Plus" :disabled="loading" @click="newSession">新建会话</el-button>
+      <div class="mobile-session-list">
+        <button v-for="item in sessions" :key="item.id" class="session-item"
+          :class="{ active: item.id === activeSessionId }" :disabled="loading" @click="openSession(item.id)">
+          <span class="session-dot"></span>
+          <span class="session-title">{{ item.title }}</span>
+          <span class="session-count">{{ item.message_count }}</span>
+        </button>
+      </div>
+    </el-drawer>
     <el-drawer v-model="mobileSkillsVisible" title="审核技能" direction="rtl" size="min(88vw, 360px)">
       <div class="mobile-skill-list">
         <button v-for="skill in skills" :key="skill.name" class="skill-item" :disabled="loading" @click="runSkill(skill)">
@@ -140,7 +152,7 @@ import { ElMessage } from 'element-plus'
 import { assistantApi } from '@/assistant/api'
 import { renderMarkdown } from '@/assistant/markdown'
 import type { AssistantCapabilities, AssistantMessage, AssistantSession, AssistantSkill, AssistantStep, AssistantTaskOption, AssistantToolActivity } from '@/assistant/types'
-import { ArrowLeft, Calendar, Check, Close, Coin, DataLine, DocumentChecked, FolderOpened, Loading, Lock, MagicStick, Plus, Promotion, Reading, Search, Ship } from '@element-plus/icons-vue'
+import { ArrowLeft, Calendar, ChatDotRound, Check, Close, Coin, DataLine, DocumentChecked, FolderOpened, Loading, Lock, MagicStick, Plus, Promotion, Reading, Search, Ship } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -157,6 +169,7 @@ const activeTrace = ref<AssistantStep[]>([])
 const toolActivity = ref<AssistantToolActivity[]>([])
 const runningSkill = ref('')
 const mobileSkillsVisible = ref(false)
+const mobileSessionsVisible = ref(false)
 
 const prompts = [
   { title: '梳理风险', text: '帮我总结当前任务的风险和人工核对点', icon: DocumentChecked },
@@ -211,6 +224,7 @@ async function loadSessions() {
 }
 
 async function newSession() {
+  mobileSessionsVisible.value = false
   try {
     const created = await assistantApi.createSession()
     sessions.value = [created, ...sessions.value]
@@ -225,6 +239,7 @@ async function newSession() {
 }
 
 async function openSession(id: number) {
+  mobileSessionsVisible.value = false
   try {
     const detail = await assistantApi.session(id)
     activeSessionId.value = id
@@ -447,8 +462,10 @@ onMounted(loadSessions)
 .skill-item:hover:not(:disabled) { border-color: #a8c4ed; box-shadow: 0 6px 14px rgba(45, 93, 167, .08); }
 .skill-item:disabled { cursor: wait; opacity: .72; }
 .head-actions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.mobile-session-trigger { display: none; }
 .mobile-skill-trigger { display: none; }
 .mobile-skill-list { display: grid; gap: 8px; }
+.mobile-session-list { display: grid; gap: 4px; }
 .skill-icon { display: grid; place-items: center; width: 30px; height: 30px; flex: 0 0 auto; border-radius: 7px; background: #edf4ff; color: #4a7bd1; font-size: 15px; }
 .skill-copy { min-width: 0; display: grid; gap: 2px; }
 .skill-copy b { color: #344b6c; font-size: 12px; font-weight: 600; }
@@ -458,6 +475,7 @@ onMounted(loadSessions)
 @media (max-width: 1100px) {
   .assistant-shell { grid-template-columns: 216px minmax(0, 1fr); }
   .skill-rail { display: none; }
+  .mobile-session-trigger { display: inline-flex; }
   .mobile-skill-trigger { display: inline-flex; }
 }
 @media (max-width: 760px) {

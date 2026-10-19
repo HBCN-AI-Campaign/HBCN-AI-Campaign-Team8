@@ -1,4 +1,3 @@
-import json
 import secrets
 from pathlib import Path
 
@@ -178,7 +177,6 @@ _STATIC_DIR = Path(__file__).resolve().parent / "static"
 @app.get("/ui", include_in_schema=False)
 @app.get("/ui/", include_in_schema=False)
 def trial_ui():
-    """本地试用页：服务端注入 SERVICE_TOKEN，免手动粘贴（仅本地试用，生产勿暴露）。"""
+    """Serve the static workbench without exposing the service token in HTML."""
     index = (_STATIC_DIR / "index.html").read_text(encoding="utf-8")
-    index = index.replace("__SERVICE_TOKEN__", json.dumps(settings.SERVICE_TOKEN))
     return HTMLResponse(index)

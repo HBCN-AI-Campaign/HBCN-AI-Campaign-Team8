@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -22,6 +23,7 @@ from ..database import get_db
 from ..security import get_current_user
 
 router = APIRouter(prefix="/api/assistant", tags=["assistant"])
+logger = logging.getLogger(__name__)
 
 
 def _session_for_user(db: Session, session_id: int, user: models.User) -> models.AssistantSession:
@@ -49,7 +51,7 @@ def capabilities(user: models.User = Depends(get_current_user)):
         configured=sdk_configured(),
         model=settings.AI_MODEL or None,
         rag_available=bool(getattr(settings, "RAG_BASE_URL", "")),
-        message=("Agent SDK 已配置，可调用模型网关" if sdk_configured() else "未配置模型网关，当前使用本地演示模式"),
+        message=("Agent SDK 已配置，可调用汇丰百炼 API" if sdk_configured() else "未配置模型 API，当前使用本地演示模式"),
     )
 
 
@@ -116,9 +118,10 @@ async def stream_message(
             async for item in stream_assistant(db, user, session, payload.content, task_code):
                 event = item.get("event", "message")
                 yield f"event: {event}\ndata: {json.dumps(item, ensure_ascii=False)}\n\n"
-        except Exception as exc:
+        except Exception:
             db.rollback()
-            yield f"event: error\ndata: {json.dumps({'event': 'error', 'message': str(exc)}, ensure_ascii=False)}\n\n"
+            logger.exception("Assistant stream failed")
+            yield f"event: error\ndata: {json.dumps({'event': 'error', 'message': '助手请求失败，请稍后重试'}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
         event_stream(),

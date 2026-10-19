@@ -15,7 +15,7 @@
 
 - `code/frontend/src/assistant/api.ts`：只负责 `/api/assistant` 请求和 SSE 解析。
 - `code/frontend/src/assistant/types.ts`：会话、消息、步骤和引用的前端契约。
-- `code/frontend/src/assistant/markdown.ts`：零依赖的 Markdown 子集渲染（先转义后替换，XSS 安全），渲染助手回复里的列表、加粗、行内代码、链接等；未引入第三方库，避免与本仓库 Vue 3 构建链耦合。
+- `code/frontend/src/assistant/markdown.ts`：使用成熟的 `marked` 解析 GFM Markdown，并由 `DOMPurify` 清理不可信模型输出；原始 HTML 和远程图片不渲染。
 - `code/frontend/src/views/AssistantView.vue`：三栏助手界面、执行步骤时间线、工具检索轨迹（`tool` 事件）和证据引用面板，并提供一键复制回复。
 - `code/frontend/src/router/index.ts`、`code/frontend/src/layouts/MainLayout.vue`：仅提供页面入口，不改变现有业务页面。
 

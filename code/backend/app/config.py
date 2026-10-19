@@ -31,8 +31,8 @@ class Settings(BaseSettings):
     APP_NAME: str = "境外贷款单据智能审核平台 · API"
     DEBUG: bool = True
 
-    # --- AI assistant / OpenAI-compatible gateway ---
-    # 可指向阿狗中转站或其他兼容 OpenAI Chat Completions 的网关。
+    # --- AI assistant / HSBC Model Studio ---
+    # OpenAI-compatible client configuration for the HSBC-provided Bailian API.
     AI_BASE_URL: str = ""
     AI_API_KEY: str = ""
     AI_MODEL: str = ""
