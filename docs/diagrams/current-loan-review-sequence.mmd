@@ -1,0 +1,75 @@
+sequenceDiagram
+    autonumber
+    actor O as 业务经办人
+    actor H as 审核人员
+    participant FE as Vue 前端
+    participant API as FastAPI tasks 路由
+    participant Parse as parse_agent
+    participant DB as SQLAlchemy 数据库
+    participant Files as sample_pdfs / uploads
+    participant Rules as rule_engine
+    participant Agent as review_agent
+
+    O->>FE: 选择多个 PDF 或载入样本模板
+    FE->>API: POST /api/tasks/parse
+    API->>Files: 保存上传文件到 uploads/{batch_id}
+    API->>Parse: parse_files(filename, pdf_url)
+    Parse-->>API: 单据类型、字段、置信度、source
+    API-->>FE: ParseResult
+    FE->>API: POST /api/tasks
+    API->>DB: 创建 ReviewTask 与 Document
+    DB-->>API: 任务编号
+    API-->>FE: TaskOut
+
+    H->>FE: 打开审核任务
+    FE->>API: GET /api/tasks/{task_code}
+    API->>DB: 查询任务、单据和字段来源
+    DB-->>API: TaskDetail
+    API-->>FE: 展示任务与 PDF 定位入口
+
+    H->>FE: 点击规则核对
+    FE->>API: POST /api/tasks/{task_code}/run
+    API->>DB: 读取任务单据
+    API->>Rules: run_all(documents)
+    Rules-->>API: pass / fail / warn / skip
+    API->>DB: 保存 CheckResult
+    API-->>FE: RunSummary
+
+    H->>FE: 启动智能审核
+    FE->>API: POST /api/tasks/{task_code}/ai/start
+    API->>Agent: build_session(task)
+    Agent->>Rules: 查找 [专项] SKIP 项
+    Agent-->>API: tree、thoughts、pendings、counts
+    API-->>FE: AISession
+
+    loop 前端播放审核步骤
+        FE->>FE: 展示解析树与思考流
+        alt 有待人工处置项
+            FE->>H: 暂停并展示原因、建议和来源
+            H->>FE: 通过 / 保留 / 已知悉
+            FE->>API: POST /api/tasks/{task_code}/ai/resolve
+            API->>DB: 更新或补建结果
+            API-->>FE: AIResolveOut
+        end
+    end
+
+    H->>FE: 查看结果并定位原文
+    FE->>API: GET /api/tasks/{task_code}/results
+    API->>DB: 查询结果与 detail.source
+    DB-->>API: CheckResultOut
+    API-->>FE: 结果、来源、PDF 页码和 bbox
+    FE->>Files: 请求 PDF 原件
+    Files-->>FE: PDF 页面
+    FE->>FE: 在指定页叠加 bbox 高亮
+
+    alt 退回补件
+        H->>FE: 提交退回意见
+        FE->>API: POST /api/tasks/{task_code}/return
+        API->>DB: 状态改为 returned
+        API-->>FE: TaskOut
+    else 审核通过
+        H->>FE: 提交完成意见
+        FE->>API: POST /api/tasks/{task_code}/complete
+        API->>DB: 状态改为 completed
+        API-->>FE: TaskOut
+    end

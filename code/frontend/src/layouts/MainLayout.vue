@@ -7,6 +7,10 @@
           <span class="brand-link" @click="router.push({ name: 'dashboard' })">
             <span class="logo-sm">贷</span> 境外贷款单据审核平台
           </span>
+          <el-button class="assistant-entry" link type="primary" @click="router.push({ name: 'assistant' })">
+            <el-icon><MagicStick /></el-icon>
+            慧眼助手
+          </el-button>
         </div>
         <div class="right">
           <el-tag :type="roleTag.type" effect="dark">{{ roleTag.label }}</el-tag>
@@ -35,6 +39,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { MagicStick } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -83,6 +88,10 @@ function onCommand(cmd: string) {
   justify-content: center;
   font-weight: 700;
   font-size: 14px;
+}
+.assistant-entry {
+  margin-left: 10px;
+  font-weight: 600;
 }
 .brand-link {
   display: inline-flex;

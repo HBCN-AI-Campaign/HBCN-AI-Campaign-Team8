@@ -1,0 +1,23 @@
+flowchart TB
+    Upload[上传 PDF / 图片] --> Store[uploads/{batch_id}\n保存原件]
+    Store --> Parse[parse_agent.parse_files]
+    Parse --> Field[结构化字段\nvalue + confidence]
+    Parse --> Source[source\npage + bbox]
+    Field --> Document[Document.fields\n写入任务]
+    Source --> Document
+    Document --> Rule[rule_engine\n规则核对]
+    Document --> Special[review_agent\n专项审核]
+    Rule --> Result[CheckResult.detail]
+    Special --> Result
+    Source --> Result
+    Result --> API[TaskDetail / Results API]
+    API --> Table[前端结果表\n显示问题与来源]
+    API --> Viewer[PdfSourceViewer]
+    Store --> Viewer
+    Viewer --> Highlight[指定页 + bbox\n原文高亮]
+
+    Confidence{confidence < 0.8?}
+    Field --> Confidence
+    Confidence -- 是 --> Review[人工复核提示]
+    Confidence -- 否 --> Rule
+    Review --> Document

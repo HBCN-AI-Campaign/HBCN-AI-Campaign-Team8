@@ -22,6 +22,12 @@ const router = createRouter({
           meta: { title: '审核工作台', icon: 'DataBoard' },
         },
         {
+          path: 'assistant',
+          name: 'assistant',
+          component: () => import('@/views/AssistantView.vue'),
+          meta: { title: '慧眼助手', icon: 'MagicStick' },
+        },
+        {
           path: 'create',
           name: 'create',
           component: () => import('@/views/CreateTaskView.vue'),

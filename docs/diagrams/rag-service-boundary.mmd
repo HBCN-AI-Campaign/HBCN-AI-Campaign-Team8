@@ -1,0 +1,9 @@
+flowchart LR
+    Existing[现有前端与审核主项目<br/>不改代码] -->|HTTP + Bearer| Service[独立 hbcn-rag-service<br/>8010]
+    Service -->|官方 REST API| RAGFlow[RAGFlow<br/>独立 Docker 部署]
+    RAGFlow --> Rules[business-rules dataset]
+    RAGFlow --> Design[project-design dataset]
+    Service -->|query evidence| Existing
+    SDK[Agent SDK 模块] -->|调用同一 HTTP 契约| Service
+    Law[法规 MCP<br/>后续授权后接入] -.-> Service
+    Task[task_documents<br/>后续接入任务权限] -.-> Service

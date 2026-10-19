@@ -31,5 +31,18 @@ class Settings(BaseSettings):
     APP_NAME: str = "境外贷款单据智能审核平台 · API"
     DEBUG: bool = True
 
+    # --- AI assistant / OpenAI-compatible gateway ---
+    # 可指向阿狗中转站或其他兼容 OpenAI Chat Completions 的网关。
+    AI_BASE_URL: str = ""
+    AI_API_KEY: str = ""
+    AI_MODEL: str = ""
+    AI_REQUEST_TIMEOUT: float = 45.0
+
+    # --- RAG 服务（独立 hbcn-rag-service，见 code/rag-service，默认端口 8010）---
+    # 主项目通过 app/rag_service.py 适配层调用该独立知识库服务；未配置时助手回退本地证据。
+    RAG_BASE_URL: str = ""          # 例如 http://127.0.0.1:8010
+    RAG_SERVICE_TOKEN: str = ""     # 与 rag-service/.env 的 SERVICE_TOKEN 保持一致
+    RAG_REQUEST_TIMEOUT: float = 15.0
+
 
 settings = Settings()
