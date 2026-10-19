@@ -11,8 +11,6 @@
 from __future__ import annotations
 
 import base64
-import os
-from html.parser import HTMLParser
 from typing import Any
 
 import httpx
@@ -28,39 +26,6 @@ IMAGE_MIME = {
     ".webp": "image/webp",
     ".bmp": "image/bmp",
 }
-
-
-class _VisibleHTMLParser(HTMLParser):
-    _HIDDEN_TAGS = {"script", "style", "noscript", "svg", "nav", "button", "select", "option", "pre", "code", "details", "footer"}
-    _VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
-
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.parts: list[str] = []
-        self.hidden_stack: list[str] = []
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        attributes = dict(attrs)
-        hidden = (
-            tag in self._HIDDEN_TAGS
-            or "hidden" in attributes
-            or attributes.get("aria-hidden", "").lower() == "true"
-            or "display:none" in attributes.get("style", "").replace(" ", "").lower()
-        )
-        if self.hidden_stack:
-            if tag not in self._VOID_TAGS:
-                self.hidden_stack.append(tag)
-        elif hidden and tag not in self._VOID_TAGS:
-            self.hidden_stack.append(tag)
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag in self.hidden_stack:
-            index = len(self.hidden_stack) - 1 - self.hidden_stack[::-1].index(tag)
-            del self.hidden_stack[index:]
-
-    def handle_data(self, data: str) -> None:
-        if not self.hidden_stack and data.strip():
-            self.parts.append(data.strip())
 
 
 def _read_text(content: bytes) -> str:
@@ -81,18 +46,12 @@ class OCRClient:
         self.vision_base_url = settings.BAILIAN_BASE_URL.rstrip("/")
         self.vision_api_key = settings.BAILIAN_API_KEY
         self.vision_model = settings.OCR_VISION_MODEL
-        self.service_api_key = os.getenv("OCR_API_KEY", "")
 
     def extract(self, filename: str, content: bytes) -> dict[str, Any]:
         """返回 ``{"text", "via_ocr", "error"}``，error 为 None 表示成功。"""
         extension = filename[filename.rfind("."):].lower() if "." in filename else ""
         if extension in TEXT_EXTENSIONS:
-            text = _read_text(content)
-            if extension in {".html", ".htm"}:
-                parser = _VisibleHTMLParser()
-                parser.feed(text)
-                text = "\n".join(parser.parts)
-            return {"text": text, "via_ocr": False, "error": None}
+            return {"text": _read_text(content), "via_ocr": False, "error": None}
 
         if self.base_url:
             result = self._call_ocr_service(filename, content, extension)
@@ -111,11 +70,9 @@ class OCRClient:
     def _call_ocr_service(self, filename: str, content: bytes, extension: str) -> dict[str, Any] | None:
         del extension
         try:
-            headers = {"Authorization": f"Bearer {self.service_api_key}"} if self.service_api_key else None
             response = httpx.post(
                 f"{self.base_url}/ocr/file",
                 files={"file": (filename, content, "application/octet-stream")},
-                headers=headers,
                 timeout=self.timeout,
             )
         except httpx.HTTPError:
@@ -126,10 +83,9 @@ class OCRClient:
             data = response.json()
         except ValueError:
             return None
-        text = data.get("text")
-        if data.get("error") or not isinstance(text, str):
+        if data.get("error"):
             return None
-        return {"text": text, "via_ocr": bool(data.get("via_ocr")), "error": None}
+        return {"text": data.get("text", ""), "via_ocr": bool(data.get("via_ocr")), "error": None}
 
     def _call_vision(self, filename: str, content: bytes, extension: str) -> dict[str, Any]:
         data_url = f"data:{IMAGE_MIME[extension]};base64,{base64.b64encode(content).decode('ascii')}"
@@ -160,12 +116,4 @@ class OCRClient:
             text = data["choices"][0]["message"]["content"]
         except (ValueError, KeyError, IndexError):
             return {"text": "", "via_ocr": True, "error": "视觉 OCR 返回格式异常"}
-        if isinstance(text, list):
-            text = "\n".join(
-                part["text"]
-                for part in text
-                if isinstance(part, dict) and isinstance(part.get("text"), str)
-            )
-        if not isinstance(text, str) or not text.strip():
-            return {"text": "", "via_ocr": True, "error": "视觉 OCR 未返回识别文本"}
         return {"text": text, "via_ocr": True, "error": None}

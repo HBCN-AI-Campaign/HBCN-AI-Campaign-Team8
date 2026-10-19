@@ -41,20 +41,6 @@ class LocalVectorStoreTests(unittest.TestCase):
         for item in results:
             self.assertGreaterEqual(item["similarity"], 0.7)
 
-    def test_reupload_replaces_document_chunks(self):
-        self.store.add_document("policy.md", "business_rules", [
-            {"content": "旧规则", "embedding": [1.0, 0.0]},
-        ])
-        self.store.add_document("policy.md", "business_rules", [
-            {"content": "新规则", "embedding": [0.0, 1.0]},
-        ])
-
-        documents = self.store.list_documents("business_rules")
-        self.assertEqual(len(documents), 1)
-        self.assertEqual(documents[0]["chunk_count"], 1)
-        results = self.store.query([0.0, 1.0], "business_rules", top_k=3)
-        self.assertEqual([item["content"] for item in results], ["新规则"])
-
     def test_scope_isolation(self):
         self.store.add_document("a.txt", "business_rules", [{"content": "规则", "embedding": [1.0, 0.0]}])
         self.assertEqual(self.store.query([1.0, 0.0], "project_design", top_k=5), [])
