@@ -21,12 +21,12 @@
 | [assistant-ui](https://github.com/assistant-ui/assistant-ui) / `@assistant-ui/vue` | MIT；约 1.26 万 stars；Vue 包版本仍为 0.0.x，需要 shared runtime/AI SDK 适配；与当前 FastAPI SSE 消息形状不直接兼容。 | 作为交互设计参考，暂不替换现有传输层。 |
 | [Open WebUI](https://github.com/open-webui/open-webui) | 完整可部署产品，后端、认证和会话体系均较完整；嵌入本项目将形成第二套账户、权限和服务栈。 | 不作为嵌入式组件；参考其工具轨迹、引用和会话交互。 |
 
-本模块采用上游 Vue 消息渲染与 Markdown，不复制其整个产品后端。项目的 Agent SDK、汇丰百炼接口、RAG 调用、JWT 权限和历史会话仍由本仓库负责。上游包携带较大的通用 Agent UI 依赖，因此通过异步组件只在首次助手回答时载入；本次生产构建的助手异步块约 1.67 MB（gzip 约 463 KB），这项体积成本需要在部署网络上实测。
+本模块采用上游 Vue 消息渲染与 Markdown，不复制其整个产品后端。项目的 Agent SDK、汇丰百炼接口、RAG 调用、JWT 权限和历史会话仍由本仓库负责。上游包携带较大的通用 Agent UI 依赖，因此通过异步组件只在首次助手回答时载入；本次生产构建中 CopilotKit 相关最大异步块约 1.67 MB（gzip 约 463 KB），需要在汇丰部署网络实测首轮答复加载体验。当前仍保留本项目 SSE 和数据库消息契约，没有引入 CopilotKit Runtime 服务。
 
 - `code/frontend/src/assistant/api.ts`：只负责 `/api/assistant` 请求和 SSE 解析。
 - `code/frontend/src/assistant/types.ts`：会话、消息、步骤和引用的前端契约。
-- `code/frontend/src/assistant/markdown.ts`：使用成熟的 `marked` 解析 GFM Markdown，并由 `DOMPurify` 清理不可信模型输出；原始 HTML 和远程图片不渲染。
-- `code/frontend/src/views/AssistantView.vue`：三栏助手界面、执行步骤时间线、工具检索轨迹（`tool` 事件）和证据引用面板，并提供一键复制回复。
+- `code/frontend/src/assistant/markdown.ts`：早期自定义 Markdown helper，目前消息正文改由 CopilotKit Vue renderer 处理；除非重新接入调用点，否则不要把它当作当前渲染入口。
+- `code/frontend/src/views/AssistantView.vue`：三栏助手界面、可折叠执行活动、停止生成、官方 CopilotKit assistant message renderer、工具检索轨迹和证据引用面板，并提供一键复制回复。
 - `code/frontend/src/router/index.ts`、`code/frontend/src/layouts/MainLayout.vue`：仅提供页面入口，不改变现有业务页面。
 
 `openai-agents==0.4.2` 是当前仓库 `pydantic==2.10.3` 的兼容锁定版本，同时锁定 `openai==2.44.0`。这是因为 `openai==2.45.0` 起新增的 usage 字段会让该 Agents SDK 版本在运行前初始化失败。更新 SDK 时必须重新验证 FastAPI/Pydantic 依赖和网关的 Chat Completions 兼容性。
@@ -76,12 +76,16 @@
 | `message_start` | `message_id`, `task_code` | 创建本轮助手消息 |
 | `step` | `step.key`, `step.label`, `step.status` | 展示执行步骤时间线；不暴露模型内部思维链 |
 | `tool` | `tool.name`, `tool.status` | 展示知识库/证据工具开始和完成 |
-| `delta` | `delta` | 增量渲染回答文本 |
+| `delta` | `delta` | 渲染最终答复文本片段；不会转发模型原始 delta |
 | `citations` | `citations[]` | 文件、规则或知识库证据引用 |
 | `message_end` | `message` | 本轮持久化消息和最终状态 |
 | `error` | `message` | 可恢复错误 |
 
-前端只需按事件类型更新自己的状态机，不需要知道 Agent SDK 的内部对象。
+前端只需按事件类型更新自己的状态机，不需要知道 Agent SDK 的内部对象。Agent SDK 的原始响应 delta 可能含有思维草稿、工具参数或不完整内容，因此服务端不向浏览器转发这些原始片段；Agent 运行结束后，只对最终 `final_output` 做安全检查，再分片发送 `delta`。因此执行步骤和工具状态会实时显示，答复文本在本轮 Agent 执行结束后才开始出现，不代表逐 token 的模型生成流。
+
+最终输出会检查常见的内部推演/工具规划标记；命中时丢弃模型输出并使用本地审核辅助兜底。历史消息接口也应用相同检查，旧记录若命中则返回“已隐藏”的提示文本，页面正文与复制操作再做一层保护。数据库原始历史不做自动改写，避免静默篡改审计记录。执行轨迹在 `steps` 字段持久化并随会话历史返回；旧记录若没有工具步骤，不会补造历史轨迹。
+
+安全标记检测属于纵深防护，不能替代模型网关对 reasoning channel 的正确隔离。上线前仍需确认 HSBC 百炼部署模型不会把隐藏推理放进 `final_output`，并对真实部署模型补充输出回归样例。
 
 ## 时序图
 
@@ -104,11 +108,14 @@ sequenceDiagram
     RAG-->>Agent: 知识库证据片段与来源
     API->>API: 合并本地任务/规则证据与知识库证据
     Agent->>GW: OpenAI-compatible 流式请求
-    loop 增量输出
-        GW-->>Agent: 文本 delta
-        Agent-->>API: delta / tool 事件
-        API-->>U: SSE 事件
+    loop 执行期间
+        GW-->>Agent: 模型原始流事件
+        Agent-->>API: tool / step 状态
+        API-->>U: SSE 活动事件（原始模型 delta 不外发）
     end
+    Agent-->>API: final_output
+    API->>API: 检查是否包含内部推演标记
+    API-->>U: 安全的最终答复 delta + citations
     API->>DB: 持久化用户消息和助手消息
     API-->>U: citations + message_end
 ```
