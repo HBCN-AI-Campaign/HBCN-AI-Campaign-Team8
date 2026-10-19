@@ -42,6 +42,7 @@ class AssistantSessionDetail(AssistantSessionOut):
 class AssistantChatIn(BaseModel):
     content: str = Field(min_length=1, max_length=8000)
     task_code: str | None = Field(default=None, max_length=64)
+    skill_id: str | None = Field(default=None, max_length=64, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
     @field_validator("content")
     @classmethod
@@ -59,3 +60,13 @@ class AssistantCapabilities(BaseModel):
     rag_available: bool
     supports_stream: bool = True
     message: str
+
+
+class AssistantSkillOut(BaseModel):
+    id: str
+    name: str
+    desc: str
+    version: str
+    owner: str
+    license: str
+    permissions: list[str] = Field(default_factory=list)

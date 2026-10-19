@@ -1,5 +1,3 @@
-import type { Component } from 'vue'
-
 export type AssistantRole = 'user' | 'assistant'
 
 export interface AssistantSession {
@@ -59,15 +57,18 @@ export interface AssistantCapabilities {
 
 export interface AssistantToolActivity {
   name: string
-  status: 'running' | 'completed'
+  status: 'running' | 'completed' | 'error'
   result_count?: number
 }
 
 export interface AssistantSkill {
+  id: string
   name: string
   desc: string
-  icon: Component
-  prompt: string
+  version: string
+  owner: string
+  license: string
+  permissions: string[]
 }
 
 export interface AssistantStreamEvent {

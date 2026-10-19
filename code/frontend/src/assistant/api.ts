@@ -3,6 +3,7 @@ import type {
   AssistantSession,
   AssistantSessionDetail,
   AssistantStreamEvent,
+  AssistantSkill,
   AssistantTaskOption,
 } from './types'
 
@@ -41,6 +42,10 @@ export const assistantApi = {
     return request(`/api/tasks?mine=${mine}`, { headers: headers() })
   },
 
+  skills(): Promise<AssistantSkill[]> {
+    return request(`${base}/skills`, { headers: headers() })
+  },
+
   createSession(title = '新会话', taskCode?: string): Promise<AssistantSession> {
     return request(`${base}/sessions`, {
       method: 'POST',
@@ -53,11 +58,11 @@ export const assistantApi = {
     return request(`${base}/sessions/${id}`, { headers: headers() })
   },
 
-  async *streamMessage(id: number, content: string, taskCode?: string, signal?: AbortSignal): AsyncGenerator<AssistantStreamEvent> {
+  async *streamMessage(id: number, content: string, taskCode?: string, skillId?: string, signal?: AbortSignal): AsyncGenerator<AssistantStreamEvent> {
     const response = await fetch(`${base}/sessions/${id}/messages/stream`, {
       method: 'POST',
       headers: { ...headers(true), Accept: 'text/event-stream' },
-      body: JSON.stringify({ content, task_code: taskCode || null }),
+      body: JSON.stringify({ content, task_code: taskCode || null, skill_id: skillId || null }),
       signal,
     })
     if (!response.ok || !response.body) {

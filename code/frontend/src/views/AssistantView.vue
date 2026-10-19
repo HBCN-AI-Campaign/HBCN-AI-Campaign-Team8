@@ -19,7 +19,7 @@
         </div>
         <div class="rail-foot">
           <span class="live-dot" :class="{ ready: capabilities?.configured }"></span>
-          {{ capabilities?.configured ? '模型已连接' : '本地演示模式' }}
+          {{ capabilities?.configured ? '模型已连接' : '助手服务未连接' }}
         </div>
       </aside>
 
@@ -55,71 +55,79 @@
             </div>
           </div>
 
-          <article v-for="message in messages" :key="message.id" class="message-row" :class="message.role">
-            <div class="avatar" :class="message.role">
-              <el-icon v-if="message.role === 'assistant'"><MagicStick /></el-icon>
-              <span v-else>{{ auth.displayName?.slice(0, 1) || '我' }}</span>
-            </div>
-            <div class="message-body">
-              <div class="message-meta">
-                <strong>{{ message.role === 'assistant' ? '慧眼助手' : '你' }}</strong>
-                <span v-if="message.streaming" class="streaming-label">正在生成</span>
-                <button v-if="message.role === 'assistant' && safeMessageContent(message) && !message.streaming" class="copy-btn"
-                  title="复制回答" aria-label="复制回答" @click="copyMessage(message)"><el-icon><CopyDocument /></el-icon></button>
-              </div>
-              <div class="message-card">
-                <div v-if="message.steps?.length || message.streaming" class="activity-panel" :class="{ running: message.streaming }">
-                  <button class="activity-heading" :aria-expanded="activityExpanded(message)" @click="toggleActivity(message)">
-                    <span class="activity-spark"><el-icon v-if="message.streaming" class="spin"><Loading /></el-icon><el-icon v-else><CircleCheck /></el-icon></span>
-                    <span class="activity-heading-copy"><b>{{ activityTitle(message) }}</b><small>{{ activitySubtitle(message) }}</small></span>
-                    <el-icon class="activity-chevron" :class="{ expanded: activityExpanded(message) }"><ArrowRight /></el-icon>
-                  </button>
-                  <div v-if="activityExpanded(message)" class="activity-feed">
-                    <div v-for="step in message.steps" :key="step.key" class="activity-event" :class="step.status">
-                      <span class="event-marker"><el-icon v-if="step.status === 'completed'"><Check /></el-icon><el-icon v-else-if="step.status === 'error'"><Close /></el-icon><span v-else class="event-pulse"></span></span>
-                      <div class="event-copy"><b>{{ step.label }}</b><small v-if="step.detail">{{ step.detail }}</small></div>
+          <CopilotChatMessageView v-else :messages="copilotMessages" :is-running="loading" class="copilot-message-view">
+            <template #assistant-message="{ message: chatMessage }">
+              <article v-for="message in [messageForChat(chatMessage.id)]" :key="message.id" class="message-row assistant">
+                <div class="avatar assistant"><el-icon><MagicStick /></el-icon></div>
+                <div class="message-body">
+                  <div class="message-meta">
+                    <strong>慧眼助手</strong>
+                    <span v-if="message.streaming" class="streaming-label">正在生成</span>
+                    <button v-if="safeMessageContent(message) && !message.streaming" class="copy-btn"
+                      title="复制回答" aria-label="复制回答" @click="copyMessage(message)"><el-icon><CopyDocument /></el-icon></button>
+                  </div>
+                  <div class="message-card">
+                    <div v-if="message.steps?.length || message.streaming" class="activity-panel" :class="{ running: message.streaming }">
+                      <button class="activity-heading" :aria-expanded="activityExpanded(message)" @click="toggleActivity(message)">
+                        <span class="activity-spark"><el-icon v-if="message.streaming" class="spin"><Loading /></el-icon><el-icon v-else><CircleCheck /></el-icon></span>
+                        <span class="activity-heading-copy"><b>{{ activityTitle(message) }}</b><small>{{ activitySubtitle(message) }}</small></span>
+                        <el-icon class="activity-chevron" :class="{ expanded: activityExpanded(message) }"><ArrowRight /></el-icon>
+                      </button>
+                      <div v-if="activityExpanded(message)" class="activity-feed">
+                        <div v-for="step in message.steps" :key="step.key" class="activity-event" :class="step.status">
+                          <span class="event-marker"><el-icon v-if="step.status === 'completed'"><Check /></el-icon><el-icon v-else-if="step.status === 'error'"><Close /></el-icon><span v-else class="event-pulse"></span></span>
+                          <div class="event-copy"><b>{{ step.label }}</b><small v-if="step.detail">{{ step.detail }}</small></div>
+                        </div>
+                      </div>
                     </div>
-                    <div v-for="(tool, index) in toolActivity" :key="`${tool.name}-${index}`" class="activity-event" :class="tool.status">
-                      <span class="event-marker"><el-icon v-if="tool.status === 'completed'"><Check /></el-icon><span v-else class="event-pulse"></span></span>
-                      <div class="event-copy"><b>{{ toolLabel(tool.name) }}</b><small>{{ tool.status === 'running' ? '正在检索授权材料与知识库' : `找到 ${tool.result_count ?? 0} 条相关证据` }}</small></div>
+                    <div class="message-content">
+                      <CopilotChatAssistantMessage
+                        :message="toCopilotMessage(message)"
+                        :is-running="Boolean(message.streaming)"
+                        :toolbar-visible="false"
+                        class="copilot-answer"
+                      />
                     </div>
-                    <div v-if="message.streaming" class="activity-event pending"><span class="event-marker"><span class="event-pulse"></span></span><div class="event-copy"><b>组织审核建议</b><small>正在整合材料、规则和知识库依据</small></div></div>
+                    <div v-if="message.citations?.length" class="citation-wrap">
+                      <div class="citation-label">证据引用</div>
+                      <div class="citation-list">
+                        <span v-for="citation in message.citations" :key="citation.id" class="citation-chip"
+                          :class="citation.status" :title="citation.detail">
+                          <span v-if="citation.status" class="cite-dot"></span>{{ citation.label }}
+                          <small v-if="citation.page"> · p.{{ citation.page }}</small>
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <div class="message-content">
-                  <CopilotChatAssistantMessage
-                    v-if="message.role === 'assistant'"
-                    :message="toCopilotMessage(message)"
-                    :is-running="Boolean(message.streaming)"
-                    :toolbar-visible="false"
-                    class="copilot-answer"
-                  />
-                  <div v-else class="user-content">{{ message.content }}</div>
+              </article>
+            </template>
+            <template #user-message="{ message: chatMessage }">
+              <article v-for="message in [messageForChat(chatMessage.id)]" :key="message.id" class="message-row user">
+                <div class="avatar user">{{ auth.displayName?.slice(0, 1) || '我' }}</div>
+                <div class="message-body">
+                  <div class="message-meta"><strong>你</strong></div>
+                  <div class="message-card"><div class="message-content"><div class="user-content">{{ message.content }}</div></div></div>
                 </div>
-                <div v-if="message.citations?.length" class="citation-wrap">
-                  <div class="citation-label">证据引用</div>
-                  <div class="citation-list">
-                    <span v-for="citation in message.citations" :key="citation.id" class="citation-chip"
-                      :class="citation.status" :title="citation.detail">
-                      <span v-if="citation.status" class="cite-dot"></span>{{ citation.label }}
-                      <small v-if="citation.page"> · p.{{ citation.page }}</small>
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </article>
+              </article>
+            </template>
+          </CopilotChatMessageView>
         </div>
 
         <footer class="composer-wrap">
           <div v-if="runningSkill" class="skill-running"><el-icon class="spin"><Loading /></el-icon>正在执行：{{ runningSkill }}</div>
-          <form class="composer" @submit.prevent="sendMessage">
-            <el-input v-model="draft" type="textarea" :rows="1" :maxlength="8000" resize="none" :disabled="loading"
-              placeholder="描述你想核对的规则、材料或风险…" @keydown.enter.exact.prevent="sendMessage" />
-            <el-button v-if="!loading" class="send-button" type="primary" circle :icon="Promotion"
-              :disabled="!draft.trim()" native-type="submit" title="发送消息" aria-label="发送消息" />
-            <el-button v-else class="send-button stop-button" circle :icon="VideoPause" title="停止生成" aria-label="停止生成" @click.prevent="stopGeneration" />
-          </form>
+          <CopilotChatInput
+            v-model="draft"
+            class="copilot-composer"
+            :disabled="!activeSessionId"
+            :is-running="loading"
+            :mode="loading ? 'processing' : 'input'"
+            :max-rows="5"
+            :show-disclaimer="false"
+            placeholder="描述你想核对的规则、材料或风险…"
+            @submit-message="submitChatInput"
+            @stop="stopGeneration"
+          ><template #add-menu-button /></CopilotChatInput>
           <div class="composer-foot">受控只读 · 结论由审核人员确认</div>
         </footer>
       </main>
@@ -128,12 +136,12 @@
       <aside class="skill-rail">
         <div class="skill-head">审核技能</div>
         <div class="skill-list">
-          <button v-for="skill in skills" :key="skill.name" class="skill-item" :disabled="loading" @click="runSkill(skill)">
-            <span class="skill-icon"><el-icon><component :is="skill.icon" /></el-icon></span>
+          <button v-for="skill in skills" :key="skill.id" class="skill-item" :disabled="loading" @click="runSkill(skill)">
+            <span class="skill-icon"><el-icon><component :is="skillIcon(skill.id)" /></el-icon></span>
             <span class="skill-copy"><b>{{ skill.name }}</b><small>{{ skill.desc }}</small></span>
           </button>
         </div>
-        <div class="skill-foot">技能沉淀自审核专家经验，点击即可运行</div>
+        <div class="skill-foot">团队内置审核指引 · 只读运行</div>
       </aside>
     </section>
     <el-drawer v-model="mobileSessionsVisible" title="会话" direction="ltr" size="min(88vw, 360px)">
@@ -149,8 +157,8 @@
     </el-drawer>
     <el-drawer v-model="mobileSkillsVisible" title="审核技能" direction="rtl" size="min(88vw, 360px)">
       <div class="mobile-skill-list">
-        <button v-for="skill in skills" :key="skill.name" class="skill-item" :disabled="loading" @click="runSkill(skill)">
-          <span class="skill-icon"><el-icon><component :is="skill.icon" /></el-icon></span>
+        <button v-for="skill in skills" :key="skill.id" class="skill-item" :disabled="loading" @click="runSkill(skill)">
+          <span class="skill-icon"><el-icon><component :is="skillIcon(skill.id)" /></el-icon></span>
           <span class="skill-copy"><b>{{ skill.name }}</b><small>{{ skill.desc }}</small></span>
         </button>
       </div>
@@ -160,20 +168,24 @@
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent, nextTick, onMounted, ref } from 'vue'
+import type { Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 import { assistantApi } from '@/assistant/api'
 import '@copilotkit/vue/styles.css'
-import type { AssistantCapabilities, AssistantMessage, AssistantSession, AssistantSkill, AssistantStep, AssistantTaskOption, AssistantToolActivity } from '@/assistant/types'
-import type { AssistantMessage as CopilotMessage } from '@ag-ui/core'
-import { ArrowLeft, ArrowRight, Calendar, ChatDotRound, Check, CircleCheck, Close, Coin, CopyDocument, DataLine, DocumentChecked, FolderOpened, Loading, Lock, MagicStick, Plus, Promotion, Reading, Search, Ship, VideoPause } from '@element-plus/icons-vue'
+import type { AssistantCapabilities, AssistantMessage, AssistantSession, AssistantSkill, AssistantStep, AssistantTaskOption } from '@/assistant/types'
+import type { AssistantMessage as CopilotAssistantMessage, Message as CopilotMessage } from '@ag-ui/core'
+import { ArrowLeft, ArrowRight, Calendar, ChatDotRound, Check, CircleCheck, Close, Coin, CopyDocument, DataLine, DocumentChecked, FolderOpened, Loading, Lock, MagicStick, Plus, Reading, Search, Ship } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const auth = useAuthStore()
 const CopilotChatAssistantMessage = defineAsyncComponent(() => import('@copilotkit/vue/v2').then((module) => module.CopilotChatAssistantMessage))
+const CopilotChatMessageView = defineAsyncComponent(() => import('@copilotkit/vue/v2').then((module) => module.CopilotChatMessageView))
+const CopilotChatInput = defineAsyncComponent(() => import('@copilotkit/vue/v2').then((module) => module.CopilotChatInput))
 const sessions = ref<AssistantSession[]>([])
 const tasks = ref<AssistantTaskOption[]>([])
+const skills = ref<AssistantSkill[]>([])
 const activeSessionId = ref<number | null>(null)
 const taskSelection = ref('')
 const messages = ref<AssistantMessage[]>([])
@@ -181,13 +193,19 @@ const capabilities = ref<AssistantCapabilities | null>(null)
 const draft = ref('')
 const loading = ref(false)
 const messageList = ref<HTMLElement | null>(null)
-const activeTrace = ref<AssistantStep[]>([])
-const toolActivity = ref<AssistantToolActivity[]>([])
 const runningSkill = ref('')
 const mobileSkillsVisible = ref(false)
 const mobileSessionsVisible = ref(false)
 const expandedActivityIds = ref(new Set<number | string>())
 const streamAbortController = ref<AbortController | null>(null)
+const skillIcons: Record<string, Component> = {
+  'bill-of-lading-check': Ship,
+  'fx-review': Coin,
+  'business-day-check': Calendar,
+  'sanctions-screening-review': Lock,
+  'regulatory-research': Reading,
+  'document-reconciliation': DataLine,
+}
 
 const prompts = [
   { title: '梳理风险', text: '帮我总结当前任务的风险和人工核对点', icon: DocumentChecked },
@@ -195,40 +213,21 @@ const prompts = [
   { title: '材料核对', text: '哪些单据字段需要优先复核？', icon: FolderOpened },
 ]
 
-const skills: AssistantSkill[] = [
-  {
-    name: '提单验真', desc: '核验海运提单关键信息', icon: Ship,
-    prompt: '请执行【提单验真】：对当前关联任务的提单类单据，核验提单号、装运港/目的港、承运人与发票/合同的一致性，用表格列出：核对项 | 单据字段 | 是否一致 | 说明。证据不足的项标注“需人工确认”。',
-  },
-  {
-    name: '汇率换算', desc: '核对币种与汇率折算', icon: Coin,
-    prompt: '请执行【汇率换算】：核对关联任务的提款/支付币种与金额，检查是否存在跨币种折算及其汇率依据，用表格列出：单据 | 原币种 | 金额 | 折算说明。',
-  },
-  {
-    name: '节假日核验', desc: '检查提款/付款日是否节假日', icon: Calendar,
-    prompt: '请执行【节假日核验】：对关联任务的提款/付款日期，核验目标市场节假日与工作日历，用表格列出：单据 | 日期 | 是否节假日 | 说明。不确定处标注“需人工确认”。',
-  },
-  {
-    name: '制裁名单筛查', desc: '筛查制裁与黑名单命中', icon: Lock,
-    prompt: '请执行【制裁名单筛查】：检查关联任务的借款人、汇款人、收款人是否涉及制裁名单，用表格列出：主体 | 类型 | 筛查结果 | 说明。',
-  },
-  {
-    name: '法规检索', desc: '检索跨境贷款适用法规', icon: Reading,
-    prompt: '请执行【法规检索】：针对关联任务的跨境贷款场景，检索适用的外汇/跨境融资法规要点，用表格列出：法规 | 要点 | 对当前任务的影响。',
-  },
-  {
-    name: '单据比对', desc: '核对单据字段一致性', icon: DataLine,
-    prompt: '请执行【单据比对】：对比关联任务各单据的金额、币种、主体、期限等字段一致性，用表格列出：字段 | 各单据取值 | 是否一致 | 说明。',
-  },
-]
-
 const activeSession = computed(() => sessions.value.find((item) => item.id === activeSessionId.value))
+const copilotMessages = computed<CopilotMessage[]>(() => messages.value.map((message) => ({
+  id: String(message.id),
+  role: message.role,
+  content: message.role === 'assistant' ? safeMessageContent(message) : message.content,
+})))
 
 async function loadSessions() {
   try {
-    const [items, capability] = await Promise.all([assistantApi.sessions(), assistantApi.capabilities()])
+    const [items, capability, skillCatalog] = await Promise.all([
+      assistantApi.sessions(), assistantApi.capabilities(), assistantApi.skills(),
+    ])
     sessions.value = items
     capabilities.value = capability
+    skills.value = skillCatalog
     try {
       tasks.value = await assistantApi.tasks(auth.role !== 'operator')
     } catch {
@@ -249,8 +248,6 @@ async function newSession() {
     activeSessionId.value = created.id
     taskSelection.value = ''
     messages.value = []
-    activeTrace.value = []
-    toolActivity.value = []
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '无法创建会话')
   }
@@ -263,8 +260,6 @@ async function openSession(id: number) {
     activeSessionId.value = id
     taskSelection.value = detail.task_code || ''
     messages.value = detail.messages
-    activeTrace.value = messages.value[messages.value.length - 1]?.steps || []
-    toolActivity.value = []
     scrollToBottom()
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '无法打开会话')
@@ -283,7 +278,6 @@ async function selectTaskContext(taskCode: string | undefined) {
     activeSessionId.value = created.id
     taskSelection.value = taskCode
     messages.value = []
-    activeTrace.value = []
   } catch (error) {
     taskSelection.value = activeSession.value?.task_code || ''
     ElMessage.error(error instanceof Error ? error.message : '无法连接该任务')
@@ -292,50 +286,69 @@ async function selectTaskContext(taskCode: string | undefined) {
 
 function usePrompt(text: string) { draft.value = text; sendMessage() }
 
+function submitChatInput(value: string) {
+  draft.value = value
+  sendMessage()
+}
+
+function skillIcon(id: string): Component {
+  return skillIcons[id] || Reading
+}
+
 async function runSkill(skill: AssistantSkill) {
   if (loading.value) return
   mobileSkillsVisible.value = false
   if (!activeSessionId.value) await newSession()
   runningSkill.value = skill.name
-  draft.value = skill.prompt
+  draft.value = `请执行“${skill.name}”，基于当前授权任务材料整理分析结果和人工核验点。`
   try {
-    await sendMessage()
+    await sendMessage(skill)
   } finally {
     runningSkill.value = ''
   }
 }
 
-async function sendMessage() {
+async function sendMessage(skill?: AssistantSkill) {
   if (!draft.value.trim() || !activeSessionId.value || loading.value) return
   const content = draft.value.trim()
   draft.value = ''
   messages.value.push({ id: `user-${Date.now()}`, role: 'user', content, status: 'completed', steps: [], citations: [] })
   const assistant: AssistantMessage = { id: `assistant-${Date.now()}`, role: 'assistant', content: '', status: 'running', steps: [], citations: [], streaming: true }
+  const temporaryMessageId = assistant.id
   messages.value.push(assistant)
   loading.value = true
   const controller = new AbortController()
   streamAbortController.value = controller
   expandedActivityIds.value.add(assistant.id)
-  activeTrace.value = []
-  toolActivity.value = []
   scrollToBottom()
   try {
-    for await (const event of assistantApi.streamMessage(activeSessionId.value, content, activeSession.value?.task_code || undefined, controller.signal)) {
+    for await (const event of assistantApi.streamMessage(activeSessionId.value, content, activeSession.value?.task_code || undefined, skill?.id, controller.signal)) {
       if (event.event === 'step' && event.step) {
         const step = event.step
         const index = assistant.steps.findIndex((current) => current.key === step.key)
         if (index >= 0) assistant.steps[index] = step
         else assistant.steps.push(step)
-        activeTrace.value = [...assistant.steps]
       } else if (event.event === 'delta') assistant.content += event.delta || ''
       else if (event.event === 'citations') assistant.citations = event.citations || []
       else if (event.event === 'tool' && event.tool) {
-        const found = toolActivity.value.find((item) => item.name === event.tool!.name)
-        if (found) Object.assign(found, event.tool)
-        else toolActivity.value.push({ ...event.tool })
+        const activity = event.tool
+        const toolStep: AssistantStep = {
+          key: `tool:${activity.name}`,
+          label: '读取授权证据',
+          detail: activity.status === 'running'
+            ? '正在向模型提供本轮已授权证据'
+            : activity.status === 'error'
+              ? '读取授权证据失败'
+              : `已提供 ${activity.result_count ?? 0} 条证据`,
+          status: activity.status,
+        }
+        const index = assistant.steps.findIndex((step) => step.key === toolStep.key)
+        if (index >= 0) assistant.steps[index] = toolStep
+        else assistant.steps.push(toolStep)
       }
       else if (event.event === 'message_end' && event.message) {
         assistant.id = event.message.id
+        expandedActivityIds.value.delete(temporaryMessageId)
         assistant.content = event.message.content
         assistant.steps = event.message.steps || assistant.steps
         assistant.citations = event.message.citations || assistant.citations
@@ -370,21 +383,16 @@ function toggleActivity(message: AssistantMessage) {
   expandedActivityIds.value = next
 }
 function activityTitle(message: AssistantMessage) {
-  if (message.streaming) return '慧眼正在处理'
-  if (message.status === 'error') return '本次处理未完成'
-  return `完成 ${message.steps?.length ?? 0} 个执行步骤`
+  if (message.streaming) return '正在执行'
+  if (message.status === 'error') return '执行未完成'
+  return `执行记录 · ${message.steps?.length ?? 0} 步`
 }
 function activitySubtitle(message: AssistantMessage) {
-  const toolCount = toolActivity.value.length
-  return message.streaming ? `${toolCount ? `已调用 ${toolCount} 次证据检索` : '正在理解请求并准备检索'}` : '查看本轮执行轨迹'
-}
-function toolLabel(name: string) {
-  if (name.includes('knowledge')) return '检索知识库'
-  if (name.includes('task')) return '读取任务证据'
-  return name.split('_').join(' ')
+  const toolCount = message.steps.filter((step) => step.key.startsWith('tool:')).length
+  return message.streaming ? `${toolCount ? `已触发 ${toolCount} 次授权证据读取` : '等待检索与模型运行事件'}` : '查看工具调用与处理状态'
 }
 function safeMessageContent(message: AssistantMessage) {
-  const markers = ['我们需要回答用户', '用户要求两句话', '需要引用任务材料或规则结果', '先调用 search_knowledge_base', 'let me think', 'we need to answer the user', 'analysis:', 'reasoning:']
+  const markers = ['我们需要回答用户', '用户要求两句话', '用户只是问', '没有具体单据审核证据', '证据不足时明确说', '最终只输出', '需要用中文', '需要引用任务材料或规则结果', '先调用 search_knowledge_base', '应调用 search_knowledge_base', '当前工具可用', '我们可以基于知识库', '先调用', '最终答案是', 'let me think', 'we need to answer the user', 'analysis:', 'reasoning:', 'chain of thought']
   const content = message.content || ''
   if (markers.some((marker) => content.toLowerCase().includes(marker.toLowerCase()))) {
     return '这条历史答复包含不可展示的内部过程，已隐藏。请重新发送问题以获取审核辅助答复。'
@@ -392,8 +400,12 @@ function safeMessageContent(message: AssistantMessage) {
   return content
 }
 
-function toCopilotMessage(message: AssistantMessage): CopilotMessage {
+function toCopilotMessage(message: AssistantMessage): CopilotAssistantMessage {
   return { id: String(message.id), role: 'assistant', content: safeMessageContent(message) }
+}
+
+function messageForChat(id: string): AssistantMessage {
+  return messages.value.find((message) => String(message.id) === id)!
 }
 
 async function copyMessage(message: AssistantMessage) {
@@ -515,6 +527,8 @@ onMounted(loadSessions)
 .typing span:nth-child(2) { animation-delay: .15s; }.typing span:nth-child(3) { animation-delay: .3s; }
 @keyframes bounce { 50% { transform: translateY(-3px); opacity: .5; } }
 .composer-wrap { flex: 0 0 auto; padding: 0 clamp(20px, 4vw, 60px) 14px; }
+.copilot-composer { display: block; }
+.copilot-composer :deep([data-testid="copilot-chat-input-add"]) { display: none; }
 .skill-running { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; color: #4a7bd1; font-size: 11px; }
 .composer { position: relative; }
 .composer :deep(.el-textarea__inner) { min-height: 44px !important; padding: 12px 46px 12px 14px; border: 1px solid #d9e2ee; border-radius: 8px; color: #354a69; box-shadow: 0 4px 15px rgba(42, 66, 100, .05); font-size: 13px; }

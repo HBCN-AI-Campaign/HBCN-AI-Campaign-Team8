@@ -8,6 +8,4 @@ python-jose[cryptography]==3.3.0
 bcrypt==4.2.1
 python-multipart==0.0.17
 httpx==0.28.1
-openai-agents==0.4.2
-# openai-agents 0.4.2 is incompatible with openai >=2.45.0 usage details.
-openai==2.44.0
+PyYAML==6.0.3

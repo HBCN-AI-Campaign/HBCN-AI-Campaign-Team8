@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import httpx
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -16,8 +17,10 @@ from ..assistant_schemas import (
     AssistantSessionCreate,
     AssistantSessionDetail,
     AssistantSessionOut,
+    AssistantSkillOut,
 )
 from ..assistant_service import _safe_final_answer, sdk_configured, stream_assistant, task_for_user
+from ..assistant_skills import get_skill, list_skills
 from ..config import settings
 from ..database import get_db
 from ..security import get_current_user
@@ -53,14 +56,50 @@ def _message_out(message: models.AssistantMessage) -> AssistantMessageOut:
 
 
 @router.get("/capabilities", response_model=AssistantCapabilities)
-def capabilities(user: models.User = Depends(get_current_user)):
+async def capabilities(user: models.User = Depends(get_current_user)):
     del user
+    runtime_available = False
+    runtime_model = None
+    rag_available = False
+    async with httpx.AsyncClient(timeout=httpx.Timeout(1.5, connect=0.5)) as client:
+        if settings.ASSISTANT_RUNTIME_URL:
+            try:
+                response = await client.get(f"{settings.ASSISTANT_RUNTIME_URL.rstrip('/')}/healthz")
+                runtime_info = response.json()
+                runtime_available = (
+                    response.is_success
+                    and isinstance(runtime_info, dict)
+                    and runtime_info.get("configured") is True
+                )
+                if runtime_available and isinstance(runtime_info.get("model"), str):
+                    runtime_model = runtime_info["model"]
+            except (httpx.HTTPError, ValueError):
+                runtime_available = False
+        if settings.RAG_BASE_URL:
+            try:
+                response = await client.get(f"{settings.RAG_BASE_URL.rstrip('/')}/health")
+                health = response.json()
+                rag_available = response.is_success and health.get("status") == "ok"
+            except (httpx.HTTPError, ValueError):
+                rag_available = False
+
+    assistant_available = sdk_configured() and runtime_available
+    if not sdk_configured():
+        message = "OpenCode runtime 或汇丰模型 API 配置未完成"
+    elif not runtime_available:
+        message = "OpenCode runtime 未就绪，请检查运行时和汇丰模型配置"
+    elif settings.RAG_BASE_URL and not rag_available:
+        message = "助手可用；知识库暂不可用，本次仅能使用当前任务证据"
+    elif rag_available:
+        message = "OpenCode runtime、汇丰模型 API 与知识库均可用"
+    else:
+        message = "OpenCode runtime 与汇丰模型 API 可用，知识库未配置"
     return AssistantCapabilities(
-        sdk="openai-agents-python",
-        configured=sdk_configured(),
-        model=settings.AI_MODEL or None,
-        rag_available=bool(getattr(settings, "RAG_BASE_URL", "")),
-        message=("Agent SDK 已配置，可调用汇丰百炼 API" if sdk_configured() else "未配置模型 API，当前使用本地演示模式"),
+        sdk="opencode-sdk@2.0.32",
+        configured=assistant_available,
+        model=runtime_model,
+        rag_available=rag_available,
+        message=message,
     )
 
 
@@ -73,6 +112,13 @@ def list_sessions(db: Session = Depends(get_db), user: models.User = Depends(get
         .all()
     )
     return [_session_out(session) for session in sessions]
+
+
+@router.get("/skills", response_model=list[AssistantSkillOut])
+def skills(user: models.User = Depends(get_current_user)):
+    del user
+    fields = ("id", "name", "desc", "version", "owner", "license", "permissions")
+    return [{key: skill[key] for key in fields} for skill in list_skills()]
 
 
 @router.post("/sessions", response_model=AssistantSessionOut, status_code=201)
@@ -121,10 +167,14 @@ async def stream_message(
     task_code = payload.task_code or session.task_code
     if task_code and not task_for_user(db, user, task_code):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="任务不存在或无权访问")
+    if payload.skill_id and not get_skill(payload.skill_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="审核技能不存在或未发布")
 
     async def event_stream():
         try:
-            async for item in stream_assistant(db, user, session, payload.content, task_code):
+            async for item in stream_assistant(
+                db, user, session, payload.content, task_code, payload.skill_id
+            ):
                 event = item.get("event", "message")
                 yield f"event: {event}\ndata: {json.dumps(item, ensure_ascii=False)}\n\n"
         except Exception:

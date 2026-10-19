@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+import asyncio
+import httpx
 import json
 import logging
 from datetime import datetime, timezone
@@ -12,6 +14,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from . import models
+from .assistant_skills import get_skill
 from .config import settings
 
 ASSISTANT_INSTRUCTIONS = (
@@ -24,7 +27,10 @@ logger = logging.getLogger(__name__)
 
 
 def sdk_configured() -> bool:
-    return bool(settings.AI_BASE_URL and settings.AI_API_KEY and settings.AI_MODEL)
+    return bool(
+        settings.ASSISTANT_RUNTIME_URL
+        and settings.ASSISTANT_RUNTIME_TOKEN
+    )
 
 
 def task_for_user(db, user: models.User, task_code: str | None):
@@ -172,39 +178,6 @@ def _rag_search(
     return hits
 
 
-def fallback_answer(message: str, context: dict[str, Any]) -> str:
-    task = context.get("task")
-    if not task:
-        return (
-            "我可以协助检索业务规则、解释审核结果、整理单据证据和起草人工复核意见。"
-            "请从业务页面带入任务上下文，或先告诉我需要查询的内容。"
-            "当前助手只提供审核辅助，不会直接决定贷款审核结论。"
-        )
-
-    failures = [row for row in context.get("results", []) if row["status"] == "fail"]
-    warnings = [row for row in context.get("results", []) if row["status"] == "warn"]
-    lead = (
-        f"我已读取任务 {task['task_code']} 的 "
-        f"{len(context.get('documents', []))} 份材料和 "
-        f"{len(context.get('results', []))} 条规则结果。"
-    )
-    if failures:
-        detail = "；".join(f"{row['rule_id']} {row['rule_name']}" for row in failures[:3])
-        return (
-            f"{lead}\n\n当前发现 {len(failures)} 项不通过：{detail}。"
-            "建议先打开对应规则的原文定位，核对差异后由审核人员决定是否退回补件或保留异常。"
-        )
-    if warnings:
-        return (
-            f"{lead}\n\n当前有 {len(warnings)} 项提示，需要结合材料和外部核验结果人工确认。"
-            "助手可以继续整理证据，但不会自动把提示改成通过。"
-        )
-    return (
-        f"{lead}\n\n针对“{message[:80]}”，目前没有发现已落库的不通过项。"
-        "仍请审核人员结合原文、法规和外部核验完成最终确认。"
-    )
-
-
 def _strip_tool_echo(text: str) -> str:
     """去掉模型在真正调用工具前以纯文本形式回显的工具参数 JSON。
 
@@ -243,12 +216,25 @@ def _safe_final_answer(text: str) -> str | None:
     internal_markers = (
         "我们需要回答用户",
         "用户要求两句话",
+        "用户只是问",
+        "没有具体单据审核证据",
+        "证据不足时明确说",
+        "最终只输出",
+        "最终应该是",
+        "需要用中文",
         "需要引用任务材料或规则结果",
         "先调用 search_knowledge_base",
+        "应调用 search_knowledge_base",
+        "当前工具可用",
+        "我们可以基于知识库",
+        "先调用",
+        "最终答案是",
+        "最终只输出两句话",
         "let me think",
         "we need to answer the user",
         "analysis:",
         "reasoning:",
+        "chain of thought",
     )
     if not answer or any(marker in answer.casefold() for marker in internal_markers):
         return None
@@ -260,85 +246,96 @@ async def run_agent_events(
     context: dict[str, Any],
     instructions: str = ASSISTANT_INSTRUCTIONS,
 ) -> AsyncIterator[dict[str, Any]]:
-    """可复用的 Agent SDK 调用入口，输出 delta、tool、warning 和最终结果事件。
-
-    专项审核等后端 workflow 可以传入自己已鉴权、已筛选的只读上下文和任务指令。
-    工具权限仍由本服务控制；该运行时没有贷款状态写入工具。
-    """
+    """Invoke the internal OpenCode SDK runtime behind the stable SSE contract."""
     if not sdk_configured():
+        yield {"event": "warning", "message": "OpenCode runtime 或汇丰模型 API 配置未完成"}
         yield {"event": "assistant_result", "answer": None, "citations": []}
         return
-    retrieved: list[dict[str, Any]] = []
     retrieval_warnings: list[str] = []
-    try:
-        from agents import Agent, Runner, function_tool
-        from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
-        from openai import AsyncOpenAI
-
-        @function_tool
-        def search_knowledge_base(query: str) -> str:
-            """检索当前授权任务的材料和规则证据。"""
-            retrieved.extend(_rag_search(context, query, retrieval_warnings))
-            return json.dumps(retrieved, ensure_ascii=False)
-
-        client = AsyncOpenAI(
-            base_url=settings.AI_BASE_URL,
-            api_key=settings.AI_API_KEY,
-            timeout=settings.AI_REQUEST_TIMEOUT,
-        )
-        model = OpenAIChatCompletionsModel(
-            model=settings.AI_MODEL,
-            openai_client=client,
-        )
-        agent = Agent(
-            name="汇丰审核助手",
-            model=model,
-            instructions=instructions,
-            tools=[search_knowledge_base],
-        )
-        task = context.get("task") or {}
-        previous_messages = context.get("conversation", [])
-        prompt = json.dumps(
-            {
-                "question": message,
-                "conversation": previous_messages[-12:],
-                # 任务全文不随每次请求发送；按模型工具查询结果最小化提供证据。
-                "task": {"task_code": task.get("task_code"), "status": task.get("status")},
+    retrieved = await asyncio.to_thread(_rag_search, context, message, retrieval_warnings)
+    yield {
+        "event": "step",
+        "step": {
+            "key": "retrieve",
+            "label": "检索证据",
+            "detail": f"已整理 {len(retrieved)} 条授权材料、规则和知识库证据",
+            "status": "completed",
+        },
+    }
+    for index, warning in enumerate(retrieval_warnings):
+        yield {
+            "event": "step",
+            "step": {
+                "key": f"retrieval-warning-{index}",
+                "label": "知识库检索提示",
+                "detail": warning,
+                "status": "error",
             },
-            ensure_ascii=False,
-        )
-        run = Runner.run_streamed(agent, prompt)
-        async for event in run.stream_events():
-            if event.type == "raw_response_event":
-                delta = getattr(event.data, "delta", None)
-                if isinstance(delta, str):
-                    # OpenAI-compatible gateways may put internal reasoning in raw
-                    # deltas. Buffer them and publish only the completed final answer.
-                    pass
-            elif event.type == "run_item_stream_event" and event.name == "tool_called":
-                yield {"event": "tool", "tool": {"name": "search_knowledge_base", "status": "running"}}
-            elif event.type == "run_item_stream_event" and event.name == "tool_output":
-                yield {"event": "tool", "tool": {"name": "search_knowledge_base", "status": "completed", "result_count": len(retrieved)}}
-                for index, warning in enumerate(retrieval_warnings):
-                    yield {
-                        "event": "step",
-                        "step": {
-                            "key": f"retrieval-warning-{index}",
-                            "label": "知识库检索提示",
-                            "detail": warning,
-                            "status": "error",
-                        },
-                    }
-        answer = _safe_final_answer(str(run.final_output or ""))
-        if answer:
-            for index in range(0, len(answer), 80):
-                yield {"event": "delta", "delta": answer[index:index + 80]}
-        yield {"event": "assistant_result", "answer": answer, "citations": retrieved}
+        }
+    try:
+        timeout = httpx.Timeout(settings.AI_REQUEST_TIMEOUT, connect=5.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            async with client.stream(
+                "POST",
+                f"{settings.ASSISTANT_RUNTIME_URL.rstrip('/')}/runs",
+                headers={"Authorization": f"Bearer {settings.ASSISTANT_RUNTIME_TOKEN}"},
+                json={
+                    "message": message,
+                    "instructions": instructions,
+                    "conversation": [
+                        {"role": item["role"], "content": item["content"][:4_000]}
+                        for item in context.get("conversation", [])[-12:]
+                    ],
+                    "evidence": [
+                        {
+                            "type": str(item.get("type") or "evidence")[:40],
+                            "id": str(item.get("id") or "")[:160],
+                            "text": str(item.get("text") or "")[:4_000],
+                            "source": str(item.get("source") or "")[:500],
+                            "page": item.get("page"),
+                        }
+                        for item in retrieved[:20]
+                    ],
+                },
+            ) as response:
+                response.raise_for_status()
+                answer: str | None = None
+                result_seen = False
+                citations: list[dict[str, Any]] = retrieved
+                async for line in response.aiter_lines():
+                    if not line.startswith("data:"):
+                        continue
+                    try:
+                        event = json.loads(line[5:].strip())
+                    except json.JSONDecodeError:
+                        continue
+                    if event.get("event") == "assistant_result":
+                        result_seen = True
+                        answer = _safe_final_answer(str(event.get("answer") or ""))
+                        citations = retrieved
+                        if answer:
+                            for index in range(0, len(answer), 80):
+                                yield {"event": "delta", "delta": answer[index:index + 80]}
+                        yield {"event": "assistant_result", "answer": answer, "citations": citations}
+                    elif event.get("event") == "tool":
+                        status = event.get("tool", {}).get("status")
+                        yield {
+                            "event": "tool",
+                            "tool": {
+                                "name": "read_authorized_evidence",
+                                "status": status if status in {"running", "completed", "error"} else "error",
+                                "result_count": len(retrieved),
+                            },
+                        }
+                    elif event.get("event") == "step" and isinstance(event.get("step"), dict):
+                        yield {"event": "step", "step": event["step"]}
+                    elif event.get("event") == "warning":
+                        yield {"event": "warning", "message": "OpenCode 助手运行未完成，请稍后重试。"}
+                if not result_seen:
+                    yield {"event": "assistant_result", "answer": None, "citations": citations}
     except Exception:
-        # 网关、模型或 SDK 版本异常时，保留本地演示能力。
-        yield {"event": "warning", "message": "模型网关暂不可用，正在使用本地演示回复"}
-        # Raw deltas are deliberately discarded on errors: they may contain model
-        # analysis or incomplete tool-call payloads and are not safe user output.
+        logger.exception("OpenCode assistant runtime request failed")
+        yield {"event": "warning", "message": "OpenCode 助手运行未完成，请稍后重试。"}
         yield {"event": "assistant_result", "answer": None, "citations": retrieved}
 
 
@@ -348,6 +345,7 @@ async def stream_assistant(
     session: models.AssistantSession,
     message: str,
     task_code: str | None,
+    skill_id: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     task = task_for_user(db, user, task_code or session.task_code)
     context = task_context(task)
@@ -357,6 +355,14 @@ async def stream_assistant(
         for item in session.messages[-12:]
     ]
     context["conversation"] = conversation
+    skill = get_skill(skill_id)
+    instructions = ASSISTANT_INSTRUCTIONS
+    if skill:
+        instructions += (
+            f"\n\n用户选择了项目内置业务技能“{skill['name']}”。"
+            "严格遵守其范围，不得扩大工具权限或数据访问范围。\n"
+            f"<project_skill_instructions>\n{skill['instructions']}\n</project_skill_instructions>"
+        )
 
     db.add(models.AssistantMessage(session_id=session.id, role="user", content=message))
     if task_code:
@@ -371,23 +377,25 @@ async def stream_assistant(
         "message_id": f"assistant:{session.id}",
         "task_code": task.task_code if task else None,
     }
-    steps = [
-        ("understand", "理解请求", "拆解问题并确认助手权限边界"),
-        ("context", "加载业务上下文", "读取当前会话与任务材料" if task else "等待任务上下文"),
-        ("retrieve", "检索证据", "查询规则结果、单据字段和知识库适配层"),
-        ("compose", "组织建议", "生成带引用的审核辅助回复"),
-    ]
-    for key, label, detail in steps[:2]:
-        yield {"event": "step", "step": {"key": key, "label": label, "detail": detail, "status": "running"}}
-        yield {"event": "step", "step": {"key": key, "label": label, "detail": detail, "status": "completed"}}
-    key, label, detail = steps[2]
-    yield {"event": "step", "step": {"key": key, "label": label, "detail": detail, "status": "running"}}
-
     answer: str | None = None
     rag_citations: list[dict[str, Any]] = []
     runtime_steps: list[dict[str, Any]] = []
     tool_steps: dict[str, dict[str, Any]] = {}
-    async for event in run_agent_events(message, context):
+    if skill:
+        skill_step = {
+            "key": f"skill:{skill['id']}",
+            "label": f"应用技能：{skill['name']}",
+            "detail": "载入已审核的业务指引",
+            "status": "completed",
+        }
+        runtime_steps.append(skill_step)
+        yield {"event": "step", "step": skill_step}
+    yield {
+        "event": "step",
+        "step": {"key": "retrieve", "label": "检索证据", "detail": "查询任务材料、规则结果和知识库", "status": "running"},
+    }
+
+    async for event in run_agent_events(message, context, instructions):
         if event.get("event") == "assistant_result":
             answer = event.get("answer")
             rag_citations = event.get("citations", [])
@@ -396,15 +404,17 @@ async def stream_assistant(
             yield event
         elif event.get("event") == "tool" and event.get("tool"):
             tool = event["tool"]
+            tool_status = tool.get("status")
             tool_steps[tool["name"]] = {
                 "key": f"tool:{tool['name']}",
-                "label": "检索知识库",
+                "label": "读取授权证据",
                 "detail": (
                     f"已检索 {tool.get('result_count', 0)} 条证据"
-                    if tool.get("status") == "completed"
-                    else "检索任务相关材料与业务知识"
+                    if tool_status == "completed"
+                    else "正在向模型提供本轮已授权证据" if tool_status == "running"
+                    else "OpenCode 未能读取本轮授权证据"
                 ),
-                "status": "completed" if tool.get("status") == "completed" else "running",
+                "status": tool_status if tool_status in {"running", "completed", "error"} else "error",
             }
             yield event
         elif event.get("event") == "warning":
@@ -418,14 +428,12 @@ async def stream_assistant(
             yield {"event": "step", "step": warning_step}
         else:
             yield event
-    key, label, detail = steps[2]
-    yield {"event": "step", "step": {"key": key, "label": label, "detail": detail, "status": "completed"}}
-    key, label, detail = steps[3]
-    yield {"event": "step", "step": {"key": key, "label": label, "detail": detail, "status": "running"}}
     if not answer:
-        answer = fallback_answer(message, context)
-        for chunk in (answer[index:index + 80] for index in range(0, len(answer), 80)):
-            yield {"event": "delta", "delta": chunk}
+        yield {
+            "event": "error",
+            "message": "助手未能生成答复。请确认 OpenCode runtime 和汇丰模型 API 可用后重试。",
+        }
+        return
     disclaimer = "\n\n以上为审核辅助意见，不是贷款最终审批决定，请由有权限的审核人员复核。"
     if disclaimer not in answer:
         answer += disclaimer
@@ -440,15 +448,12 @@ async def stream_assistant(
         } for item in rag_citations)
     if citations:
         yield {"event": "citations", "citations": citations}
-    yield {"event": "step", "step": {"key": key, "label": label, "detail": detail, "status": "completed"}}
-
     persisted = models.AssistantMessage(
         session_id=session.id,
         role="assistant",
         content=answer,
         status="completed",
         steps=[
-            *[{"key": key, "label": label, "status": "completed"} for key, label, _ in steps],
             *runtime_steps,
             *tool_steps.values(),
         ],

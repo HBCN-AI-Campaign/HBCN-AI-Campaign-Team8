@@ -1,8 +1,6 @@
 import asyncio
-import sys
-import types
+import json
 import unittest
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi import FastAPI
@@ -116,6 +114,11 @@ class AssistantApiTests(unittest.TestCase):
 
     def test_internal_reasoning_is_rejected_as_final_answer(self):
         self.assertIsNone(_safe_final_answer("我们需要回答用户：先检索一下。最终答案是 OK。"))
+        leaked = (
+            "用户只是问能力说明，没有具体单据审核证据。我们可以基于知识库："
+            "先调用 search_knowledge_base。最终只输出两句话。慧眼助手可协助梳理材料。"
+        )
+        self.assertIsNone(_safe_final_answer(leaked))
         self.assertEqual(_safe_final_answer("慧眼助手可整理材料并提示风险。"), "慧眼助手可整理材料并提示风险。")
 
     def test_legacy_reasoning_is_redacted_from_session_api(self):
@@ -137,45 +140,28 @@ class AssistantApiTests(unittest.TestCase):
         self.assertNotIn("内部分析内容", detail.json()["messages"][0]["content"])
 
     def test_agent_stream_never_exposes_raw_reasoning_delta(self):
-        class FakeAgent:
-            def __init__(self, **kwargs):
-                pass
+        import httpx
 
-        class FakeRun:
-            final_output = "安全的审核辅助答复"
+        payloads = [
+            {"event": "tool", "tool": {"name": "read_authorized_evidence", "status": "running"}},
+            {"event": "tool", "tool": {"name": "read_authorized_evidence", "status": "completed", "result_count": 0}},
+            {"event": "assistant_result", "answer": "安全的审核辅助答复", "citations": []},
+        ]
 
-            async def stream_events(self):
-                yield SimpleNamespace(
-                    type="raw_response_event",
-                    data=SimpleNamespace(delta="内部推理：不应发送给前端"),
-                )
+        async def response_handler(request):
+            body = "".join(f"data: {json.dumps(item)}\n\n" for item in payloads)
+            return httpx.Response(200, content=body.encode())
 
-        class FakeRunner:
-            @staticmethod
-            def run_streamed(*args, **kwargs):
-                return FakeRun()
+        async def collect_with_runtime():
+            client = httpx.AsyncClient(transport=httpx.MockTransport(response_handler))
+            with patch("app.assistant_service.httpx.AsyncClient", return_value=client), patch(
+                "app.assistant_service.sdk_configured", return_value=True
+            ), patch("app.assistant_service.settings.ASSISTANT_RUNTIME_URL", "http://runtime"), patch(
+                "app.assistant_service.settings.ASSISTANT_RUNTIME_TOKEN", "test-token"
+            ):
+                return await _collect_events(run_agent_events("test", {}))
 
-        agents_module = types.ModuleType("agents")
-        agents_module.Agent = FakeAgent
-        agents_module.Runner = FakeRunner
-        agents_module.function_tool = lambda function: function
-        models_module = types.ModuleType("agents.models")
-        models_module.__path__ = []
-        chat_module = types.ModuleType("agents.models.openai_chatcompletions")
-        chat_module.OpenAIChatCompletionsModel = lambda **kwargs: object()
-        openai_module = types.ModuleType("openai")
-        openai_module.AsyncOpenAI = lambda **kwargs: object()
-        with patch("app.assistant_service.sdk_configured", return_value=True), patch(
-            "app.assistant_service.settings.AI_BASE_URL", "https://model.example/v1"
-        ), patch("app.assistant_service.settings.AI_API_KEY", "test-key"), patch(
-            "app.assistant_service.settings.AI_MODEL", "test-model"
-        ), patch.dict(sys.modules, {
-            "agents": agents_module,
-            "agents.models": models_module,
-            "agents.models.openai_chatcompletions": chat_module,
-            "openai": openai_module,
-        }):
-            events = asyncio.run(_collect_events(run_agent_events("test", {})))
+        events = asyncio.run(collect_with_runtime())
 
         deltas = [event["delta"] for event in events if event["event"] == "delta"]
         self.assertEqual("".join(deltas), "安全的审核辅助答复")
@@ -229,15 +215,81 @@ class AssistantApiTests(unittest.TestCase):
         self.assertNotIn("private connection detail", warnings[0])
 
     def test_capabilities_reports_configured_rag_and_model(self):
-        with patch("app.routers.assistant.sdk_configured", return_value=True), patch(
-            "app.routers.assistant.settings.AI_MODEL", "qwen3.8-flash"
-        ), patch("app.routers.assistant.settings.RAG_BASE_URL", "http://rag-service"):
+        import httpx
+
+        async def response_handler(request):
+            if request.url.path == "/healthz":
+                return httpx.Response(
+                    200,
+                    json={"status": "ok", "configured": True, "model": "qwen3.8-flash"},
+                )
+            if request.url.path == "/health":
+                return httpx.Response(200, json={"status": "ok", "service": "hbcn-rag-service"})
+            return httpx.Response(404)
+
+        real_async_client = httpx.AsyncClient
+
+        def client_factory(*args, **kwargs):
+            return real_async_client(transport=httpx.MockTransport(response_handler), *args, **kwargs)
+
+        with patch("app.routers.assistant.httpx.AsyncClient", side_effect=client_factory), patch(
+            "app.routers.assistant.sdk_configured", return_value=True
+        ), patch("app.routers.assistant.settings.RAG_BASE_URL", "http://rag-service"), patch(
+            "app.routers.assistant.settings.ASSISTANT_RUNTIME_URL", "http://assistant-runtime"
+        ), patch("app.routers.assistant.settings.ASSISTANT_RUNTIME_TOKEN", "runtime-token"):
             response = self.client.get("/api/assistant/capabilities", headers=self.reviewer_headers)
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["configured"])
         self.assertTrue(response.json()["rag_available"])
         self.assertEqual(response.json()["model"], "qwen3.8-flash")
+
+    def test_skill_catalog_exposes_only_reviewed_metadata(self):
+        response = self.client.get("/api/assistant/skills", headers=self.reviewer_headers)
+
+        self.assertEqual(response.status_code, 200)
+        skills = response.json()
+        self.assertEqual(len(skills), 6)
+        sanctions = next(item for item in skills if item["id"] == "sanctions-screening-review")
+        self.assertEqual(sanctions["name"], "制裁名单筛查")
+        self.assertEqual(sanctions["permissions"], ["read_authorized_evidence"])
+        self.assertNotIn("instructions", sanctions)
+
+    def test_unknown_skill_is_rejected_before_streaming(self):
+        created = self.client.post(
+            "/api/assistant/sessions", headers=self.reviewer_headers, json={"title": "skill"}
+        )
+        response = self.client.post(
+            f"/api/assistant/sessions/{created.json()['id']}/messages/stream",
+            headers=self.reviewer_headers,
+            json={"content": "run", "skill_id": "unreviewed-skill"},
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"], "审核技能不存在或未发布")
+
+    def test_selected_skill_is_recorded_as_a_public_execution_step(self):
+        created = self.client.post(
+            "/api/assistant/sessions", headers=self.reviewer_headers, json={"title": "skill"}
+        )
+        async def fake_agent_events(*args, **kwargs):
+            yield {"event": "assistant_result", "answer": "需人工复核", "citations": []}
+
+        with patch("app.assistant_service.sdk_configured", return_value=True), patch(
+            "app.assistant_service.run_agent_events", fake_agent_events
+        ):
+            response = self.client.post(
+                f"/api/assistant/sessions/{created.json()['id']}/messages/stream",
+                headers=self.reviewer_headers,
+                json={"content": "请检查主体", "skill_id": "sanctions-screening-review"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        history = self.client.get(
+            f"/api/assistant/sessions/{created.json()['id']}", headers=self.reviewer_headers
+        ).json()
+        steps = history["messages"][-1]["steps"]
+        self.assertIn("skill:sanctions-screening-review", [step["key"] for step in steps])
 
     def test_stream_error_hides_internal_exception_text(self):
         async def failed_stream(*args, **kwargs):
@@ -260,7 +312,7 @@ class AssistantApiTests(unittest.TestCase):
 
     def test_tool_trace_is_persisted_in_session_history(self):
         async def fake_agent_events(*args, **kwargs):
-            yield {"event": "tool", "tool": {"name": "search_knowledge_base", "status": "running"}}
+            yield {"event": "tool", "tool": {"name": "read_authorized_evidence", "status": "running"}}
             yield {"event": "step", "step": {
                 "key": "retrieval-warning-0",
                 "label": "知识库检索提示",
@@ -268,7 +320,7 @@ class AssistantApiTests(unittest.TestCase):
                 "status": "error",
             }}
             yield {"event": "tool", "tool": {
-                "name": "search_knowledge_base", "status": "completed", "result_count": 0,
+                "name": "read_authorized_evidence", "status": "completed", "result_count": 0,
             }}
             yield {"event": "assistant_result", "answer": "需人工复核", "citations": []}
 
@@ -287,7 +339,7 @@ class AssistantApiTests(unittest.TestCase):
             f"/api/assistant/sessions/{session_id}", headers=self.reviewer_headers
         ).json()
         saved_steps = history["messages"][-1]["steps"]
-        self.assertIn("tool:search_knowledge_base", [item["key"] for item in saved_steps])
+        self.assertIn("tool:read_authorized_evidence", [item["key"] for item in saved_steps])
         self.assertIn("retrieval-warning-0", [item["key"] for item in saved_steps])
 
     def test_stream_returns_steps_answer_and_persisted_history(self):
@@ -297,7 +349,12 @@ class AssistantApiTests(unittest.TestCase):
             json={"title": "new"},
         )
         session_id = created.json()["id"]
-        with patch("app.assistant_service.sdk_configured", return_value=False):
+        async def fake_agent_events(*args, **kwargs):
+            yield {"event": "assistant_result", "answer": "我不能直接决定贷款审核结论。", "citations": []}
+
+        with patch("app.assistant_service.sdk_configured", return_value=True), patch(
+            "app.assistant_service.run_agent_events", fake_agent_events
+        ):
             response = self.client.post(
                 f"/api/assistant/sessions/{session_id}/messages/stream",
                 headers=self.reviewer_headers,
@@ -307,7 +364,7 @@ class AssistantApiTests(unittest.TestCase):
         self.assertIn("text/event-stream", response.headers["content-type"])
         for event in ("message_start", "step", "delta", "message_end"):
             self.assertIn(f"event: {event}", response.text)
-        self.assertIn("不会直接决定贷款审核结论", response.text)
+        self.assertIn("有权限的审核人员复核", response.text)
 
         detail = self.client.get(
             f"/api/assistant/sessions/{session_id}",
@@ -315,6 +372,21 @@ class AssistantApiTests(unittest.TestCase):
         )
         self.assertEqual(detail.status_code, 200)
         self.assertEqual([item["role"] for item in detail.json()["messages"]], ["user", "assistant"])
+
+    def test_unconfigured_model_does_not_fabricate_a_local_answer(self):
+        created = self.client.post(
+            "/api/assistant/sessions", headers=self.reviewer_headers, json={"title": "no runtime"}
+        )
+        with patch("app.assistant_service.sdk_configured", return_value=False):
+            response = self.client.post(
+                f"/api/assistant/sessions/{created.json()['id']}/messages/stream",
+                headers=self.reviewer_headers,
+                json={"content": "请审核"},
+            )
+
+        self.assertIn("event: error", response.text)
+        self.assertIn("汇丰模型 API", response.text)
+        self.assertNotIn("event: delta", response.text)
 
 
 if __name__ == "__main__":

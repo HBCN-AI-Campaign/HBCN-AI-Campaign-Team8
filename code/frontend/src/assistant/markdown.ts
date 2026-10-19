@@ -11,7 +11,7 @@ function escapeHtml(source: string): string {
 }
 
 const renderer = new marked.Renderer()
-renderer.html = ({ text }) => escapeHtml(text)
+renderer.html = (html) => escapeHtml(html)
 
 export function renderMarkdown(source: string): string {
   if (!source) return ''
