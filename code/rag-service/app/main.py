@@ -65,6 +65,26 @@ def capabilities():
     )
 
 
+_QUERY_SCOPES = ("business_rules", "project_design")
+
+
+def _retrieve_evidence(query: str, scope: str, top_k: int) -> list[dict]:
+    """按 scope 检索；scope 为 ``all`` 时合并两个默认范围并去重排序。"""
+    if scope == "all":
+        merged: list[dict] = []
+        seen: set[tuple[str, str]] = set()
+        for item_scope in _QUERY_SCOPES:
+            for chunk in get_engine().retrieve(query=query, scope=item_scope, top_k=top_k):
+                key = (str(chunk.get("document_id") or ""), str(chunk.get("content") or ""))
+                if key in seen:
+                    continue
+                seen.add(key)
+                merged.append(chunk)
+        merged.sort(key=lambda item: item.get("similarity") or 0.0, reverse=True)
+        return merged[:top_k]
+    return get_engine().retrieve(query=query, scope=scope, top_k=top_k)
+
+
 @app.post("/api/v1/query", response_model=QueryResponse, dependencies=[Depends(require_service_token)])
 def query(payload: QueryRequest):
     if payload.scope in ("task_documents", "law"):
@@ -73,11 +93,7 @@ def query(payload: QueryRequest):
             "此范围需先完成任务级权限过滤或法规 MCP 授权接入",
         )
     try:
-        chunks = get_engine().retrieve(
-            query=payload.query,
-            scope=payload.scope,
-            top_k=payload.top_k,
-        )
+        chunks = _retrieve_evidence(payload.query, payload.scope, payload.top_k)
     except RAGFlowNotConfiguredError as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
     except (RAGFlowError, EmbeddingError) as exc:
@@ -100,7 +116,7 @@ def query(payload: QueryRequest):
 
 @app.post("/api/v1/documents", response_model=IndexResponse, dependencies=[Depends(require_service_token)])
 async def index_document(
-    scope: str = Form(...),
+    scope: str = Form("business_rules"),
     file: UploadFile = File(...),
 ):
     if scope not in ("business_rules", "project_design"):

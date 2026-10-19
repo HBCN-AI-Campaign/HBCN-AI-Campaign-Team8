@@ -6,8 +6,8 @@
 
 | 层 | 选型 | 边界 |
 | --- | --- | --- |
-| Agent 编排 | OpenAI Agents SDK Python `0.4.2` | Agent、function tool、流式事件；通过 OpenAI-compatible client 接阿狗中转站 |
-| 模型网关 | `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | 密钥只放运行环境，不进仓库；未配置时使用本地演示降级 |
+| Agent 编排 | OpenAI Agents SDK Python `0.4.2` | Agent、function tool、流式事件；通过 OpenAI-compatible client 接入模型服务 |
+| 模型服务 | 汇丰提供的阿里云百炼团队 API | `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL`；密钥只放运行环境，不进仓库 |
 | RAG | 现有 `rag_service.RAGClient` | 助手只调用 `search_knowledge_base` 工具，不依赖 RAGFlow 返回格式 |
 | API | FastAPI + JSON + SSE | 会话持久化在 `assistant_sessions` / `assistant_messages` |
 
@@ -81,7 +81,7 @@ sequenceDiagram
     participant API as FastAPI assistant router
     participant DB as AssistantSession/Message
     participant Agent as OpenAI Agents SDK
-    participant GW as 阿狗 OpenAI-compatible API
+    participant GW as 汇丰百炼 OpenAI-compatible API
     participant RAG as 现有 RAG 适配层
     participant Task as 任务/规则只读数据
 
@@ -104,23 +104,27 @@ sequenceDiagram
 
 ## 运行配置
 
-在 `code/backend/.env` 设置：
+本项目默认使用汇丰比赛提供的百炼团队 API。复制 `code/backend/.env.example` 为 `.env`，并配置：
 
 ```dotenv
-AI_BASE_URL=https://your-gateway.example/v1
-AI_API_KEY=replace-with-runtime-secret
-AI_MODEL=your-chat-model
+AI_BASE_URL=https://llm-tlndh47wd9ustbss.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
+AI_API_KEY=<从汇丰安全渠道获取的 refresh 后团队密钥>
+AI_MODEL=qwen3.8-flash
 AI_REQUEST_TIMEOUT=45
+RAG_BASE_URL=http://127.0.0.1:8010
+RAG_SERVICE_TOKEN=<与 rag-service 的 SERVICE_TOKEN 相同>
+RAG_REQUEST_TIMEOUT=15
 ```
 
-本机使用 CCSwitch 时，推荐配置为：
+`AI_API_KEY` 应由本机环境变量或部署平台 Secret 注入；团队成员从 Git 拉取代码后，需通过汇丰指定的安全渠道取得同一团队的有效 refresh 密钥，再在各自运行环境设置该变量。不要把 CSV、密钥、`.env` 或密钥写入前端构建变量，也不要通过 Git/聊天记录分发。生产部署还需由部署负责人把该 Secret 配置到 HSBC ECS 的服务运行环境。仅拉取仓库不会自动获得团队密钥，这是凭证管理的必要边界。
 
-```dotenv
-AI_BASE_URL=http://127.0.0.1:15721/v1
-AI_API_KEY=PROXY_MANAGED
-AI_MODEL=gpt-6.1-sol
+本地启动完整助手时，先启动 `code/rag-service`（端口 `8010`），并在两个服务的忽略 `.env` 中分别配置 `SERVICE_TOKEN` 和同值的 `RAG_SERVICE_TOKEN`。RAG 的百炼 Embedding/视觉模型使用汇丰团队 API Key；rag-service 的 `SERVICE_TOKEN` 只是内部服务鉴权，不是模型 API Key。部署到 ECS 时将 `RAG_BASE_URL` 改为服务可达的内网地址，并把两项 Secret 配置到后端运行环境。`rag_available` 表示连接配置已启用；实际检索依赖 RAG 服务已启动且对应知识库已索引。
+
+可在 PowerShell 当前进程中设置本地密钥后启动后端：
+
+```powershell
+$env:AI_API_KEY = "<从汇丰安全渠道获取的 refresh 后团队密钥>"
+python -m uvicorn app.main:app --port 8000
 ```
 
-CCSwitch 的 Local Routing 默认监听 `127.0.0.1:15721`；启动代理并启用 Codex 路由后，它会把请求转发到当前选中的提供商。`PROXY_MANAGED` 是 CCSwitch 的路由占位令牌，真实密钥由 CCSwitch 注入，不写入本项目。若切换 CCSwitch 中的模型，只需同步修改 `AI_MODEL`。
-
-不配置上述三个必填项时，接口仍可启动并返回本地演示回答，方便前端联调；生产环境应配置密钥管理和 HTTPS 网关。
+Linux/macOS 服务进程可通过部署平台 Secret 或 systemd `EnvironmentFile` 注入相同变量。未配置模型服务时，接口仍可启动并返回本地演示回答；该模式仅用于界面联调，不代表模型 API 已配置成功。

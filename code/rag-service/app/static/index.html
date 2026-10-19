@@ -3,112 +3,87 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>HBCN 知识库检索 · 试用</title>
+  <title>智能知识库</title>
   <style>
-    :root { --brand:#0f62fe; --bg:#f4f6f9; --card:#fff; --line:#e3e8ef; --text:#1a2333; --muted:#6b7787; }
-    * { box-sizing: border-box; }
-    body { margin:0; font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif; background:var(--bg); color:var(--text); }
-    header { background:var(--brand); color:#fff; padding:16px 24px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
-    header h1 { font-size:18px; margin:0; font-weight:600; }
-    header .badge { background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.35); border-radius:999px; padding:3px 12px; font-size:12px; }
-    main { max-width:960px; margin:20px auto; padding:0 16px; display:grid; gap:16px; }
-    .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; }
-    .card h2 { margin:0 0 12px; font-size:15px; }
-    label { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
-    input[type=text], input[type=password], textarea, select, input[type=file] {
-      width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:8px; font-size:14px; font-family:inherit;
+    :root {
+      --brand: #1f5eff; --brand2: #6a3dff; --ink: #17233d; --muted: #7a8699;
+      --bg: #f5f7fb; --card: #ffffff; --line: #e6eaf2; --ok: #12a35b; --err: #e0483e;
     }
-    textarea { min-height:72px; resize:vertical; }
-    .row { display:flex; gap:12px; flex-wrap:wrap; }
-    .row > div { flex:1; min-width:160px; }
-    button { background:var(--brand); color:#fff; border:0; border-radius:8px; padding:10px 18px; font-size:14px; cursor:pointer; margin-top:14px; }
-    button.secondary { background:#eef2f7; color:var(--text); }
-    button:disabled { opacity:.55; cursor:not-allowed; }
-    .status { font-size:13px; color:var(--muted); margin-top:8px; min-height:18px; }
-    .status.error { color:#c0392b; }
-    .hit { border:1px solid var(--line); border-radius:8px; padding:12px; margin-top:10px; }
-    .hit .meta { font-size:12px; color:var(--muted); margin-top:6px; display:flex; gap:12px; flex-wrap:wrap; }
-    .hit pre { white-space:pre-wrap; font-family:inherit; font-size:14px; margin:0; }
-    table { width:100%; border-collapse:collapse; font-size:13px; }
-    th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); }
-    .token-line { display:flex; gap:8px; align-items:center; }
-    .token-line input { flex:1; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+    .hero { background: linear-gradient(120deg, var(--brand), var(--brand2)); color: #fff; padding: 56px 20px 72px; text-align: center; }
+    .hero h1 { margin: 0 0 10px; font-size: 30px; font-weight: 700; letter-spacing: .5px; }
+    .hero p { margin: 0 auto; max-width: 520px; font-size: 15px; opacity: .92; }
+    .search-wrap { max-width: 680px; margin: -34px auto 0; padding: 0 16px; }
+    .search-box { display: flex; background: var(--card); border-radius: 16px; box-shadow: 0 12px 34px rgba(31, 94, 255, .18); overflow: hidden; }
+    .search-box input { flex: 1; border: 0; outline: 0; padding: 18px 20px; font-size: 16px; background: transparent; }
+    .search-box button { border: 0; background: var(--brand); color: #fff; padding: 0 30px; font-size: 16px; cursor: pointer; }
+    .search-box button:disabled { opacity: .55; cursor: not-allowed; }
+    main { max-width: 880px; margin: 0 auto; padding: 28px 16px 80px; }
+    .panel { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px; margin-top: 20px; }
+    .panel h2 { margin: 0 0 6px; font-size: 16px; }
+    .panel .hint { margin: 0 0 14px; font-size: 13px; color: var(--muted); }
+    .dropzone { border: 2px dashed #c9d4e8; border-radius: 14px; padding: 42px 20px; text-align: center; color: var(--muted); cursor: pointer; transition: .18s; }
+    .dropzone.drag { border-color: var(--brand); background: #eef3ff; color: var(--brand); }
+    .dropzone .big { font-size: 34px; }
+    .dropzone .title { font-size: 15px; margin-top: 8px; color: var(--ink); font-weight: 600; }
+    .dropzone .sub { font-size: 13px; margin-top: 4px; }
+    .file-chip { display: inline-flex; align-items: center; gap: 8px; background: #eef3ff; color: var(--brand); border-radius: 999px; padding: 7px 14px; margin-top: 12px; font-size: 13px; }
+    .status { font-size: 13px; color: var(--muted); margin-top: 12px; min-height: 18px; }
+    .status.error { color: var(--err); }
+    .hit { border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-top: 12px; }
+    .hit .content { font-size: 14.5px; line-height: 1.7; white-space: pre-wrap; }
+    .hit .meta { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+    .tag { background: #eef3ff; color: var(--brand); border-radius: 999px; padding: 2px 10px; }
+    .docs { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+    .doc-chip { background: #f2f5fa; border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font-size: 13px; color: var(--ink); }
+    .doc-chip .n { color: var(--muted); }
+    .empty { color: var(--muted); font-size: 14px; padding: 10px 0; }
+    .spinner { width: 18px; height: 18px; border: 3px solid #dbe4f5; border-top-color: var(--brand); border-radius: 50%; animation: spin .8s linear infinite; display: inline-block; vertical-align: -4px; margin-right: 8px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
-  <header>
-    <h1>HBCN 知识库检索 · 试用</h1>
-    <span class="badge" id="engineBadge">连接中…</span>
-    <span class="badge" id="scopeBadge"></span>
-  </header>
+  <div class="hero">
+    <h1>智能知识库</h1>
+    <p>上传业务资料，用自然语言提问，快速得到带来源依据的答案</p>
+  </div>
+
+  <div class="search-wrap">
+    <div class="search-box">
+      <input id="query" placeholder="输入你的问题，例如：贷款用途需要哪些证明材料？" />
+      <button id="searchBtn" onclick="runQuery()">搜索</button>
+    </div>
+  </div>
 
   <main>
-    <div class="card">
-      <h2>服务 Token</h2>
-      <div class="token-line">
-        <input type="password" id="token" placeholder="粘贴 SERVICE_TOKEN（与 rag-service/.env 一致）" />
-        <button class="secondary" onclick="saveToken()">保存并连接</button>
+    <div class="panel">
+      <h2>上传资料</h2>
+      <p class="hint">支持 PDF、Word、Excel、图片和文本文件；系统会自动识别内容并建立索引</p>
+      <div class="dropzone" id="dropzone" onclick="document.getElementById('file').click()">
+        <div class="big">📄</div>
+        <div class="title">将文件拖到这里，或点击选择文件</div>
+        <div class="sub">单个文件最大 50MB</div>
       </div>
-      <div class="status" id="capStatus"></div>
+      <input type="file" id="file" hidden />
+      <div id="fileChip"></div>
+      <div class="status" id="uploadStatus"></div>
     </div>
 
-    <div class="card">
-      <h2>文件导入（自动 OCR + Embedding）</h2>
-      <div class="row">
-        <div>
-          <label>知识库范围</label>
-          <select id="importScope">
-            <option value="business_rules">business_rules（业务规则）</option>
-            <option value="project_design">project_design（方案设计）</option>
-          </select>
-        </div>
-        <div>
-          <label>选择文件（支持 PDF / Word / Excel / 图片 / 文本）</label>
-          <input type="file" id="file" />
-        </div>
-      </div>
-      <button onclick="importFile()">导入并建立索引</button>
-      <div class="status" id="importStatus"></div>
-    </div>
-
-    <div class="card">
-      <h2>知识库查询</h2>
-      <div class="row">
-        <div>
-          <label>知识库范围</label>
-          <select id="queryScope">
-            <option value="business_rules">business_rules（业务规则）</option>
-            <option value="project_design">project_design（方案设计）</option>
-          </select>
-        </div>
-        <div>
-          <label>返回条数 top_k</label>
-          <input type="text" id="topK" value="5" />
-        </div>
-      </div>
-      <label>问题</label>
-      <textarea id="query" placeholder="例如：境外贷款单据支持性文件包含哪些内容？"></textarea>
-      <button onclick="runQuery()">查询</button>
+    <div class="panel">
+      <h2>检索结果</h2>
       <div class="status" id="queryStatus"></div>
       <div id="results"></div>
     </div>
 
-    <div class="card">
-      <h2>已入库文档</h2>
-      <button class="secondary" onclick="loadDocuments()">刷新列表</button>
+    <div class="panel">
+      <h2>已入库资料</h2>
       <div id="docs"></div>
     </div>
   </main>
 
   <script>
-    let token = window.__SERVICE_TOKEN__ || localStorage.getItem('hbcn_rag_token') || '';
-    document.getElementById('token').value = token;
-
-    function saveToken() {
-      token = document.getElementById('token').value.trim();
-      localStorage.setItem('hbcn_rag_token', token);
-      loadCapabilities();
-    }
+    const token = __SERVICE_TOKEN__ || '';
 
     async function api(path, options = {}) {
       const headers = options.headers || {};
@@ -117,86 +92,84 @@
       const text = await resp.text();
       let data;
       try { data = JSON.parse(text); } catch { data = { raw: text }; }
-      if (!resp.ok) {
-        const msg = data.detail || data.message || text.slice(0, 200) || ('HTTP ' + resp.status);
-        throw new Error(msg);
-      }
+      if (!resp.ok) throw new Error(data.detail || data.message || text.slice(0, 160) || ('HTTP ' + resp.status));
       return data;
     }
 
-    async function loadCapabilities() {
-      const el = document.getElementById('capStatus');
+    async function runQuery() {
+      const q = document.getElementById('query').value.trim();
+      const status = document.getElementById('queryStatus');
+      const results = document.getElementById('results');
+      if (!q) { status.textContent = '请先输入问题'; status.classList.add('error'); return; }
+      status.innerHTML = '<span class="spinner"></span>正在检索…';
+      status.classList.remove('error');
+      results.innerHTML = '';
       try {
-        const cap = await api('/api/v1/capabilities');
-        document.getElementById('engineBadge').textContent = '引擎：' + (cap.engine || 'none');
-        document.getElementById('scopeBadge').textContent = '范围：' + (cap.supported_scopes || []).join(', ');
-        el.textContent = cap.retrieval ? '已就绪，可以查询与导入。' : '引擎未配置：请检查 .env 的 BAILIAN 或 RAGFLOW 配置。';
-        el.classList.remove('error');
+        const data = await api('/api/v1/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: q }),
+        });
+        status.textContent = data.evidence.length ? ('找到 ' + data.evidence.length + ' 条相关资料') : '没有找到相关资料，请换一种问法或先上传资料';
+        if (!data.evidence.length) { results.innerHTML = '<p class="empty">没有检索到相关资料</p>'; return; }
+        for (const item of data.evidence) {
+          const div = document.createElement('div');
+          div.className = 'hit';
+          const content = document.createElement('div');
+          content.className = 'content';
+          content.textContent = item.content || '';
+          const meta = document.createElement('div');
+          meta.className = 'meta';
+          const score = item.score != null ? Math.round(Number(item.score) * 100) + '%' : '—';
+          meta.innerHTML = '<span class="tag">来源：' + escapeHtml(item.document_name || '未知文件') + '</span>'
+            + '<span>相关度 ' + score + '</span>'
+            + (item.page != null ? '<span>第 ' + item.page + ' 页</span>' : '');
+          div.appendChild(content);
+          div.appendChild(meta);
+          results.appendChild(div);
+        }
       } catch (e) {
-        el.textContent = '连接失败：' + e.message + '（请先填写正确的 Service Token）';
-        el.classList.add('error');
+        status.textContent = '检索失败：' + e.message;
+        status.classList.add('error');
       }
     }
 
-    async function importFile() {
-      const fileInput = document.getElementById('file');
-      const scope = document.getElementById('importScope').value;
-      const el = document.getElementById('importStatus');
-      if (!fileInput.files.length) { el.textContent = '请先选择文件'; el.classList.add('error'); return; }
-      el.textContent = '导入中（OCR + Embedding，较大文件可能较慢）…';
-      el.classList.remove('error');
+    // 拖拽上传
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('file');
+    ['dragenter', 'dragover'].forEach(ev => dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.add('drag'); }));
+    ['dragleave', 'drop'].forEach(ev => dropzone.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.remove('drag'); }));
+    dropzone.addEventListener('drop', e => {
+      if (e.dataTransfer.files.length) { fileInput.files = e.dataTransfer.files; showFile(); uploadFile(); }
+    });
+    fileInput.addEventListener('change', () => { showFile(); uploadFile(); });
+
+    function showFile() {
+      const f = fileInput.files[0];
+      document.getElementById('fileChip').innerHTML = f ? '<span class="file-chip">📎 ' + escapeHtml(f.name) + '</span>' : '';
+    }
+
+    async function uploadFile() {
+      const f = fileInput.files[0];
+      const status = document.getElementById('uploadStatus');
+      if (!f) return;
+      status.innerHTML = '<span class="spinner"></span>正在识别并建立索引…';
+      status.classList.remove('error');
       try {
         const form = new FormData();
-        form.append('scope', scope);
-        form.append('file', fileInput.files[0]);
+        form.append('file', f);
         const headers = {};
         if (token) headers['Authorization'] = 'Bearer ' + token;
         const resp = await fetch('/api/v1/documents', { method: 'POST', headers, body: form });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.detail || data.message || ('HTTP ' + resp.status));
-        el.textContent = '导入成功，document_ids：' + (data.document_ids || []).join(', ');
+        status.textContent = '已成功导入「' + f.name + '」';
+        fileInput.value = '';
+        document.getElementById('fileChip').innerHTML = '';
         loadDocuments();
       } catch (e) {
-        el.textContent = '导入失败：' + e.message;
-        el.classList.add('error');
-      }
-    }
-
-    async function runQuery() {
-      const el = document.getElementById('queryStatus');
-      const results = document.getElementById('results');
-      results.innerHTML = '';
-      el.textContent = '查询中…';
-      el.classList.remove('error');
-      try {
-        const data = await api('/api/v1/query', {
-          method: 'POST',
-          body: JSON.stringify({
-            query: document.getElementById('query').value,
-            scope: document.getElementById('queryScope').value,
-            top_k: parseInt(document.getElementById('topK').value || '5', 10),
-          }),
-        });
-        el.textContent = '共 ' + data.evidence.length + ' 条证据' + (data.warnings.length ? '；提示：' + data.warnings.join('；') : '');
-        if (!data.evidence.length) { results.innerHTML = '<p>没有检索到证据，不应据此生成确定性审核结论。</p>'; return; }
-        for (const item of data.evidence) {
-          const div = document.createElement('div');
-          div.className = 'hit';
-          const pre = document.createElement('pre');
-          pre.textContent = item.content || '';
-          const meta = document.createElement('div');
-          meta.className = 'meta';
-          const score = item.score != null ? Number(item.score).toFixed(3) : '—';
-          meta.innerHTML = '<span>文档：' + escapeHtml(item.document_name || '—') + '</span>'
-            + '<span>页码：' + (item.page != null ? item.page : '—') + '</span>'
-            + '<span>相似度：' + score + '</span>';
-          div.appendChild(pre);
-          div.appendChild(meta);
-          results.appendChild(div);
-        }
-      } catch (e) {
-        el.textContent = '查询失败：' + e.message;
-        el.classList.add('error');
+        status.textContent = '导入失败：' + e.message;
+        status.classList.add('error');
       }
     }
 
@@ -205,15 +178,12 @@
       try {
         const data = await api('/api/v1/documents');
         const docs = data.documents || [];
-        if (!docs.length) { box.innerHTML = '<p>暂无文档</p>'; return; }
-        let html = '<table><tr><th>文档名</th><th>范围</th><th>切片数</th><th>时间</th></tr>';
-        for (const d of docs) {
-          html += '<tr><td>' + escapeHtml(d.name || '') + '</td><td>' + escapeHtml(d.scope || '') + '</td><td>' + (d.chunk_count != null ? d.chunk_count : '—') + '</td><td>' + escapeHtml(d.created_at || '') + '</td></tr>';
-        }
-        html += '</table>';
-        box.innerHTML = html;
+        if (!docs.length) { box.innerHTML = '<p class="empty">暂无资料，先在上方上传文件</p>'; return; }
+        box.innerHTML = '<div class="docs">' + docs.map(d =>
+          '<span class="doc-chip">' + escapeHtml(d.name || '') + ' <span class="n">· ' + (d.chunk_count != null ? d.chunk_count + ' 个片段' : '') + '</span></span>'
+        ).join('') + '</div>';
       } catch (e) {
-        box.innerHTML = '<p class="status error">' + escapeHtml(e.message) + '</p>';
+        box.innerHTML = '<p class="empty">' + escapeHtml(e.message) + '</p>';
       }
     }
 
@@ -221,7 +191,7 @@
       return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
-    loadCapabilities();
+    document.getElementById('query').addEventListener('keydown', e => { if (e.key === 'Enter') runQuery(); });
     loadDocuments();
   </script>
 </body>

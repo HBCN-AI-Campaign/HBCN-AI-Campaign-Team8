@@ -64,7 +64,7 @@ class RAGFlowClient:
                 "name": name,
                 "description": description,
                 "language": settings.RAGFLOW_LANGUAGE,
-                "chunk_method": settings.RAGFLOW_CHUNK_METHOD,
+                "parser_id": settings.RAGFLOW_PARSER_ID,
                 "permission": "me",
             },
         )

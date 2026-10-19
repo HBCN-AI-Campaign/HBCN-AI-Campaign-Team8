@@ -87,9 +87,16 @@ class LocalEngine:
 
 
 def engine_kind() -> str:
-    if settings.RAGFLOW_BASE_URL and settings.RAGFLOW_API_KEY:
+    ragflow_ready = bool(settings.RAGFLOW_BASE_URL and settings.RAGFLOW_API_KEY)
+    local_ready = bool(settings.BAILIAN_BASE_URL and settings.BAILIAN_API_KEY)
+
+    if settings.RAG_ENGINE == "ragflow":
+        return "ragflow" if ragflow_ready else "none"
+    if settings.RAG_ENGINE == "local":
+        return "local" if local_ready else "none"
+    if ragflow_ready:
         return "ragflow"
-    if settings.BAILIAN_BASE_URL and settings.BAILIAN_API_KEY:
+    if local_ready:
         return "local"
     return "none"
 

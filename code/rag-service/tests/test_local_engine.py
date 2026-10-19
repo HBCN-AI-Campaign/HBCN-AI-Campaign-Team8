@@ -56,6 +56,7 @@ class LocalVectorStoreTests(unittest.TestCase):
 class EngineTests(unittest.TestCase):
     def setUp(self):
         self.values = {
+            "RAG_ENGINE": settings.RAG_ENGINE,
             "RAGFLOW_BASE_URL": settings.RAGFLOW_BASE_URL,
             "RAGFLOW_API_KEY": settings.RAGFLOW_API_KEY,
             "BAILIAN_BASE_URL": settings.BAILIAN_BASE_URL,
@@ -68,6 +69,7 @@ class EngineTests(unittest.TestCase):
             setattr(settings, key, value)
 
     def test_engine_kind_and_factory(self):
+        settings.RAG_ENGINE = "auto"
         settings.RAGFLOW_BASE_URL = ""
         settings.RAGFLOW_API_KEY = ""
         settings.BAILIAN_BASE_URL = ""
@@ -86,7 +88,21 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(engine_kind(), "ragflow")
         self.assertIsInstance(get_engine(), RAGFlowClient)
 
+    def test_explicit_engine_selection_does_not_fall_back(self):
+        settings.RAG_ENGINE = "ragflow"
+        settings.RAGFLOW_BASE_URL = ""
+        settings.RAGFLOW_API_KEY = ""
+        settings.BAILIAN_BASE_URL = "https://bailian.example/v1"
+        settings.BAILIAN_API_KEY = "k"
+        self.assertEqual(engine_kind(), "none")
+
+        settings.RAG_ENGINE = "local"
+        settings.RAGFLOW_BASE_URL = "http://ragflow:9380"
+        settings.RAGFLOW_API_KEY = "k"
+        self.assertEqual(engine_kind(), "local")
+
     def test_local_engine_upload_and_retrieve(self):
+        settings.RAG_ENGINE = "local"
         settings.RAGFLOW_BASE_URL = ""
         settings.RAGFLOW_API_KEY = ""
         settings.BAILIAN_BASE_URL = "https://bailian.example/v1"

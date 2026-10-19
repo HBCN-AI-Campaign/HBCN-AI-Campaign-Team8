@@ -16,13 +16,13 @@ Copy-Item .env.example .env
 .venv\Scripts\python -m uvicorn app.main:app --port 8010
 ```
 
-运行前在 `.env` 配置 `SERVICE_TOKEN`；再按引擎二选一配置（见下）。`.env` 只保留在本机，不提交。
+运行前在 `.env` 配置 `SERVICE_TOKEN`；再按引擎二选一配置（见下）。`.env` 只保留在本机，不提交。示例配置默认选择正式 RAGFlow 引擎。
 
 ### 引擎选择
 
-- **RAGFlow 引擎**（正式底座）：配置 `RAGFLOW_BASE_URL` / `RAGFLOW_API_KEY` 和两个 dataset ID。
+- **RAGFlow 引擎**（正式底座）：设置 `RAG_ENGINE=ragflow`，配置 `RAGFLOW_BASE_URL` / `RAGFLOW_API_KEY` 和两个 dataset ID。缺少 RAGFlow 配置时服务报告未就绪，不会静默切到本地引擎。
 - **本地引擎**（试运行，无需 Docker）：配置 `BAILIAN_BASE_URL` / `BAILIAN_API_KEY`，
-  用百炼 `qwen3.7-text-embedding-flash` 生成向量并存入本地 SQLite。两者都配置时优先 RAGFlow。
+  并设置 `RAG_ENGINE=local`，用百炼 `qwen3.7-text-embedding-flash` 生成向量并存入本地 SQLite。旧配置可暂用 `RAG_ENGINE=auto`，此时 RAGFlow 优先、本地引擎回退。
 
 ### 试用 UI（本地引擎）
 

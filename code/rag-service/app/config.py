@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -8,6 +10,7 @@ class Settings(BaseSettings):
     BUSINESS_SOURCE_ROOT: str = ""
 
     # --- 正式检索底座：RAGFlow ---
+    RAG_ENGINE: Literal["ragflow", "local", "auto"] = "auto"
     RAGFLOW_BASE_URL: str = ""
     RAGFLOW_API_KEY: str = ""
     RAGFLOW_BUSINESS_RULES_DATASET_ID: str = ""
@@ -15,7 +18,7 @@ class Settings(BaseSettings):
     RAGFLOW_BUSINESS_RULES_DATASET_NAME: str = "hbcn-team8-business-rules"
     RAGFLOW_PROJECT_DESIGN_DATASET_NAME: str = "hbcn-team8-project-design"
     RAGFLOW_LANGUAGE: str = "Chinese"
-    RAGFLOW_CHUNK_METHOD: str = "naive"
+    RAGFLOW_PARSER_ID: str = "general"
     REQUEST_TIMEOUT_SECONDS: float = 60.0
     MAX_UPLOAD_BYTES: int = 50 * 1024 * 1024
     PARSE_POLL_INTERVAL_SECONDS: float = 5.0

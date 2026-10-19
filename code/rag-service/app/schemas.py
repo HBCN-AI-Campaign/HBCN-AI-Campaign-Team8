@@ -3,13 +3,13 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-KnowledgeScope = Literal["business_rules", "project_design", "task_documents", "law"]
+KnowledgeScope = Literal["business_rules", "project_design", "task_documents", "law", "all"]
 
 
 class QueryRequest(BaseModel):
     query: str = Field(min_length=1, max_length=4000)
-    scope: KnowledgeScope = "business_rules"
-    top_k: int = Field(default=8, ge=1, le=20)
+    scope: KnowledgeScope = "all"     # all = business_rules + project_design 合并去重
+    top_k: int = Field(default=5, ge=1, le=20)
 
 
 class Evidence(BaseModel):

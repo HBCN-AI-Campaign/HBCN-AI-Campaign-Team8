@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app import models
-from app.assistant_service import _strip_tool_echo
+from app.assistant_service import _rag_search, _strip_tool_echo
 from app.database import Base, get_db
 from app.routers.assistant import router
 from app.security import create_access_token, hash_password
@@ -105,6 +105,85 @@ class AssistantApiTests(unittest.TestCase):
         self.assertEqual(_strip_tool_echo("正常回答"), "正常回答")
         self.assertEqual(_strip_tool_echo('{"foo":1}保留'), '{"foo":1}保留')
         self.assertEqual(_strip_tool_echo('{"query":"只有json"}'), '{"query":"只有json"}')
+
+    def test_task_chat_queries_shared_knowledge_base(self):
+        from app.rag_service import RAGClient
+
+        context = {"task": {"task_code": "TASK-1"}, "documents": [], "results": []}
+        response = {
+            "evidence": [{
+                "document_id": "doc-1",
+                "document_name": "审核规则",
+                "content": "提款币种需与合同一致",
+                "page": 3,
+            }],
+            "warnings": [],
+        }
+        with patch("app.assistant_service.settings.RAG_BASE_URL", "http://rag-service"), patch.object(
+            RAGClient, "query", return_value=response
+        ) as query:
+            hits = _rag_search(context, "提款币种")
+
+        query.assert_called_once_with(
+            query="提款币种",
+            scope="knowledge_base",
+            task_code="TASK-1",
+            top_k=6,
+            agentic=True,
+            include_external_law=False,
+        )
+        self.assertEqual(hits[0]["type"], "knowledge")
+        self.assertEqual(hits[0]["source"], "审核规则")
+
+    def test_rag_failure_is_reported_while_local_evidence_remains(self):
+        from app.rag_service import RAGClient
+
+        context = {
+            "task": {"task_code": "TASK-1"},
+            "documents": [{"doc_code": "DOC-1", "fields": {"currency": "USD"}}],
+            "results": [],
+        }
+        warnings = []
+        with patch("app.assistant_service.settings.RAG_BASE_URL", "http://rag-service"), patch.object(
+            RAGClient, "query", side_effect=RuntimeError("private connection detail")
+        ):
+            hits = _rag_search(context, "currency", warnings)
+
+        self.assertEqual([hit["type"] for hit in hits], ["document"])
+        self.assertEqual(len(warnings), 1)
+        self.assertNotIn("private connection detail", warnings[0])
+
+    def test_tool_trace_is_persisted_in_session_history(self):
+        async def fake_agent_events(*args, **kwargs):
+            yield {"event": "tool", "tool": {"name": "search_knowledge_base", "status": "running"}}
+            yield {"event": "step", "step": {
+                "key": "retrieval-warning-0",
+                "label": "知识库检索提示",
+                "detail": "知识库暂不可用",
+                "status": "error",
+            }}
+            yield {"event": "tool", "tool": {
+                "name": "search_knowledge_base", "status": "completed", "result_count": 0,
+            }}
+            yield {"event": "assistant_result", "answer": "需人工复核", "citations": []}
+
+        created = self.client.post(
+            "/api/assistant/sessions", headers=self.reviewer_headers, json={"title": "trace"}
+        )
+        session_id = created.json()["id"]
+        with patch("app.assistant_service.run_agent_events", fake_agent_events):
+            response = self.client.post(
+                f"/api/assistant/sessions/{session_id}/messages/stream",
+                headers=self.reviewer_headers,
+                json={"content": "查找对应审核规则"},
+            )
+        self.assertEqual(response.status_code, 200)
+        history = self.client.get(
+            f"/api/assistant/sessions/{session_id}", headers=self.reviewer_headers
+        ).json()
+        saved_steps = history["messages"][-1]["steps"]
+        self.assertIn("tool:search_knowledge_base", [item["key"] for item in saved_steps])
+        self.assertIn("retrieval-warning-0", [item["key"] for item in saved_steps])
 
     def test_stream_returns_steps_answer_and_persisted_history(self):
         created = self.client.post(

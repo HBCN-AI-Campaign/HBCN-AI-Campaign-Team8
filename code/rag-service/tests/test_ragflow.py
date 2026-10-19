@@ -29,16 +29,32 @@ class RAGFlowClientTests(unittest.TestCase):
             "RAGFLOW_API_KEY": settings.RAGFLOW_API_KEY,
             "RAGFLOW_BUSINESS_RULES_DATASET_ID": settings.RAGFLOW_BUSINESS_RULES_DATASET_ID,
             "RAGFLOW_PROJECT_DESIGN_DATASET_ID": settings.RAGFLOW_PROJECT_DESIGN_DATASET_ID,
+            "RAGFLOW_PARSER_ID": settings.RAGFLOW_PARSER_ID,
             "BUSINESS_SOURCE_ROOT": settings.BUSINESS_SOURCE_ROOT,
         }
         settings.RAGFLOW_BASE_URL = "http://ragflow.test"
         settings.RAGFLOW_API_KEY = "test-key"
         settings.RAGFLOW_BUSINESS_RULES_DATASET_ID = "rules-id"
         settings.RAGFLOW_PROJECT_DESIGN_DATASET_ID = "design-id"
+        settings.RAGFLOW_PARSER_ID = "general"
 
     def tearDown(self):
         for key, value in self.values.items():
             setattr(settings, key, value)
+
+    @patch("app.ragflow.httpx.request")
+    def test_create_dataset_uses_v1_parser_id(self, request):
+        request.return_value = FakeResponse({"code": 0, "data": {"id": "dataset-id"}})
+
+        dataset_id = RAGFlowClient().create_dataset(
+            name="business-rules",
+            description="HSBC loan-review business rules",
+        )
+
+        self.assertEqual(dataset_id, "dataset-id")
+        payload = request.call_args.kwargs["json"]
+        self.assertEqual(payload["parser_id"], "general")
+        self.assertNotIn("chunk_method", payload)
 
     @patch("app.ragflow.httpx.request")
     def test_retrieve_uses_official_hybrid_retrieval_payload(self, request):

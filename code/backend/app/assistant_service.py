@@ -117,7 +117,11 @@ def search_evidence(context: dict[str, Any], query: str) -> list[dict[str, Any]]
     return hits[:8]
 
 
-def _rag_search(context: dict[str, Any], query: str) -> list[dict[str, Any]]:
+def _rag_search(
+    context: dict[str, Any],
+    query: str,
+    warnings: list[str] | None = None,
+) -> list[dict[str, Any]]:
     """组合任务本地证据与外部 RAG 知识库证据。
 
     本地证据（规则结果 + 单据字段）始终返回，保证任务上下文不因 RAG 未配置、
@@ -131,9 +135,11 @@ def _rag_search(context: dict[str, Any], query: str) -> list[dict[str, Any]]:
     try:
         from .rag_service import RAGClient
 
+        # The current RAG service indexes shared business/project knowledge only.
+        # Task documents are already permission-filtered and supplied as local evidence.
         result = RAGClient().query(
             query=query,
-            scope="task_documents" if context.get("task") else "knowledge_base",
+            scope="knowledge_base",
             task_code=(context.get("task") or {}).get("task_code"),
             top_k=6,
             agentic=True,
@@ -141,7 +147,15 @@ def _rag_search(context: dict[str, Any], query: str) -> list[dict[str, Any]]:
         )
     except Exception:
         # 网关或 RAG 服务异常时保留本地证据，不阻断助手。
+        warning = "知识库暂不可用；本次回复仅基于当前任务已加载的本地证据。"
+        if warnings is not None and warning not in warnings:
+            warnings.append(warning)
         return hits
+
+    if result.get("warnings") and warnings is not None:
+        warning = "知识库未能提供完整匹配证据；请结合当前任务材料人工核实。"
+        if warning not in warnings:
+            warnings.append(warning)
 
     for index, item in enumerate(result.get("evidence", []), start=1):
         hits.append({
@@ -234,6 +248,7 @@ async def run_agent_events(
         return
     chunks: list[str] = []
     retrieved: list[dict[str, Any]] = []
+    retrieval_warnings: list[str] = []
     try:
         from agents import Agent, Runner, function_tool
         from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
@@ -242,7 +257,7 @@ async def run_agent_events(
         @function_tool
         def search_knowledge_base(query: str) -> str:
             """检索当前授权任务的材料和规则证据。"""
-            retrieved.extend(_rag_search(context, query))
+            retrieved.extend(_rag_search(context, query, retrieval_warnings))
             return json.dumps(retrieved, ensure_ascii=False)
 
         client = AsyncOpenAI(
@@ -282,6 +297,16 @@ async def run_agent_events(
                 yield {"event": "tool", "tool": {"name": "search_knowledge_base", "status": "running"}}
             elif event.type == "run_item_stream_event" and event.name == "tool_output":
                 yield {"event": "tool", "tool": {"name": "search_knowledge_base", "status": "completed", "result_count": len(retrieved)}}
+                for index, warning in enumerate(retrieval_warnings):
+                    yield {
+                        "event": "step",
+                        "step": {
+                            "key": f"retrieval-warning-{index}",
+                            "label": "知识库检索提示",
+                            "detail": warning,
+                            "status": "error",
+                        },
+                    }
         answer = _strip_tool_echo(
             "".join(chunks).strip() or str(run.final_output or "").strip()
         )
@@ -335,10 +360,37 @@ async def stream_assistant(
 
     answer: str | None = None
     rag_citations: list[dict[str, Any]] = []
+    runtime_steps: list[dict[str, Any]] = []
+    tool_steps: dict[str, dict[str, Any]] = {}
     async for event in run_agent_events(message, context):
         if event.get("event") == "assistant_result":
             answer = event.get("answer")
             rag_citations = event.get("citations", [])
+        elif event.get("event") == "step" and event.get("step"):
+            runtime_steps.append(event["step"])
+            yield event
+        elif event.get("event") == "tool" and event.get("tool"):
+            tool = event["tool"]
+            tool_steps[tool["name"]] = {
+                "key": f"tool:{tool['name']}",
+                "label": "检索知识库",
+                "detail": (
+                    f"已检索 {tool.get('result_count', 0)} 条证据"
+                    if tool.get("status") == "completed"
+                    else "检索任务相关材料与业务知识"
+                ),
+                "status": "completed" if tool.get("status") == "completed" else "running",
+            }
+            yield event
+        elif event.get("event") == "warning":
+            warning_step = {
+                "key": "model-warning",
+                "label": "模型服务提示",
+                "detail": event.get("message", "模型服务暂不可用"),
+                "status": "error",
+            }
+            runtime_steps.append(warning_step)
+            yield {"event": "step", "step": warning_step}
         else:
             yield event
     key, label, detail = steps[2]
@@ -370,7 +422,11 @@ async def stream_assistant(
         role="assistant",
         content=answer,
         status="completed",
-        steps=[{"key": key, "label": label, "status": "completed"} for key, label, _ in steps],
+        steps=[
+            *[{"key": key, "label": label, "status": "completed"} for key, label, _ in steps],
+            *runtime_steps,
+            *tool_steps.values(),
+        ],
         citations=citations,
     )
     db.add(persisted)
