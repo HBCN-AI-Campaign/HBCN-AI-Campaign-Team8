@@ -350,6 +350,14 @@ class AssistantApiTests(unittest.TestCase):
         )
         session_id = created.json()["id"]
         async def fake_agent_events(*args, **kwargs):
+            # Execution steps now come from the runtime, not a fixed UI checklist.
+            yield {"event": "step", "step": {
+                "key": "runtime-answer", "label": "生成审核辅助答复", "status": "running",
+            }}
+            yield {"event": "step", "step": {
+                "key": "runtime-answer", "label": "生成审核辅助答复", "status": "completed",
+            }}
+            yield {"event": "delta", "delta": "我不能直接决定贷款审核结论。"}
             yield {"event": "assistant_result", "answer": "我不能直接决定贷款审核结论。", "citations": []}
 
         with patch("app.assistant_service.sdk_configured", return_value=True), patch(
@@ -372,6 +380,9 @@ class AssistantApiTests(unittest.TestCase):
         )
         self.assertEqual(detail.status_code, 200)
         self.assertEqual([item["role"] for item in detail.json()["messages"]], ["user", "assistant"])
+        self.assertEqual(detail.json()["messages"][-1]["steps"][0]["key"], "runtime-answer")
+        self.assertEqual(len(detail.json()["messages"][-1]["steps"]), 1)
+        self.assertEqual(detail.json()["messages"][-1]["steps"][0]["status"], "completed")
 
     def test_unconfigured_model_does_not_fabricate_a_local_answer(self):
         created = self.client.post(

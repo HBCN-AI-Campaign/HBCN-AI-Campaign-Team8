@@ -367,7 +367,8 @@ async def stream_assistant(
     }
     answer: str | None = None
     rag_citations: list[dict[str, Any]] = []
-    runtime_steps: list[dict[str, Any]] = []
+    # One entry per business operation; later events update its persisted state.
+    runtime_steps: dict[str, dict[str, Any]] = {}
     tool_steps: dict[str, dict[str, Any]] = {}
     if skill:
         skill_step = {
@@ -376,14 +377,14 @@ async def stream_assistant(
             "detail": "载入已审核的业务指引",
             "status": "completed",
         }
-        runtime_steps.append(skill_step)
+        runtime_steps[skill_step["key"]] = skill_step
         yield {"event": "step", "step": skill_step}
     async for event in run_agent_events(message, context, instructions):
         if event.get("event") == "assistant_result":
             answer = event.get("answer")
             rag_citations = event.get("citations", [])
         elif event.get("event") == "step" and event.get("step"):
-            runtime_steps.append(event["step"])
+            runtime_steps[event["step"]["key"]] = event["step"]
             yield event
         elif event.get("event") == "tool" and event.get("tool"):
             tool = event["tool"]
@@ -407,7 +408,7 @@ async def stream_assistant(
                 "detail": event.get("message", "模型服务暂不可用"),
                 "status": "error",
             }
-            runtime_steps.append(warning_step)
+            runtime_steps[warning_step["key"]] = warning_step
             yield {"event": "step", "step": warning_step}
         else:
             yield event
@@ -437,7 +438,7 @@ async def stream_assistant(
         content=answer,
         status="completed",
         steps=[
-            *runtime_steps,
+            *runtime_steps.values(),
             *tool_steps.values(),
         ],
         citations=citations,
