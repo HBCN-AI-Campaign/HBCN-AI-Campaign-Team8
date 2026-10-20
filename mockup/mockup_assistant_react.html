@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>慧眼助手 · React 原型</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f7fb;
+    --panel: #ffffff;
+    --border: #e7ecf3;
+    --ink: #17253f;
+    --ink-2: #435574;
+    --muted: #8a99b0;
+    --brand: #356ed3;
+    --brand-2: #214b99;
+    --brand-soft: #eaf1fd;
+    --ok: #2cba87;
+    --warn: #e9b65e;
+    --err: #d65353;
+    --shadow: 0 3px 12px rgba(35, 59, 91, .05);
+  }
+  * { box-sizing: border-box; }
+  html, body, #root { height: 100%; margin: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--ink); font-size: 14px;
+  }
+  .app { height: 100vh; display: grid; grid-template-columns: 240px minmax(0,1fr) 264px; background: var(--panel); }
+
+  /* ===== 左：会话 ===== */
+  .rail { display: flex; flex-direction: column; min-height: 0; background: #f8fafc; border-right: 1px solid var(--border); }
+  .rail-brand { display: flex; align-items: center; gap: 10px; padding: 18px 16px 14px; }
+  .rail-mark { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; color: #fff; font-size: 17px; background: linear-gradient(145deg, var(--brand), var(--brand-2)); }
+  .rail-name { font-weight: 700; font-size: 16px; color: #172844; }
+  .rail-section-label { padding: 10px 16px 6px; font-size: 11px; color: var(--muted); letter-spacing: .5px; }
+  .session-scroll { flex: 1; overflow-y: auto; min-height: 0; padding: 0 10px 12px; }
+  .session-item { position: relative; display: flex; align-items: center; gap: 9px; padding: 10px 9px; margin-bottom: 3px; border-radius: 8px; cursor: pointer; color: var(--ink-2); transition: .15s; }
+  .session-item:hover { background: #eef3fb; }
+  .session-item.active { background: var(--brand-soft); color: #204f9e; }
+  .session-dot { width: 7px; height: 7px; border: 2px solid #b8c7dc; border-radius: 50%; flex: 0 0 auto; }
+  .session-item.active .session-dot { border-color: #4e82dc; background: #4e82dc; }
+  .session-title { min-width: 0; flex: 1; overflow: hidden; font-size: 12.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  .session-count { color: #9aa9be; font-size: 10.5px; flex: 0 0 auto; }
+  .session-actions { display: none; gap: 4px; }
+  .session-item:hover .session-actions { display: flex; }
+  .icon-btn { border: 0; background: transparent; padding: 0; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 5px; cursor: pointer; color: #9aa9be; font-size: 13px; }
+  .icon-btn:hover { background: #e4ebf6; color: var(--brand); }
+  .icon-btn.danger:hover { background: #fdeaea; color: var(--err); }
+  .empty-rail { padding: 16px 10px; color: #9aa9be; font-size: 12px; text-align: center; }
+  .rail-foot { padding: 12px 16px; border-top: 1px solid #edf1f5; color: #6b7f99; font-size: 11px; display: flex; align-items: center; gap: 7px; }
+  .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px #d9f6ea; }
+
+  /* ===== 中：对话 ===== */
+  .chat { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #fff; }
+  .chat-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 22px; border-bottom: 1px solid var(--border); }
+  .chat-head h2 { margin: 0; font-size: 16px; color: #172a4b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-head .tag { font-size: 11px; color: var(--muted); margin-left: 10px; }
+  .chat-head-actions { display: flex; gap: 8px; align-items: center; }
+  .btn { border: 1px solid var(--border); background: #fff; color: var(--ink-2); border-radius: 8px; padding: 7px 12px; font-size: 12.5px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: .15s; }
+  .btn:hover { border-color: #b9cdec; color: var(--brand); }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
+  .btn.primary:hover { background: var(--brand-2); }
+  .btn.ghost { border-color: transparent; background: transparent; }
+  .btn.ghost:hover { background: var(--brand-soft); }
+
+  .msg-list { flex: 1; overflow-y: auto; min-height: 0; padding: 22px clamp(20px, 4vw, 64px) 14px; }
+  .welcome { max-width: 660px; margin: 5vh auto 0; text-align: center; }
+  .welcome-mark { width: 52px; height: 52px; margin: 0 auto 16px; border-radius: 10px; display: grid; place-items: center; color: #fff; font-size: 25px; background: linear-gradient(145deg, var(--brand), var(--brand-2)); }
+  .welcome h3 { margin: 0 0 8px; font-size: 23px; color: #1a2e50; }
+  .welcome p { margin: 0 auto 24px; max-width: 480px; color: #8493a9; font-size: 13px; line-height: 1.7; }
+  .prompt-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: left; }
+  .prompt-card { padding: 14px 12px; border: 1px solid #e5eaf2; border-radius: 9px; background: #fff; cursor: pointer; transition: .18s; }
+  .prompt-card:hover { border-color: #a8c4ed; box-shadow: var(--shadow); transform: translateY(-2px); }
+  .prompt-card b { display: block; font-size: 12px; color: #344b6c; margin-bottom: 5px; }
+  .prompt-card span { font-size: 11px; color: #8c9bb0; line-height: 1.45; }
+
+  .row { display: flex; align-items: flex-start; gap: 11px; max-width: 780px; margin-bottom: 22px; }
+  .row.assistant { margin-right: auto; }
+  .row.user { flex-direction: row-reverse; margin-left: auto; }
+  .avatar { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; font-size: 15px; font-weight: 700; flex: 0 0 auto; }
+  .avatar.assistant { background: #eaf2ff; color: #3e70cb; }
+  .avatar.user { background: #e9edf4; color: #63758e; }
+  .body { max-width: calc(100% - 44px); }
+  .meta { display: flex; align-items: center; gap: 8px; margin: 1px 2px 6px; }
+  .row.user .meta { justify-content: flex-end; }
+  .meta b { font-size: 11px; color: #6e829d; }
+  .stream-badge { font-size: 11px; color: var(--brand); display: inline-flex; align-items: center; gap: 5px; }
+  .card { padding: 13px 15px; border: 1px solid #e4e9f1; border-radius: 5px 10px 10px 10px; background: #fff; box-shadow: var(--shadow); font-size: 14px; line-height: 1.8; color: var(--ink-2); }
+  .row.user .card { border: 0; border-radius: 10px 5px 10px 10px; background: #edf3fd; color: #31568d; box-shadow: none; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .card p { margin: 0 0 10px; }
+  .card p:last-child { margin-bottom: 0; }
+  .card table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 13px; }
+  .card th, .card td { padding: 7px 9px; border: 1px solid #e4e9f1; text-align: left; }
+  .card th { background: #f2f6fb; font-weight: 600; }
+  .disclaimer { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #e2e8f0; font-size: 12px; color: #9aa9be; }
+  .copy-btn { border: 0; background: transparent; padding: 0; color: #7b93b1; font-size: 10px; cursor: pointer; }
+  .copy-btn:hover { color: var(--brand); }
+
+  /* Agent 活动流（冒泡） */
+  .activity { margin-bottom: 12px; border: 1px solid #e2eaf4; border-radius: 9px; background: #f8fafd; overflow: hidden; }
+  .activity.running { border-color: #c8d9f2; background: #f7faff; }
+  .activity-head { display: flex; align-items: center; width: 100%; gap: 10px; padding: 9px 11px; border: 0; background: transparent; cursor: pointer; color: #344761; font-size: 12.5px; text-align: left; }
+  .activity-head .spark { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: #e8f0fc; color: #4875bd; flex: 0 0 auto; }
+  .activity-head .copy { flex: 1; min-width: 0; }
+  .activity-head b { display: block; font-size: 12px; }
+  .activity-head small { display: block; color: #8a99b0; font-size: 11px; }
+  .activity-head .chev { transition: .2s; color: #9aa9be; }
+  .activity-head .chev.open { transform: rotate(90deg); }
+  .activity-feed { padding: 2px 12px 10px; }
+  .act-item { display: flex; align-items: flex-start; gap: 9px; padding: 7px 0; border-left: 1px solid #e3ebf4; margin-left: 7px; padding-left: 12px; }
+  .act-marker { width: 16px; height: 16px; flex: 0 0 auto; margin-top: 2px; display: grid; place-items: center; }
+  .act-marker .pulse { width: 9px; height: 9px; border-radius: 50%; background: var(--brand); animation: pulse 1.1s ease-in-out infinite; }
+  .act-marker .done { width: 16px; height: 16px; border-radius: 50%; background: var(--ok); color: #fff; font-size: 10px; display: grid; place-items: center; }
+  .act-marker .fail { width: 16px; height: 16px; border-radius: 50%; background: var(--err); color: #fff; font-size: 10px; display: grid; place-items: center; }
+  .act-copy b { display: block; font-size: 12px; color: #3b5270; }
+  .act-copy small { color: #8a99b0; font-size: 11px; }
+  @keyframes pulse { 0%,100% { opacity: .3; transform: scale(.85); } 50% { opacity: 1; transform: scale(1.15); } }
+
+  .citations { margin-top: 10px; }
+  .cite-label { font-size: 11px; color: #8a99b0; margin-bottom: 6px; }
+  .cite-chip { display: inline-flex; align-items: center; gap: 5px; margin: 0 6px 6px 0; padding: 4px 9px; border: 1px solid #e2e8f0; border-radius: 14px; font-size: 11px; color: #526681; background: #fbfcfe; }
+  .cite-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+
+  /* 输入区 */
+  .composer { flex: 0 0 auto; padding: 10px 22px 12px; border-top: 1px solid var(--border); background: #fff; }
+  .composer-box { display: flex; align-items: flex-end; gap: 8px; border: 1px solid #d9e2ee; border-radius: 12px; padding: 9px 9px 9px 14px; background: #fff; transition: .15s; }
+  .composer-box:focus-within { border-color: #a8c4ed; box-shadow: 0 0 0 3px #edf4ff; }
+  .composer-box textarea { flex: 1; border: 0; outline: 0; resize: none; font-size: 14px; line-height: 1.6; color: var(--ink); font-family: inherit; background: transparent; max-height: 140px; }
+  .new-chat { border: 0; background: #eef3fb; color: var(--brand); width: 34px; height: 34px; border-radius: 9px; cursor: pointer; font-size: 17px; flex: 0 0 auto; }
+  .new-chat:hover { background: #e1ebfb; }
+  .send { border: 0; background: var(--brand); color: #fff; width: 34px; height: 34px; border-radius: 9px; cursor: pointer; font-size: 15px; flex: 0 0 auto; }
+  .send:hover { background: var(--brand-2); }
+  .send:disabled { background: #c6d3e8; cursor: not-allowed; }
+  .send.stop { background: #1d2430; }
+  .composer-foot { padding: 7px 2px 0; font-size: 11px; color: #9aa9be; text-align: center; }
+
+  /* ===== 右：技能商店 ===== */
+  .skills { display: flex; flex-direction: column; min-height: 0; background: #f8fafc; border-left: 1px solid var(--border); }
+  .skills-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 16px 12px; }
+  .skills-head b { font-size: 14px; color: #172844; }
+  .skills-scroll { flex: 1; overflow-y: auto; min-height: 0; padding: 0 12px 12px; }
+  .skill-item { width: 100%; display: flex; align-items: flex-start; gap: 10px; padding: 11px 10px; margin-bottom: 6px; border: 1px solid transparent; border-radius: 9px; background: transparent; cursor: pointer; text-align: left; transition: .15s; }
+  .skill-item:hover { background: #fff; border-color: #e3ebf4; box-shadow: var(--shadow); }
+  .skill-icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; font-size: 15px; background: #edf4ff; flex: 0 0 auto; }
+  .skill-copy { min-width: 0; }
+  .skill-copy b { display: block; font-size: 12.5px; color: #344b6c; }
+  .skill-copy small { display: block; color: #8c9bb0; font-size: 11px; line-height: 1.45; margin-top: 3px; }
+  .skill-custom-tag { font-size: 10px; color: var(--brand); background: var(--brand-soft); border-radius: 4px; padding: 1px 5px; margin-left: 6px; }
+  .skills-foot { padding: 12px 16px; border-top: 1px solid #edf1f5; font-size: 11px; color: #8a99b0; }
+  .create-skill { width: 100%; margin-top: 4px; }
+
+  /* 弹层 */
+  .overlay { position: fixed; inset: 0; background: rgba(23,37,63,.35); display: grid; place-items: center; z-index: 50; }
+  .modal { width: min(480px, 92vw); background: #fff; border-radius: 12px; padding: 20px; box-shadow: 0 18px 50px rgba(23,37,63,.25); }
+  .modal h3 { margin: 0 0 14px; font-size: 15px; color: #172a4b; }
+  .modal label { display: block; font-size: 12px; color: #6e829d; margin: 12px 0 5px; }
+  .modal input, .modal textarea { width: 100%; border: 1px solid #d9e2ee; border-radius: 8px; padding: 9px 11px; font-size: 13px; font-family: inherit; color: var(--ink); outline: 0; }
+  .modal input:focus, .modal textarea:focus { border-color: #a8c4ed; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+  .cursor::after { content: "▍"; color: var(--brand); animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useMemo } = React;
+
+/* ============ 初始数据 ============ */
+const PRESET_SKILLS = [
+  { id: "drawdown-completeness", icon: "📄", name: "提款材料完整性核对", desc: "对照提款指示逐项核对单据是否齐备", prompt: "请对照提款指示逐项核对当前任务的单据是否齐备，列出缺失项与待补材料。" },
+  { id: "bill-of-lading", icon: "🚢", name: "提单验真", desc: "核对提单与交易单据的一致性", prompt: "请核对提单与交易单据的一致性，重点检查发货人、收货人、装运港、数量与日期。" },
+  { id: "invoice-contract", icon: "🧾", name: "发票-合同一致性", desc: "比对发票金额、币种、贸易术语与合同", prompt: "请比对发票与合同的金额、币种、贸易术语是否一致，列出差异点。" },
+  { id: "fx-review", icon: "💱", name: "汇率与币种换算", desc: "核对币种、金额及换算依据", prompt: "请核对任务涉及的币种与金额，识别是否需要外部汇率依据以及材料中的换算差异。" },
+  { id: "business-day", icon: "📅", name: "节假日/工作日核验", desc: "定位业务日期与工作日历风险", prompt: "请定位业务日期，结合工作日历识别节假日导致的起息日/到期日风险。" },
+  { id: "sanctions", icon: "🛡️", name: "制裁名单/反洗钱筛查", desc: "整理主体信息与筛查待核验项", prompt: "请整理任务涉及的主体信息，列出制裁名单与反洗钱筛查的待核验项。" },
+  { id: "trade-background", icon: "🌐", name: "贸易背景真实性核查", desc: "结合合同、发票、提单核对贸易背景", prompt: "请结合合同、发票、提单核对贸易背景真实性，识别逻辑矛盾与缺失证据。" },
+  { id: "use-of-proceeds", icon: "🎯", name: "资金用途合规审核", desc: "核对资金用途与合同/监管要求", prompt: "请核对资金用途与合同及监管要求的一致性，标注需人工确认的合规要点。" },
+  { id: "duplicate-financing", icon: "🔁", name: "重复融资排查", desc: "交叉比对主体与单据识别重复融资", prompt: "请交叉比对主体与单据信息，识别重复融资风险并列出可疑线索。" },
+  { id: "regulatory-research", icon: "📚", name: "法规/监管合规检索", desc: "检索知识库规则并整理适用性", prompt: "请检索知识库中的法规与规则，整理与当前任务相关的适用条款及依据。" },
+];
+
+const DEFAULT_ANSWER = (q) => `针对「${q}」，我按以下思路整理审核辅助意见：
+
+**当前情况**
+- 已读取本轮授权证据，结合任务材料与规则结果进行核对；
+- 若证据缺失或冲突，会明确标注为待人工确认。
+
+**建议的人工核验点**
+| 核对项 | 现状 | 建议 |
+| --- | --- | --- |
+| 单据完整性 | 待确认 | 核对提款指示逐项比对 |
+| 金额/币种 | 待确认 | 比对合同与发票 |
+| 贸易背景 | 待确认 | 结合提单交叉验证 |
+
+我会持续解释证据、整理风险要点并起草复核意见，但不会作出批准或拒绝决定。`;
+
+const DISCLAIMER = "以上为审核辅助意见，不是贷款最终审批决定，请由有权限的审核人员复核。";
+
+let idc = 0;
+const uid = () => `${Date.now()}-${++idc}`;
+
+const genSteps = (skillName) => {
+  const base = [];
+  if (skillName) base.push({ key: "skill", label: `应用技能：${skillName}`, detail: "载入已审核的业务指引", status: "completed" });
+  base.push({ key: "retrieve", label: "检索授权证据", detail: "查询任务材料、规则结果与知识库", status: "running" });
+  base.push({ key: "tool", label: "读取授权证据", detail: "向模型提供本轮已授权证据", status: "running" });
+  base.push({ key: "compose", label: "生成审核建议", detail: "调用模型整合证据并起草意见", status: "running" });
+  return base;
+};
+
+function makeSession(title) {
+  return { id: uid(), title: title || "新会话", archived: false, updatedAt: Date.now(), messages: [] };
+}
+
+/* ============ 组件 ============ */
+function ActivityPanel({ msg, expanded, onToggle }) {
+  const done = msg.status === "done";
+  const steps = msg.steps || [];
+  const running = msg.streaming;
+  const title = running ? "正在执行" : done ? `执行记录 · ${steps.length} 步` : "执行未完成";
+  const subtitle = running
+    ? (steps.find(s => s.status === "running")?.label || "准备中")
+    : "查看工具调用与处理状态";
+  return (
+    <div className={"activity" + (running ? " running" : "")}>
+      <button className="activity-head" onClick={onToggle} aria-expanded={expanded}>
+        <span className="spark">{running ? <Pulse /> : (done ? "✓" : "✕")}</span>
+        <span className="copy"><b>{title}</b><small>{subtitle}</small></span>
+        <span className={"chev" + (expanded ? " open" : "")}>▸</span>
+      </button>
+      {expanded && (
+        <div className="activity-feed">
+          {steps.map((s) => (
+            <div className="act-item" key={s.key}>
+              <span className="act-marker">
+                {s.status === "completed" ? <span className="done">✓</span>
+                  : s.status === "error" ? <span className="fail">✕</span>
+                  : <span className="pulse" />}
+              </span>
+              <span className="act-copy"><b>{s.label}</b>{s.detail && <small>　{s.detail}</small>}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+const Pulse = () => <span className="pulse" />;
+
+function Markdown({ text }) {
+  // 极简渲染：支持表格、加粗、段落
+  const lines = text.split("\n");
+  let rows = [];
+  let table = null;
+  const flush = () => { if (table) { rows.push(<table key={uid()}><tbody>{table.map((r,i)=><tr key={i}>{r.map((c,j)=><td key={j}><b>{c}</b></td>)}</tr>)}</tbody></table>); table = null; } };
+  for (const line of lines) {
+    if (line.startsWith("|") && line.trim().endsWith("|") && !/^\|[\s\-|]+\|$/.test(line.trim())) {
+      const cells = line.trim().replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+      if (!table) table = [];
+      table.push(cells);
+      continue;
+    }
+    flush();
+    if (line.trim() === "") continue;
+    if (line.startsWith("##")) rows.push(<h4 key={uid()} style={{margin:"14px 0 6px"}}>{line.replace(/^#+\s*/,"")}</h4>);
+    else if (line.startsWith("**") || line.startsWith("- ")) rows.push(<p key={uid()}>{line}</p>);
+    else rows.push(<p key={uid()}>{line}</p>);
+  }
+  flush();
+  return <div>{rows}</div>;
+}
+
+function App() {
+  const [sessions, setSessions] = useState(() => {
+    const s1 = makeSession("提款材料核对");
+    s1.messages = [
+      { id: uid(), role: "user", content: "帮我核对这笔提款单据是否齐备", status: "done", steps: [] },
+      { id: uid(), role: "assistant", content: "已核对单据清单：合同、发票、提单均在场，但缺少付款指示与用途说明，需人工补齐。\n\n" + DISCLAIMER, status: "done", steps: genSteps("提款材料完整性核对").map(s => ({...s, status:"completed"})), citations: [{id:"c1", label:"合同 · FOL-2024-018"},{id:"c2", label:"发票 · INV-8821"},{id:"c3", label:"提单 · BL-2210"}] },
+    ];
+    const s2 = makeSession("汇率风险排查");
+    s2.archived = true;
+    s2.messages = [];
+    return [s1, s2];
+  });
+  const [activeId, setActiveId] = useState(() => sessions[0]?.id);
+  const [skills, setSkills] = useState(() => {
+    try { const raw = localStorage.getItem("hbcn_custom_skills"); const c = raw ? JSON.parse(raw) : []; return [...PRESET_SKILLS, ...c]; }
+    catch { return PRESET_SKILLS; }
+  });
+  const [draft, setDraft] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [expanded, setExpanded] = useState({});
+  const listRef = useRef(null);
+
+  const active = useMemo(() => sessions.find(s => s.id === activeId), [sessions, activeId]);
+  const live = sessions.filter(s => !s.archived);
+  const archived = sessions.filter(s => s.archived);
+
+  useEffect(() => { listRef.current?.scrollTo({ top: listRef.current.scrollHeight }); }, [sessions, activeId]);
+
+  const patchSession = (id, patch) => setSessions(prev => prev.map(s => s.id === id ? { ...s, ...patch, updatedAt: Date.now() } : s));
+  const patchMessage = (id, patch) => setSessions(prev => prev.map(s => s.messages.some(m => m.id === id) ? { ...s, messages: s.messages.map(m => m.id === id ? { ...m, ...patch } : m) } : s));
+
+  const newChat = () => {
+    const s = makeSession("");
+    setSessions(prev => [s, ...prev]);
+    setActiveId(s.id);
+  };
+  const openSession = (id) => setActiveId(id);
+  const toggleArchive = (id) => patchSession(id, { archived: !sessions.find(s => s.id === id)?.archived });
+
+  const runStep = (mid, steps, idx, onDone) => {
+    if (idx >= steps.length) { onDone(); return; }
+    patchMessage(mid, { steps: steps.map((s, i) => i < idx ? { ...s, status: "completed" } : s) });
+    setTimeout(() => runStep(mid, steps, idx + 1, onDone), 420 + Math.random() * 380);
+  };
+
+  const send = (text, skill) => {
+    const content = (text || "").trim();
+    if (!content || streaming) return;
+    const userMsg = { id: uid(), role: "user", content, status: "done", steps: [] };
+    const asstId = uid();
+    const asstMsg = { id: asstId, role: "assistant", content: "", status: "running", steps: genSteps(skill?.name), streaming: true, citations: [] };
+    patchSession(activeId, { messages: [...active.messages, userMsg, asstMsg], title: active.title === "新会话" ? content.slice(0, 20) : active.title });
+    setDraft("");
+    setStreaming(true);
+    setExpanded(prev => ({ ...prev, [asstId]: true }));
+
+    runStep(asstId, asstMsg.steps, 1, () => {
+      const answer = skill
+        ? `${skill.name}：已按该技能口径执行。\n\n${DEFAULT_ANSWER(content)}\n\n${DISCLAIMER}`
+        : DEFAULT_ANSWER(content) + "\n\n" + DISCLAIMER;
+      const chars = Array.from(answer);
+      let i = 0;
+      const tick = () => {
+        i = Math.min(chars.length, i + 3 + Math.floor(Math.random() * 5));
+        const cur = chars.slice(0, i).join("");
+        patchMessage(asstId, { content: cur });
+        if (i < chars.length) setTimeout(tick, 16);
+        else {
+          patchMessage(asstId, { content: answer, status: "done", streaming: false, citations: [{ id: "c1", label: "合同 · FOL-2024-018" }, { id: "c2", label: "规则 · 用途合规" }] });
+          setStreaming(false);
+          setExpanded(prev => { const n = { ...prev }; delete n[asstId]; return n; });
+        }
+      };
+      setTimeout(tick, 200);
+    });
+  };
+
+  const addCustomSkill = (skill) => {
+    const next = [...skills, { ...skill, custom: true }];
+    setSkills(next);
+    localStorage.setItem("hbcn_custom_skills", JSON.stringify(next.filter(s => s.custom)));
+    setShowCreate(false);
+  };
+
+  const copyMsg = (m) => { navigator.clipboard?.writeText(m.content); };
+
+  return (
+    <div className="app">
+      {/* 左：会话 */}
+      <aside className="rail">
+        <div className="rail-brand"><span className="rail-mark">慧</span><span className="rail-name">慧眼助手</span></div>
+        <div className="rail-section-label">进行中</div>
+        <div className="session-scroll">
+          {live.length === 0 && <div className="empty-rail">暂无会话，点右下角「＋」新建</div>}
+          {live.map(s => (
+            <div key={s.id} className={"session-item" + (s.id === activeId ? " active" : "")} onClick={() => openSession(s.id)}>
+              <span className="session-dot"></span>
+              <span className="session-title">{s.title}</span>
+              <span className="session-count">{s.messages.length}</span>
+              <span className="session-actions">
+                <button className="icon-btn" title="存档" onClick={(e) => { e.stopPropagation(); toggleArchive(s.id); }}>📥</button>
+              </span>
+            </div>
+          ))}
+          {archived.length > 0 && <div className="rail-section-label">已存档</div>}
+          {archived.map(s => (
+            <div key={s.id} className={"session-item" + (s.id === activeId ? " active" : "")} onClick={() => openSession(s.id)}>
+              <span className="session-dot" style={{ opacity: .5 }}></span>
+              <span className="session-title" style={{ opacity: .65 }}>{s.title}</span>
+              <span className="session-count">{s.messages.length}</span>
+              <span className="session-actions">
+                <button className="icon-btn" title="取消存档" onClick={(e) => { e.stopPropagation(); toggleArchive(s.id); }}>↩️</button>
+                <button className="icon-btn danger" title="删除" onClick={(e) => { e.stopPropagation(); setSessions(prev => prev.filter(x => x.id !== s.id)); }}>🗑</button>
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="rail-foot"><span className="live-dot"></span>模型已连接 · 受控只读</div>
+      </aside>
+
+      {/* 中：对话 */}
+      <main className="chat">
+        <header className="chat-head">
+          <div style={{display:"flex",alignItems:"center",minWidth:0}}>
+            <h2>{active?.title || "新会话"}</h2>
+            {active?.archived && <span className="tag">已存档</span>}
+          </div>
+          <div className="chat-head-actions">
+            <button className="btn ghost" onClick={newChat}>＋ 新对话</button>
+            {active?.archived
+              ? <button className="btn" onClick={() => toggleArchive(active.id)}>取消存档</button>
+              : <button className="btn" onClick={() => toggleArchive(active.id)}>📥 存档</button>}
+          </div>
+        </header>
+
+        <div className="msg-list" ref={listRef}>
+          {(!active || active.messages.length === 0) ? (
+            <div className="welcome">
+              <div className="welcome-mark">慧</div>
+              <h3>让审核工作更快一步</h3>
+              <p>我可以读取授权任务材料与规则结果，检索证据、解释规则并整理人工复核意见。</p>
+              <div className="prompt-grid">
+                {[{t:"梳理风险",d:"总结当前任务的风险和人工核对点"},{t:"解释规则",d:"解释不通过项，给出材料定位建议"},{t:"材料核对",d:"哪些单据字段需要优先复核？"}].map(p => (
+                  <div className="prompt-card" key={p.t} onClick={() => send(p.d)}><b>{p.t}</b><span>{p.d}</span></div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            active.messages.map(m => m.role === "user" ? (
+              <div className="row user" key={m.id}>
+                <div className="avatar user">审</div>
+                <div className="body"><div className="meta"><b>你</b></div><div className="card">{m.content}</div></div>
+              </div>
+            ) : (
+              <div className="row assistant" key={m.id}>
+                <div className="avatar assistant">慧</div>
+                <div className="body">
+                  <div className="meta">
+                    <b>慧眼助手</b>
+                    {m.streaming && <span className="stream-badge"><Pulse />正在生成</span>}
+                    {!m.streaming && <button className="copy-btn" onClick={() => copyMsg(m)}>复制</button>}
+                  </div>
+                  <div className="card">
+                    <ActivityPanel msg={m} expanded={!!expanded[m.id]} onToggle={() => setExpanded(p => ({ ...p, [m.id]: !p[m.id] }))} />
+                    <Markdown text={m.content} />
+                    {m.streaming && <span className="cursor" />}
+                    {m.citations?.length > 0 && (
+                      <div className="citations">
+                        <div className="cite-label">证据引用</div>
+                        {m.citations.map(c => <span className="cite-chip" key={c.id}><span className="dot"></span>{c.label}</span>)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <footer className="composer">
+          <div className="composer-box">
+            <textarea rows="1" placeholder="描述你想核对的规则、材料或风险…"
+              value={draft} disabled={!active}
+              onChange={(e) => { setDraft(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px"; }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(draft); } }} />
+            <button className="new-chat" title="新建会话" onClick={newChat}>＋</button>
+            {streaming
+              ? <button className="send stop" title="停止" onClick={() => {}}>■</button>
+              : <button className="send" disabled={!draft.trim()} onClick={() => send(draft)}>➤</button>}
+          </div>
+          <div className="composer-foot">受控只读 · 结论由审核人员确认</div>
+        </footer>
+      </main>
+
+      {/* 右：技能商店 */}
+      <aside className="skills">
+        <div className="skills-head"><b>审核技能</b><span style={{fontSize:11,color:"#9aa9be"}}>{skills.length} 项</span></div>
+        <div className="skills-scroll">
+          {skills.map(s => (
+            <button className="skill-item" key={s.id} disabled={streaming} onClick={() => send(s.prompt, s)}>
+              <span className="skill-icon">{s.icon}</span>
+              <span className="skill-copy">
+                <b>{s.name}{s.custom && <span className="skill-custom-tag">自定义</span>}</b>
+                <small>{s.desc}</small>
+              </span>
+            </button>
+          ))}
+          <button className="btn create-skill" onClick={() => setShowCreate(true)}>＋ 创建技能</button>
+        </div>
+        <div className="skills-foot">团队内置审核指引 · 只读运行</div>
+      </aside>
+
+      {showCreate && <CreateSkillModal onClose={() => setShowCreate(false)} onSubmit={addCustomSkill} />}
+    </div>
+  );
+}
+
+function CreateSkillModal({ onClose, onSubmit }) {
+  const [name, setName] = useState("");
+  const [desc, setDesc] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [icon, setIcon] = useState("✨");
+  const valid = name.trim() && prompt.trim();
+  return (
+    <div className="overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3>创建自定义技能</h3>
+        <label>图标（emoji）</label>
+        <input value={icon} onChange={(e) => setIcon(e.target.value)} />
+        <label>技能名称</label>
+        <input placeholder="例如：担保文件审核" value={name} onChange={(e) => setName(e.target.value)} />
+        <label>一句话说明</label>
+        <input placeholder="例如：核对担保/抵押文件的完整性与有效性" value={desc} onChange={(e) => setDesc(e.target.value)} />
+        <label>触发指令（发给模型的 prompt）</label>
+        <textarea rows="3" placeholder="例如：请核对担保文件与合同条款的一致性…" value={prompt} onChange={(e) => setPrompt(e.target.value)} />
+        <div className="modal-actions">
+          <button className="btn" onClick={onClose}>取消</button>
+          <button className="btn primary" disabled={!valid} onClick={() => onSubmit({ id: uid(), icon: icon || "✨", name: name.trim(), desc: desc.trim() || name.trim(), prompt: prompt.trim(), custom: true })}>创建</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
