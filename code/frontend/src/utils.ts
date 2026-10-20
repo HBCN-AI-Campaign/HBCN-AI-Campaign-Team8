@@ -13,23 +13,25 @@ export function statusText(s: string): string {
   return map[s] || s
 }
 
-export function statusType(s: string): any {
+// antd Tag color（替代 Element Plus 的 tag type）
+export function statusType(s: string): string {
   const map: Record<string, string> = {
-    created: 'info',
-    reviewing: 'primary',
+    created: 'default',
+    reviewing: 'processing',
     need_supplement: 'warning',
-    supplemented: 'primary',
+    supplemented: 'processing',
     completed: 'success',
   }
-  return map[s] || 'info'
+  return map[s] || 'default'
 }
 
 // 规则判定状态
 export function checkText(s: string): string {
   return { pass: '通过', fail: '不通过', warn: '提示' }[s] || s
 }
-export function checkType(s: string): any {
-  return { pass: 'success', fail: 'danger', warn: 'warning' }[s] || 'info'
+// antd Tag color
+export function checkType(s: string): string {
+  return { pass: 'success', fail: 'error', warn: 'warning' }[s] || 'default'
 }
 
 export const DIMENSION_NAME: Record<string, string> = {
