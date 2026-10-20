@@ -1,5 +1,5 @@
 <template>
-  <CopilotKitProvider>
+  <CopilotKitProvider :enable-inspector="false">
     <div class="assistant-page">
       <section class="assistant-shell">
       <!-- 左：会话 -->
@@ -467,8 +467,9 @@ onMounted(loadSessions)
 .prompt-card strong, .prompt-card small { display: block; }
 .prompt-card strong { margin: 1px 0 5px; color: #344b6c; font-size: 12px; }
 .prompt-card small { max-width: 130px; color: #8c9bb0; font-size: 11px; line-height: 1.45; }
-.message-row { display: flex; align-items: flex-start; gap: 11px; max-width: 760px; margin: 0 auto 24px; }
-.message-row.user { flex-direction: row-reverse; }
+.message-row { display: flex; align-items: flex-start; gap: 11px; max-width: 760px; margin-bottom: 24px; }
+.message-row.assistant { margin-right: auto; }
+.message-row.user { flex-direction: row-reverse; margin-left: auto; }
 .avatar { display: grid; place-items: center; width: 29px; height: 29px; flex: 0 0 auto; border-radius: 8px; font-size: 11px; font-weight: 700; }
 .avatar.assistant { background: #eaf2ff; color: #3e70cb; font-size: 16px; }
 .avatar.user { background: #e9edf4; color: #63758e; }
