@@ -1,6 +1,7 @@
 <template>
-  <div class="assistant-page">
-    <section class="assistant-shell">
+  <CopilotKitProvider>
+    <div class="assistant-page">
+      <section class="assistant-shell">
       <!-- 左：会话 -->
       <aside class="session-rail">
         <div class="rail-brand">
@@ -163,7 +164,8 @@
         </button>
       </div>
     </el-drawer>
-  </div>
+    </div>
+  </CopilotKitProvider>
 </template>
 
 <script setup lang="ts">
@@ -180,6 +182,7 @@ import { ArrowLeft, ArrowRight, Calendar, ChatDotRound, Check, CircleCheck, Clos
 
 const router = useRouter()
 const auth = useAuthStore()
+const CopilotKitProvider = defineAsyncComponent(() => import('@copilotkit/vue/v2').then((module) => module.CopilotKitProvider))
 const CopilotChatAssistantMessage = defineAsyncComponent(() => import('@copilotkit/vue/v2').then((module) => module.CopilotChatAssistantMessage))
 const CopilotChatMessageView = defineAsyncComponent(() => import('@copilotkit/vue/v2').then((module) => module.CopilotChatMessageView))
 const CopilotChatInput = defineAsyncComponent(() => import('@copilotkit/vue/v2').then((module) => module.CopilotChatInput))
