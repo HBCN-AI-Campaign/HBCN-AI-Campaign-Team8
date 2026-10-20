@@ -59,6 +59,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--min-score", type=float, default=0.3, help="OCR 行置信度阈值（默认 0.3）"
     )
+    parser.add_argument(
+        "--detailed",
+        action="store_true",
+        help="额外输出带坐标的 JSON（每条含 text/score/box/poly）",
+    )
     args = parser.parse_args(argv)
 
     inputs = args.inputs or [str(config.DEFAULT_INPUT_DIR)]
@@ -77,17 +82,28 @@ def main(argv: list[str] | None = None) -> int:
     for f in files:
         label = config.DOC_TYPE_LABELS.get(config.classify(f), "未知")
         print(f"[{label}] {f.name} ...")
-        res = parse_file(f)
+        res = parse_file(f, detailed=args.detailed)
 
         # 写文本结果到 output 目录（保留原始文件名，避免同名不同类型互相覆盖）
         txt_path = out_dir / f"{f.stem}__{res['label']}.txt"
         txt_path.write_text(res["text"], encoding="utf-8")
+
+        # 带坐标时，额外写一份 JSON
+        json_path = None
+        if args.detailed and "blocks" in res:
+            json_path = out_dir / f"{f.stem}__{res['label']}__坐标.json"
+            json_path.write_text(
+                json.dumps(res["blocks"], ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
 
         if res["error"]:
             print(f"    ✗ 失败：{res['error']}")
         else:
             extra = "（已走 OCR）" if res["via_ocr"] else ""
             print(f"    ✓ 完成{extra}，输出 -> {txt_path}")
+            if json_path:
+                print(f"      坐标 JSON -> {json_path}")
 
         results.append(
             {
