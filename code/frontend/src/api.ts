@@ -1,7 +1,7 @@
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
+import { message as staticMessage } from 'antd'
+import type { MessageInstance } from 'antd/es/message/interface'
 import { useAuthStore } from '@/stores/auth'
-import router from '@/router'
 import type {
   CheckResult,
   DashboardStats,
@@ -13,15 +13,28 @@ import type {
   TaskOut,
   AISession,
   AIResolveOut,
+  SupplementIn,
 } from '@/types'
 
 const http = axios.create({ baseURL: '/', timeout: 20000 })
 
+// 由 App 注入的导航回调（替代 Vue 的 router.push）——避免在非组件环境直接依赖 react-router
+let navigate: ((path: string) => void) | null = null
+export function bindNavigate(fn: (path: string) => void) {
+  navigate = fn
+}
+
+// 由 <App> 注入的 message 实例（antd v5 推荐：静态 message 无法消费主题 context）
+let message: MessageInstance = staticMessage
+export function bindMessage(instance: MessageInstance) {
+  message = instance
+}
+
 // 请求拦截：注入 Bearer token
 http.interceptors.request.use((config) => {
-  const auth = useAuthStore()
-  if (auth.token) {
-    config.headers.Authorization = `Bearer ${auth.token}`
+  const { token } = useAuthStore.getState()
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
   }
   return config
 })
@@ -33,14 +46,13 @@ http.interceptors.response.use(
     const status = error.response?.status
     const detail = error.response?.data?.detail
     if (status === 401) {
-      const auth = useAuthStore()
-      auth.logout()
-      router.push('/login')
-      ElMessage.error('登录已过期，请重新登录')
+      useAuthStore.getState().logout()
+      navigate?.('/login')
+      message.error('登录已过期，请重新登录')
     } else if (status === 403) {
-      ElMessage.error(detail || '没有权限执行该操作')
+      message.error(detail || '没有权限执行该操作')
     } else {
-      ElMessage.error(detail || '请求失败，请稍后重试')
+      message.error(detail || '请求失败，请稍后重试')
     }
     return Promise.reject(error)
   },
@@ -111,6 +123,14 @@ export const api = {
   async completeTask(code: string, comment = ''): Promise<TaskOut> {
     const { data } = await http.post<TaskOut>(
       `/api/tasks/${encodeURIComponent(code)}/complete`, { comment },
+    )
+    return data
+  },
+
+  // 经办人补件：回填字段值 / 补充文件 + 补件说明
+  async supplementTask(code: string, payload: SupplementIn): Promise<TaskOut> {
+    const { data } = await http.post<TaskOut>(
+      `/api/tasks/${encodeURIComponent(code)}/supplement`, payload,
     )
     return data
   },

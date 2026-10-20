@@ -15,7 +15,7 @@
 }
 html,
 body,
-#app {
+#root {
   height: 100%;
   margin: 0;
 }
@@ -41,4 +41,234 @@ body {
 .badvalue {
   color: var(--red);
   font-weight: 600;
+}
+
+/* PdfSourceViewer 高亮框脉冲动画 */
+@keyframes pv-pulse {
+  0%,
+  100% {
+    background: rgba(239, 68, 68, 0.1);
+  }
+  50% {
+    background: rgba(239, 68, 68, 0.28);
+  }
+}
+
+/* ===== TaskObjectView ===== */
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.title-row h2 {
+  margin: 0;
+}
+.tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tab-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.docs {
+  margin-bottom: 14px;
+}
+.doctag {
+  margin: 0 6px 6px 0;
+}
+.doctag.clickable {
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.doctag.clickable:hover {
+  color: var(--blue);
+  border-color: var(--blue);
+}
+.doc-eye {
+  margin-left: 4px;
+  vertical-align: -1px;
+  font-size: 12px;
+}
+.attach-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.attach-tip {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+.rname {
+  font-weight: 600;
+}
+.rid {
+  margin-left: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.why,
+.sug {
+  font-size: 13px;
+  line-height: 1.7;
+}
+.sug {
+  color: var(--amber);
+}
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.ai-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.ai-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tree {
+  max-height: 460px;
+  overflow: auto;
+}
+.tnode {
+  padding: 7px 0;
+  border-bottom: 1px dashed #eceff4;
+}
+.tcode {
+  font-weight: 600;
+  margin: 0 8px;
+}
+.ttype {
+  color: var(--muted);
+  font-size: 12px;
+}
+.tsum {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.think {
+  height: 460px;
+  overflow: auto;
+  background: #0f172a;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.th-line {
+  margin-bottom: 8px;
+  color: #cbd5e1;
+}
+.th-line.pass {
+  color: #86efac;
+}
+.th-line.warn {
+  color: #fcd34d;
+}
+.th-line.fail {
+  color: #fca5a5;
+}
+.th-line.phase {
+  color: #93c5fd;
+}
+.th-line.special {
+  color: #c4b5fd;
+}
+.th-tag {
+  display: inline-block;
+  min-width: 42px;
+  margin-right: 8px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 11px;
+}
+.pend {
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid var(--amber);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.pend.fail {
+  border-left-color: var(--red);
+}
+.pend.special {
+  border-left-color: #8b5cf6;
+}
+.pend.resolved {
+  opacity: 0.75;
+  background: #f8fafc;
+}
+.pend-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pend-name {
+  font-weight: 600;
+}
+.pend-why {
+  font-size: 13px;
+  margin: 6px 0;
+  line-height: 1.6;
+}
+.pend-sug {
+  font-size: 12px;
+  color: var(--amber);
+}
+.pend-act {
+  display: flex;
+  gap: 8px;
+}
+.pend-done {
+  font-size: 13px;
+  font-weight: 600;
+}
+.pend-done.accept {
+  color: var(--green);
+}
+.pend-done.keep {
+  color: var(--red);
+}
+.pend-done.ack {
+  color: var(--amber);
+}
+.supp-comment {
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  color: #b45309;
+}
+.supp-doc {
+  padding: 8px 0 2px;
+  border-bottom: 1px dashed #eceff4;
+  margin-bottom: 8px;
+}
+.supp-doc:last-child {
+  border-bottom: none;
+}
+.supp-doc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.supp-doc-type {
+  font-size: 13px;
+  color: var(--muted);
 }

@@ -17,11 +17,24 @@ from ..schemas import (
     ParseResult,
     RunSummary,
     StatusAction,
+    SupplementIn,
     TaskCreate,
     TaskDetail,
     TaskOut,
 )
 from ..security import get_current_user, require_role
+
+
+def _task_out(task: "models.ReviewTask") -> TaskOut:
+    """统一构建 TaskOut DTO，避免各处重复。"""
+    return TaskOut(
+        id=task.id, task_code=task.task_code, borrower=task.borrower,
+        drawdown_currency=task.drawdown_currency,
+        drawdown_amount=float(task.drawdown_amount), status=task.status.value,
+        created_at=task.created_at,
+        review_comment=task.review_comment,
+        supplement_note=task.supplement_note,
+    )
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
@@ -80,6 +93,7 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
         created=q.filter_by(status=TaskStatus.CREATED).count(),
         reviewing=q.filter_by(status=TaskStatus.REVIEWING).count(),
         need_supplement=q.filter_by(status=TaskStatus.NEED_SUPPLEMENT).count(),
+        supplemented=q.filter_by(status=TaskStatus.SUPPLEMENTED).count(),
         completed=q.filter_by(status=TaskStatus.COMPLETED).count(),
     )
 
@@ -111,11 +125,7 @@ def create_task(
     db.add(task)
     db.commit()
     db.refresh(task)
-    return TaskOut(
-        id=task.id, task_code=task.task_code, borrower=task.borrower,
-        drawdown_currency=task.drawdown_currency,
-        drawdown_amount=float(task.drawdown_amount), status=task.status.value,
-    )
+    return _task_out(task)
 
 
 @router.get("", response_model=list[TaskOut])
@@ -129,14 +139,7 @@ def list_tasks(
     if mine:
         q = q.filter_by(submitted_by=user.id)
     tasks = q.order_by(models.ReviewTask.id.desc()).all()
-    return [
-        TaskOut(
-            id=t.id, task_code=t.task_code, borrower=t.borrower,
-            drawdown_currency=t.drawdown_currency,
-            drawdown_amount=float(t.drawdown_amount), status=t.status.value,
-        )
-        for t in tasks
-    ]
+    return [_task_out(t) for t in tasks]
 
 
 def _get_task(db: Session, task_code: str) -> models.ReviewTask:
@@ -173,6 +176,9 @@ def get_task_detail(
         id=task.id, task_code=task.task_code, borrower=task.borrower,
         drawdown_currency=task.drawdown_currency,
         drawdown_amount=float(task.drawdown_amount), status=task.status.value,
+        created_at=task.created_at,
+        review_comment=task.review_comment,
+        supplement_note=task.supplement_note,
         documents=[
             {"id": d.id, "doc_code": d.doc_code,
              "type_code": d.type_code.value if hasattr(d.type_code, "value") else str(d.type_code),
@@ -236,13 +242,10 @@ def return_for_supplement(
 ):
     task = _get_task(db, task_code)
     task.status = models.TaskStatus.NEED_SUPPLEMENT
+    task.review_comment = payload.comment or task.review_comment
     db.commit()
     db.refresh(task)
-    return TaskOut(
-        id=task.id, task_code=task.task_code, borrower=task.borrower,
-        drawdown_currency=task.drawdown_currency,
-        drawdown_amount=float(task.drawdown_amount), status=task.status.value,
-    )
+    return _task_out(task)
 
 
 @router.post("/{task_code}/complete", response_model=TaskOut)
@@ -257,11 +260,52 @@ def complete_task(
     task.status = models.TaskStatus.COMPLETED
     db.commit()
     db.refresh(task)
-    return TaskOut(
-        id=task.id, task_code=task.task_code, borrower=task.borrower,
-        drawdown_currency=task.drawdown_currency,
-        drawdown_amount=float(task.drawdown_amount), status=task.status.value,
-    )
+    return _task_out(task)
+
+
+@router.post("/{task_code}/supplement", response_model=TaskOut)
+def supplement_task(
+    task_code: str,
+    payload: SupplementIn,
+    db: Session = Depends(get_db),
+    # 仅业务经办人可补件
+    user: User = Depends(require_role(Role.OPERATOR)),
+):
+    """经办人补件：可更正单据字段值、登记新补充文件，并附补件说明。
+
+    补件后任务状态置为「已补件」(supplemented)，回到审核人的「待复核」列表；
+    同时清空历史规则结果，待审核人重新核对。
+    """
+    task = _get_task(db, task_code)
+    if task.status not in (models.TaskStatus.NEED_SUPPLEMENT, models.TaskStatus.SUPPLEMENTED):
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="仅「待补件」的任务可以补件")
+
+    # 1) 字段级更正：按 doc_code 定位单据，重建 fields dict 以触发 JSON 列更新
+    docs_by_code = {d.doc_code: d for d in task.documents}
+    for upd in payload.field_updates:
+        d = docs_by_code.get(upd.doc_code)
+        if not d:
+            continue
+        new_fields = dict(d.fields or {})
+        new_fields[upd.field_key] = upd.value
+        d.fields = new_fields
+
+    # 2) 登记补充文件（仅记录文件名，便于审核人看到补了哪些件）
+    if payload.added_files:
+        note_files = "；".join(payload.added_files)
+        extra = f"[补充文件] {note_files}"
+        payload.note = f"{payload.note}\n{extra}".strip() if payload.note else extra
+
+    # 3) 记录补件说明 + 状态流转
+    task.supplement_note = payload.note or task.supplement_note
+    task.status = models.TaskStatus.SUPPLEMENTED
+
+    # 4) 清空历史规则结果，等审核人重新核对
+    db.query(models.CheckResult).filter_by(task_id=task.id).delete()
+
+    db.commit()
+    db.refresh(task)
+    return _task_out(task)
 
 
 # ======================= 智能审核 Agent =======================
