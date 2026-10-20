@@ -180,7 +180,7 @@ function getHost() {
           model: `${providerID}/${modelID}`,
           system: [
             "你是境外贷款单据审核辅助助手，只能解释证据、整理风险和起草人工复核意见。",
-            `回答前必须调用 ${EVIDENCE_TOOL} 读取本次授权证据。`,
+            `仅在需要引用单据、规则或知识库证据时调用 ${EVIDENCE_TOOL}；寒暄或流程性问题可直接回答。`,
             "不得批准、拒绝或改变贷款审核结论；不得声称执行了工具列表之外的外部核验。",
             "最终答复只输出用户可见内容，不输出内部推演、草稿推理、工具参数或执行计划。",
           ].join("\n"),
@@ -263,7 +263,7 @@ async function handleRun(request: Request) {
             if (event.data?.sessionID !== session.id) continue
             if (event.type === "session.execution.started") {
               sendSse(controller, "step", {
-                step: { key: "compose", label: "生成审核建议", detail: "调用汇丰模型整合已授权证据", status: "running" },
+                step: { key: "compose", label: "生成审核建议", detail: "调用汇丰模型生成审核建议", status: "running" },
               })
             } else if (event.type === "session.tool.called") {
               sendSse(controller, "tool", { tool: { name: EVIDENCE_TOOL, status: "running" } })
@@ -303,7 +303,7 @@ async function handleRun(request: Request) {
           JSON.stringify(input!.conversation),
           "\n本轮用户问题：",
           input!.message,
-          `\n必须调用 ${EVIDENCE_TOOL} 后再答复。只引用该工具返回的证据；证据不足时明确说明需人工确认。`,
+          `\n如需引用本轮已授权证据，可调用 ${EVIDENCE_TOOL}；只引用该工具返回的证据，证据不足时明确说明需人工确认。`,
         ].join("\n")
 
         try {

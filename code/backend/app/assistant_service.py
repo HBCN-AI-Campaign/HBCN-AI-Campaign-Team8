@@ -251,27 +251,10 @@ async def run_agent_events(
         yield {"event": "warning", "message": "OpenCode runtime 或汇丰模型 API 配置未完成"}
         yield {"event": "assistant_result", "answer": None, "citations": []}
         return
+    # 证据在后台静默整理（供模型按需调用 read_authorized_evidence 时读取），
+    # 不再作为强制步骤前置展示；检索告警也不单独暴露给用户。
     retrieval_warnings: list[str] = []
     retrieved = await asyncio.to_thread(_rag_search, context, message, retrieval_warnings)
-    yield {
-        "event": "step",
-        "step": {
-            "key": "retrieve",
-            "label": "检索证据",
-            "detail": f"已整理 {len(retrieved)} 条授权材料、规则和知识库证据",
-            "status": "completed",
-        },
-    }
-    for index, warning in enumerate(retrieval_warnings):
-        yield {
-            "event": "step",
-            "step": {
-                "key": f"retrieval-warning-{index}",
-                "label": "知识库检索提示",
-                "detail": warning,
-                "status": "error",
-            },
-        }
     try:
         timeout = httpx.Timeout(settings.AI_REQUEST_TIMEOUT, connect=5.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -301,7 +284,7 @@ async def run_agent_events(
                 response.raise_for_status()
                 answer: str | None = None
                 result_seen = False
-                citations: list[dict[str, Any]] = retrieved
+                tool_used = False
                 async for line in response.aiter_lines():
                     if not line.startswith("data:"):
                         continue
@@ -312,13 +295,18 @@ async def run_agent_events(
                     if event.get("event") == "assistant_result":
                         result_seen = True
                         answer = _safe_final_answer(str(event.get("answer") or ""))
-                        citations = retrieved
                         if answer:
                             for index in range(0, len(answer), 80):
                                 yield {"event": "delta", "delta": answer[index:index + 80]}
-                        yield {"event": "assistant_result", "answer": answer, "citations": citations}
+                        yield {
+                            "event": "assistant_result",
+                            "answer": answer,
+                            "citations": retrieved if tool_used else [],
+                        }
                     elif event.get("event") == "tool":
                         status = event.get("tool", {}).get("status")
+                        if status == "completed":
+                            tool_used = True
                         yield {
                             "event": "tool",
                             "tool": {
@@ -332,7 +320,7 @@ async def run_agent_events(
                     elif event.get("event") == "warning":
                         yield {"event": "warning", "message": "OpenCode 助手运行未完成，请稍后重试。"}
                 if not result_seen:
-                    yield {"event": "assistant_result", "answer": None, "citations": citations}
+                    yield {"event": "assistant_result", "answer": None, "citations": retrieved if tool_used else []}
     except Exception:
         logger.exception("OpenCode assistant runtime request failed")
         yield {"event": "warning", "message": "OpenCode 助手运行未完成，请稍后重试。"}
@@ -390,11 +378,6 @@ async def stream_assistant(
         }
         runtime_steps.append(skill_step)
         yield {"event": "step", "step": skill_step}
-    yield {
-        "event": "step",
-        "step": {"key": "retrieve", "label": "检索证据", "detail": "查询任务材料、规则结果和知识库", "status": "running"},
-    }
-
     async for event in run_agent_events(message, context, instructions):
         if event.get("event") == "assistant_result":
             answer = event.get("answer")
