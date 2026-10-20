@@ -240,6 +240,46 @@
                 <el-button type="primary" :icon="Promotion" @click="copyMail">复制邮件内容</el-button>
               </div>
             </el-card>
+
+            <!-- 附件原文：回复邮件需随附的单据原件 -->
+            <el-card shadow="never" style="margin-top: 16px">
+              <template #header>
+                <div class="attach-head">
+                  <span><el-icon style="vertical-align:-2px"><Paperclip /></el-icon> 附件原文（回复邮件随附）</span>
+                  <el-checkbox v-model="includeAttachments" @change="genMail">
+                    在邮件正文中列出附件清单
+                  </el-checkbox>
+                </div>
+              </template>
+
+              <el-empty v-if="!(detail?.documents?.length)" description="本任务暂无单据" :image-size="60" />
+              <el-table v-else :data="detail!.documents" size="small" border>
+                <el-table-column label="单据号" prop="doc_code" min-width="150" />
+                <el-table-column label="类型" min-width="120">
+                  <template #default="{ row }">
+                    {{ typeLabel(row.type_code) }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="原件" width="90" align="center">
+                  <template #default="{ row }">
+                    <el-tag v-if="row.pdf_file" type="success" size="small" effect="plain">PDF</el-tag>
+                    <el-tag v-else type="info" size="small" effect="plain">无</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="170" align="center">
+                  <template #default="{ row }">
+                    <el-button v-if="row.pdf_file" text type="primary" size="small" :icon="View"
+                      @click="viewDoc(row.id)">查看</el-button>
+                    <el-button v-if="row.pdf_file" text type="primary" size="small" :icon="Download"
+                      @click="downloadDoc(row)">下载</el-button>
+                    <span v-if="!row.pdf_file" class="muted">—</span>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <p class="attach-tip">
+                共 {{ attachableDocs.length }} 份可随附原件。回复邮件时请将上述 PDF 作为附件一并发送给经办人。
+              </p>
+            </el-card>
           </el-col>
 
           <el-col :span="canReview ? 10 : 24">
@@ -266,17 +306,80 @@
                 </el-button>
               </template>
 
-              <!-- 经办人：只读看状态 -->
+              <!-- 经办人：补件 / 状态 -->
               <template v-else>
+                <!-- 待补件 / 已补件：可补件 -->
+                <template v-if="canSupplement">
+                  <el-alert
+                    :type="detail?.status === 'supplemented' ? 'info' : 'warning'"
+                    :closable="false" show-icon style="margin-bottom: 14px"
+                    :title="detail?.status === 'supplemented'
+                      ? '您已提交补件，等待审核人复核。如需再次更正可继续补件。'
+                      : '审核人已退回，请根据下方补件意见更正字段或补充材料后提交。'" />
+
+                  <!-- 审核人退回意见 -->
+                  <el-card v-if="detail?.review_comment" shadow="never" class="supp-block"
+                    style="margin-bottom: 14px">
+                    <template #header><span><el-icon style="vertical-align:-2px"><Back /></el-icon> 审核人退回意见</span></template>
+                    <div class="supp-comment">{{ detail.review_comment }}</div>
+                  </el-card>
+
+                  <!-- 字段补件 / 更正 -->
+                  <el-card shadow="never" class="supp-block" style="margin-bottom: 14px">
+                    <template #header><span>✏️ 字段补充 / 更正</span></template>
+                    <el-form label-position="top">
+                      <div v-for="d in detail!.documents" :key="d.id" class="supp-doc">
+                        <div class="supp-doc-head">
+                          <el-tag size="small" type="info" effect="plain">{{ d.doc_code }}</el-tag>
+                          <span class="supp-doc-type">{{ typeLabel(d.type_code) }}</span>
+                        </div>
+                        <el-row :gutter="12">
+                          <el-col v-for="(val, key) in d.fields" :key="key" :span="12">
+                            <el-form-item :label="String(key)">
+                              <el-input
+                                :model-value="fieldVal(d.doc_code, String(key), val)"
+                                size="small"
+                                @update:model-value="(v: string) => setField(d.doc_code, String(key), v)" />
+                            </el-form-item>
+                          </el-col>
+                        </el-row>
+                      </div>
+                    </el-form>
+                  </el-card>
+
+                  <!-- 补充文件 -->
+                  <el-card shadow="never" class="supp-block" style="margin-bottom: 14px">
+                    <template #header><span><el-icon style="vertical-align:-2px"><Paperclip /></el-icon> 补充文件</span></template>
+                    <el-upload
+                      :auto-upload="false" :file-list="suppFileList"
+                      :on-change="onSuppFileChange" :on-remove="onSuppFileRemove" multiple>
+                      <el-button size="small" :icon="Upload">选择要补充的文件</el-button>
+                      <template #tip>
+                        <div class="muted" style="font-size:12px;margin-top:4px">
+                          可补充审核人要求的缺失单据（仅登记文件名，随补件说明一并提交）。
+                        </div>
+                      </template>
+                    </el-upload>
+                  </el-card>
+
+                  <!-- 补件说明 + 提交 -->
+                  <el-input v-model="suppNote" type="textarea" :rows="3"
+                    placeholder="补件说明（说明本次补充/更正了什么，将同步给审核人）"
+                    style="margin-bottom: 12px" />
+                  <el-button type="primary" style="width: 100%" :icon="Promotion"
+                    :loading="supping" @click="doSupplement">
+                    提交补件（转交审核人复核）
+                  </el-button>
+                </template>
+
+                <!-- 其它状态：只读 -->
                 <el-result
-                  :icon="detail?.status === 'need_supplement' ? 'warning'
-                    : detail?.status === 'completed' ? 'success' : 'info'"
+                  v-else
+                  :icon="detail?.status === 'completed' ? 'success' : 'info'"
                   :title="statusText(detail?.status || '')"
-                  :sub-title="detail?.status === 'need_supplement'
-                    ? '审核人已退回，请根据关注点补充材料后重新提交'
-                    : detail?.status === 'completed'
-                      ? '任务已审核通过并归档'
-                      : '审核进行中，请等待审核人处理'" />
+                  :sub-title="detail?.status === 'completed'
+                    ? '任务已审核通过并归档'
+                    : '审核进行中，请等待审核人处理'" />
               </template>
             </el-card>
           </el-col>
@@ -295,12 +398,13 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowLeft, Back, DocumentChecked, MagicStick, Message,
   Promotion, Refresh, RefreshRight, Select, VideoPlay, View,
+  Paperclip, Download, Upload,
 } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { api } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import type { AIPending, AIThought, AITreeNode, CheckResult, TaskDetail, FieldSource } from '@/types'
-import { checkText, checkType, DIMENSION_NAME, fmt, statusText, statusType } from '@/utils'
+import { checkText, checkType, DIMENSION_NAME, fmt, statusText, statusType, typeLabel } from '@/utils'
 import PdfSourceViewer from '@/components/PdfSourceViewer.vue'
 
 const route = useRoute()
@@ -316,6 +420,69 @@ const running = ref(false)
 const acting = ref(false)
 const comment = ref('')
 const canReview = computed(() => auth.canReview)
+
+/* ---------- 经办人补件 ---------- */
+// 仅经办人、且任务处于待补件/已补件时可补件
+const canSupplement = computed(
+  () => !canReview.value
+    && (detail.value?.status === 'need_supplement' || detail.value?.status === 'supplemented'),
+)
+const supping = ref(false)
+const suppNote = ref('')
+// doc_code -> { field_key -> 新值 }，仅记录被修改过的字段
+const suppEdits = ref<Record<string, Record<string, string>>>({})
+const suppFileList = ref<{ name: string }[]>([])
+
+// 字段当前展示值：优先取编辑后的值，否则取原始值
+function fieldVal(docCode: string, key: string, original: any): string {
+  const e = suppEdits.value[docCode]
+  if (e && key in e) return e[key]
+  if (original == null) return ''
+  return Array.isArray(original) ? original.join('，') : String(original)
+}
+function setField(docCode: string, key: string, v: string) {
+  if (!suppEdits.value[docCode]) suppEdits.value[docCode] = {}
+  suppEdits.value[docCode][key] = v
+}
+function onSuppFileChange(file: { name: string }, files: { name: string }[]) {
+  suppFileList.value = files
+}
+function onSuppFileRemove(file: { name: string }, files: { name: string }[]) {
+  suppFileList.value = files
+}
+
+async function doSupplement() {
+  // 汇总字段更正
+  const fieldUpdates: { doc_code: string; field_key: string; value: any }[] = []
+  for (const [docCode, edits] of Object.entries(suppEdits.value)) {
+    for (const [fieldKey, value] of Object.entries(edits)) {
+      fieldUpdates.push({ doc_code: docCode, field_key: fieldKey, value })
+    }
+  }
+  const addedFiles = suppFileList.value.map((f) => f.name)
+  if (!suppNote.value && !fieldUpdates.length && !addedFiles.length) {
+    ElMessage.info('请至少更正一个字段、补充一个文件或填写补件说明')
+    return
+  }
+  supping.value = true
+  try {
+    const t = await api.supplementTask(code, {
+      note: suppNote.value,
+      field_updates: fieldUpdates,
+      added_files: addedFiles,
+    })
+    // 刷新详情（字段值 / 状态已更新）
+    detail.value = await api.taskDetail(code)
+    suppEdits.value = {}
+    suppFileList.value = []
+    suppNote.value = ''
+    ElMessage.success(`已提交补件（状态：${statusText(t.status)}），等待审核人复核`)
+  } catch {
+    /* 拦截器已提示 */
+  } finally {
+    supping.value = false
+  }
+}
 
 const counts = computed(() => {
   const c: Record<string, number> = { pass: 0, fail: 0, warn: 0 }
@@ -552,6 +719,49 @@ function resolvedLabel(id: string) {
 
 /* ---------- 回复邮件草稿 ---------- */
 const mail = ref({ to: '', subject: '', body: '' })
+
+/* ---------- 附件原文（回复邮件随附单据原件） ---------- */
+const includeAttachments = ref(true)
+
+// 可随附的原件（存在 pdf_file 的单据）
+const attachableDocs = computed(() =>
+  (detail.value?.documents ?? []).filter((d) => !!d.pdf_file),
+)
+
+/** 把 pdf_file 转成可访问 URL（与 PdfSourceViewer 的解析规则一致）。 */
+function docUrl(pf: string): string {
+  return pf.startsWith('uploads/')
+    ? '/' + pf.split('/').map(encodeURIComponent).join('/')
+    : `/pdf/${encodeURIComponent(pf)}`
+}
+
+/** 下载 / 在新标签页打开某单据原件，便于作为邮件附件保存。 */
+function downloadDoc(d: { doc_code: string; pdf_file?: string | null }) {
+  if (!d.pdf_file) {
+    ElMessage.info('该单据暂无原件 PDF')
+    return
+  }
+  const url = docUrl(d.pdf_file)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${d.doc_code}.pdf`
+  a.target = '_blank'
+  a.rel = 'noopener'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
+/** 邮件正文的附件清单片段。 */
+function attachmentBlock(): string {
+  const list = attachableDocs.value
+  if (!includeAttachments.value || !list.length) return ''
+  const lines = list
+    .map((d, i) => `  ${i + 1}. ${d.doc_code}（${typeLabel(d.type_code)}）`)
+    .join('\n')
+  return `\n随附单据原件 ${list.length} 份：\n${lines}\n`
+}
+
 function genMail() {
   const d = detail.value
   const borrower = d?.borrower ?? ''
@@ -567,20 +777,30 @@ function genMail() {
       `经规则核对与智能审核，各项单据一致性良好，未发现不通过项，` +
       `${counts.value.warn ? `另有 ${counts.value.warn} 项提示已记录。` : ''}本次审核结论为：通过，相关材料已归档。\n\n` +
       (comment.value ? `审核意见：${comment.value}\n\n` : '') +
-      `如有疑问请回复本邮件。\n\n此致\n审核人员 ${auth.displayName}`
+      attachmentBlock() +
+      `\n如有疑问请回复本邮件。\n\n此致\n审核人员 ${auth.displayName}`
   } else {
     mail.value.body =
       `您好，\n\n关于贷款审核任务 ${code}（借款人：${borrower}）的单据审核已完成，本次审核结论为：退回补件。\n\n` +
       `存在以下 ${counts.value.fail} 项不通过${counts.value.warn ? ` 及 ${counts.value.warn} 项提示` : ''}，请核实后重新提交：\n${issues}\n\n` +
       (comment.value ? `审核意见：${comment.value}\n\n` : '') +
-      `请在收到本邮件后尽快补充 / 更正相关材料。\n\n此致\n审核人员 ${auth.displayName}`
+      attachmentBlock() +
+      `\n请在收到本邮件后尽快补充 / 更正相关材料。\n\n此致\n审核人员 ${auth.displayName}`
   }
 }
 async function copyMail() {
-  const text = `收件人：${mail.value.to}\n主题：${mail.value.subject}\n\n${mail.value.body}`
+  let text = `收件人：${mail.value.to}\n主题：${mail.value.subject}\n\n${mail.value.body}`
+  // 附件：附上原件访问链接，便于粘贴到邮件客户端后下载/添加附件
+  const list = attachableDocs.value
+  if (list.length) {
+    const links = list
+      .map((dd, i) => `  ${i + 1}. ${dd.doc_code}（${typeLabel(dd.type_code)}）：${location.origin}${docUrl(dd.pdf_file as string)}`)
+      .join('\n')
+    text += `\n\n—— 附件原件链接 ——\n${links}`
+  }
   try {
     await navigator.clipboard.writeText(text)
-    ElMessage.success('邮件内容已复制到剪贴板')
+    ElMessage.success(list.length ? `邮件内容及 ${list.length} 份附件链接已复制` : '邮件内容已复制到剪贴板')
   } catch {
     ElMessage.warning('复制失败，请手动选择文本复制')
   }
@@ -668,6 +888,16 @@ onMounted(async () => {
 .doc-eye {
   margin-left: 4px;
   vertical-align: -1px;
+  font-size: 12px;
+}
+.attach-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.attach-tip {
+  margin: 10px 0 0;
+  color: var(--muted);
   font-size: 12px;
 }
 .muted {
@@ -804,4 +1034,34 @@ onMounted(async () => {
 .pend-done.accept { color: var(--green); }
 .pend-done.keep { color: var(--red); }
 .pend-done.ack { color: var(--amber); }
+/* 经办人补件 */
+.supp-block :deep(.el-card__header) {
+  padding: 10px 14px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.supp-comment {
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  color: #b45309;
+}
+.supp-doc {
+  padding: 8px 0 2px;
+  border-bottom: 1px dashed #eceff4;
+  margin-bottom: 8px;
+}
+.supp-doc:last-child {
+  border-bottom: none;
+}
+.supp-doc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.supp-doc-type {
+  font-size: 13px;
+  color: var(--muted);
+}
 </style>

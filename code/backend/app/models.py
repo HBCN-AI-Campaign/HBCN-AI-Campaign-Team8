@@ -65,6 +65,7 @@ class TaskStatus(str, enum.Enum):
     CREATED = "created"                     # 经办人已提交，待审核人受理
     REVIEWING = "reviewing"                 # 审核中（规则核对 / agent / 人工终审统一为此态）
     NEED_SUPPLEMENT = "need_supplement"     # 待补件：审核人退回，需经办人补充材料
+    SUPPLEMENTED = "supplemented"           # 已补件：经办人已补充并重新提交，待审核人复核
     COMPLETED = "completed"                 # 审核通过，已完成
 
 
@@ -77,6 +78,11 @@ class ReviewTask(Base):
     drawdown_currency: Mapped[str] = mapped_column(String(8))
     drawdown_amount: Mapped[float] = mapped_column(Numeric(18, 2))
     status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), default=TaskStatus.CREATED)
+
+    # 审核人退回补件时填写的说明（经办人补件时可见）
+    review_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 经办人补件时填写的说明（审核人复核时可见）
+    supplement_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     submitted_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)

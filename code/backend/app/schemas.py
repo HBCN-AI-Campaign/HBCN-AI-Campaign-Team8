@@ -1,4 +1,6 @@
 """Pydantic DTO。"""
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, field_validator
 
 
@@ -41,6 +43,9 @@ class TaskOut(BaseModel):
     drawdown_currency: str
     drawdown_amount: float
     status: str
+    created_at: datetime | None = None
+    review_comment: str | None = None      # 审核人退回补件说明
+    supplement_note: str | None = None     # 经办人补件说明
 
 
 # --- check results ---
@@ -71,12 +76,26 @@ class StatusAction(BaseModel):
     comment: str = ""       # 审核意见 / 补件说明（可选）
 
 
+# --- 经办人补件 ---
+class SupplementFieldUpdate(BaseModel):
+    doc_code: str           # 要修改的单据编号
+    field_key: str          # 字段键
+    value: object = None    # 新值（字符串 / 数字 / 列表等）
+
+
+class SupplementIn(BaseModel):
+    note: str = ""                                   # 补件说明
+    field_updates: list[SupplementFieldUpdate] = []  # 字段级补充 / 更正
+    added_files: list[str] = []                      # 新补充的文件名（仅登记，便于展示）
+
+
 # --- 工作台统计 ---
 class DashboardStats(BaseModel):
     total_tasks: int        # 全部（经办人视角=我提交的；审核人视角=系统全部）
     created: int            # 待受理（经办人视角计入"进行中"）
     reviewing: int          # 审核中
     need_supplement: int    # 待补件
+    supplemented: int = 0   # 已补件（待复核）
     completed: int          # 已完成
 
 
