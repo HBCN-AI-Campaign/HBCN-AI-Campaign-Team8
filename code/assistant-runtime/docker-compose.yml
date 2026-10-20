@@ -7,6 +7,11 @@ services:
     environment:
       ASSISTANT_RUNTIME_HOST: 0.0.0.0
       ASSISTANT_RUNTIME_MAX_CONCURRENT_RUNS: ${ASSISTANT_RUNTIME_MAX_CONCURRENT_RUNS:-4}
+      # HSBC Model Studio is reached directly; strip any host-injected proxy.
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      ALL_PROXY: ""
+      NO_PROXY: "*"
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=512m

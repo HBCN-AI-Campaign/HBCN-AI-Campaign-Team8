@@ -138,6 +138,8 @@ RAG_REQUEST_TIMEOUT=15
 
 `AI_API_KEY` 应由本机环境变量或部署平台 Secret 注入；团队成员从 Git 拉取代码后，需通过汇丰指定的安全渠道取得同一团队的有效 refresh 密钥，再在各自运行环境设置该变量。不要把 CSV、密钥、`.env` 或密钥写入前端构建变量，也不要通过 Git/聊天记录分发。生产部署还需由部署负责人把该 Secret 配置到 HSBC ECS 的服务运行环境。仅拉取仓库不会自动获得团队密钥，这是凭证管理的必要边界。
 
+模型连接走汇丰百炼 OpenAI 兼容接口的**直连地址**，不经过任何本地代理（如 CCSwitch）。`code/assistant-runtime` 启动时会清除继承的 `HTTP(S)_PROXY` / `ALL_PROXY` 环境变量并设置 `NO_PROXY=*`，确保始终直连 `AI_BASE_URL`；不要在本机代理或 CCSwitch 中拦截该域名，也不要为汇丰模型地址配置代理转发。
+
 本地启动完整助手时，先启动 `code/rag-service`（端口 `8010`），并在两个服务的忽略 `.env` 中分别配置 `SERVICE_TOKEN` 和同值的 `RAG_SERVICE_TOKEN`。RAG 的百炼 Embedding/视觉模型使用汇丰团队 API Key；rag-service 的 `SERVICE_TOKEN` 只是内部服务鉴权，不是模型 API Key。部署到 ECS 时将 `RAG_BASE_URL` 改为服务可达的内网地址，并把两项 Secret 配置到后端运行环境。`rag_available` 表示连接配置已启用；实际检索依赖 RAG 服务已启动且对应知识库已索引。
 
 可在 PowerShell 当前进程中设置本地密钥后启动后端：

@@ -5,6 +5,16 @@ import { cp, mkdir, mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
+// The HSBC Model Studio API (AI_BASE_URL) is a direct endpoint and must never be
+// routed through a local proxy such as CCSwitch. Clear any inherited HTTP(S)_PROXY
+// so Bun/OpenCode connect straight to the configured base URL regardless of the
+// shell environment that launched this runtime.
+for (const key of ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"]) {
+  delete Bun.env[key]
+}
+Bun.env.NO_PROXY = "*"
+Bun.env.no_proxy = "*"
+
 type Evidence = {
   type?: string
   id?: string
