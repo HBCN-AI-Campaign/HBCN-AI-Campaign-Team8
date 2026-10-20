@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     RAGFLOW_PARSER_ID: str = "general"
     REQUEST_TIMEOUT_SECONDS: float = 60.0
     MAX_UPLOAD_BYTES: int = 50 * 1024 * 1024
+    UPLOAD_TIMEOUT_SECONDS: int = 900
     PARSE_POLL_INTERVAL_SECONDS: float = 5.0
     PARSE_POLL_TIMEOUT_SECONDS: float = 900.0
 
@@ -30,7 +31,7 @@ class Settings(BaseSettings):
     BAILIAN_API_KEY: str = ""
     EMBEDDING_MODEL: str = "qwen3.7-text-embedding-flash"
     LOCAL_STORE_PATH: str = "rag_store.sqlite3"   # 相对 rag-service 根目录
-    OCR_BASE_URL: str = "http://127.0.0.1:8000"   # 队友 ocr_demo 服务（code/ocr_demo）
+    OCR_BASE_URL: str = "http://127.0.0.1:8001"   # 队友 ocr_demo 服务（code/ocr_demo）
     OCR_TIMEOUT_SECONDS: float = 300.0
     OCR_VISION_MODEL: str = "qwen3.8-flash"       # OCR 服务不可用时，图片走百炼视觉兜底
     CHUNK_SIZE: int = 500

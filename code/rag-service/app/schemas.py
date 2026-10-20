@@ -36,6 +36,9 @@ class Capabilities(BaseModel):
     agentic_orchestration: bool = False
     external_law_mcp: bool = False
     supported_scopes: list[str]
+    max_upload_bytes: int = 50 * 1024 * 1024
+    upload_timeout_seconds: int = 900
+    supported_file_extensions: list[str] = Field(default_factory=list)
 
 
 class IndexResponse(BaseModel):

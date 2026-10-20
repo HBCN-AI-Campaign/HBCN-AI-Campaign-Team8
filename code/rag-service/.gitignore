@@ -3,3 +3,6 @@
 __pycache__/
 *.pyc
 rag_store.sqlite3
+app/static/ui-build/
+knowledge-base/docs/
+knowledge-base/manifest.json

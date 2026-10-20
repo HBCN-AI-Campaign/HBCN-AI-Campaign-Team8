@@ -17,6 +17,8 @@
 
 - **前端整体从 Vue 3 切换到 React**（已拍板）。前端架构由罗姐负责从 Vue 迁到 React；
   AI 助手 UI（`code/frontend/src/views/AssistantView.vue`）也一并改用 React 重做。
+- **RAG 知识库工作台（`code/rag-service/ui`）同样切 React**：该目录当前是 Vue 3 + Element Plus，属于架构错位，
+  正在改为 Vite + React + TypeScript（构建产物仍输出到 `app/static/ui-build`，由 rag-service 在 `/ui/` 提供）。
 - 迁移完成前，现有 Vue 代码仍在使用、仍可运行；**新写的前端功能一律用 React**，不要再往 Vue 里加新页面/新组件。
 - 迁移完成后，更新本文档中所有 Vue 相关描述与运行命令。
 
@@ -26,6 +28,7 @@
   - `app/rule_engine/` 规则引擎（注册表模式）；`app/routers/` auth/tasks 路由
   - `app/sample_pdfs/` 样本 PDF（随仓库分发）；`app/uploads/` 运行时产物（已 gitignore）
 - `code/frontend/` — 前端，源码全在 `src/`
+- `code/rag-service/knowledge-base/` — 境外/跨境贷款法规与汇丰公开资料知识库（`catalog.json` 为索引，`README.md` 说明来源与下载方式；`docs/` 存 PDF/文本，已 gitignore）
 - `mockup/` — 各成员 HTML 设计稿，按 `mockup_<名字>.html` 命名
 
 ## 环境与运行命令
