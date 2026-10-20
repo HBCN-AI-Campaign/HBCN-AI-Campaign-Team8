@@ -31,13 +31,14 @@ code/
 │   ├── uploads/                经办人上传的真实 PDF（运行时按批次落盘，不入库，经 /uploads/<批次>/<file> 访问）
 │   ├── requirements.txt
 │   └── .env.example
-└── frontend/           Vite + Vue 3 + TS + Element Plus 前端
+└── frontend/           Vite + React 18 + TS + Ant Design 前端
     ├── src/
-    │   ├── views/              登录 / 仪表盘 / 创建任务 / 任务审核
+    │   ├── views/              登录 / 仪表盘 / 创建任务 / 任务审核（.tsx）
+    │   │   └── task-object/    任务审核页的自定义 hooks（AI 会话 / 核对 / PDF 定位 / 补件）
     │   ├── components/
-    │   │   └── PdfSourceViewer.vue  PDF 预览 + 出错点高亮（pdfjs-dist）
-    │   ├── stores/             Pinia 状态
-    │   ├── router/             路由 + 鉴权守卫
+    │   │   └── PdfSourceViewer.tsx  PDF 预览 + 出错点高亮（pdfjs-dist）
+    │   ├── stores/             zustand 状态（auth.ts）
+    │   ├── router/             React Router 路由 + 鉴权守卫（ProtectedRoute）
     │   └── api.ts              axios 封装（/api 代理到后端）
     ├── package.json
     └── vite.config.ts
@@ -78,7 +79,7 @@ POST /api/tasks/parse                     → 落盘 uploads/<批次>/<文件名
   `pdf_file` 记为 `uploads/<batch_id>/<文件名>`，「定位原文」预览到的即本次真实上传件。
 - `uploads/` 已在 `.gitignore` 中忽略（运行时产物，不入库）。
 
-**「一键载入模板 8 个文件」**（`CreateTaskView.vue · loadTemplate`）：
+**「一键载入模板 8 个文件」**（`CreateTaskView.tsx · loadTemplate`）：
 为方便演示，该按钮会**真的 `fetch` `/pdf/` 下的 8 个样本 PDF 二进制**，封装成 `File`
 （文件名用中文模板名）后放进上传列表——**走和真人上传完全一致的 multipart 流程**，
 不是占位空文件。因此后续「定位原文」高亮的就是真实 PDF 内容。
@@ -114,9 +115,9 @@ source = {
 ```
 
 - 后端把 PDF 静态托管：仓库样本在 `/pdf/<file>`（`backend/sample_pdfs/`），
-  经办人上传件在 `/uploads/<批次>/<file>`（`backend/uploads/`）。`PdfSourceViewer.vue`
+  经办人上传件在 `/uploads/<批次>/<file>`（`backend/uploads/`）。`PdfSourceViewer.tsx`
   依据 `pdf_file` 是否以 `uploads/` 开头自动选对应路径。
-- 前端组件 `PdfSourceViewer.vue` 用 `pdfjs-dist` 渲染指定页，并按 bbox 叠加高亮框。
+- 前端组件 `PdfSourceViewer.tsx` 用 `pdfjs-dist` 渲染指定页，并按 bbox 叠加高亮框。
 - **接真实 OCR 时**：Azure Document Intelligence / AWS Textract / PaddleOCR 等都会返回字段级坐标，
   把 Mock 里手工标注的 `bbox` 换成服务返回值（归一化到 0~1）即可，前端无需改动。
 
@@ -192,7 +193,7 @@ npm run dev        # 启动开发服务器（http://localhost:5173）
 
 **后端**：FastAPI · SQLAlchemy 2.0 · Pydantic 2 · python-jose (JWT) · bcrypt · SQLite（默认）/ PostgreSQL（可选）
 
-**前端**：Vite 6 · Vue 3.5 · TypeScript · Pinia · Vue Router 4 · Element Plus 2.9 · axios
+**前端**：Vite 6 · React 18 · TypeScript · zustand · React Router 6 · Ant Design 5 · axios · pdfjs-dist
 
 ---
 
