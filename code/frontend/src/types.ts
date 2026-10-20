@@ -14,6 +14,22 @@ export interface TaskOut {
   drawdown_currency: string
   drawdown_amount: number
   status: string
+  created_at?: string | null
+  review_comment?: string | null
+  supplement_note?: string | null
+}
+
+// --- 补件（经办人回填） ---
+export interface SupplementFieldUpdate {
+  doc_code: string
+  field_key: string
+  value: any
+}
+
+export interface SupplementIn {
+  note?: string
+  field_updates?: SupplementFieldUpdate[]
+  added_files?: string[]
 }
 
 export interface FieldSource {
@@ -62,6 +78,7 @@ export interface DashboardStats {
   created: number
   reviewing: number
   need_supplement: number
+  supplemented: number
   completed: number
 }
 

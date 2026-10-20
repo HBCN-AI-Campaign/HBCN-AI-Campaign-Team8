@@ -13,6 +13,7 @@ import type {
   TaskOut,
   AISession,
   AIResolveOut,
+  SupplementIn,
 } from '@/types'
 
 const http = axios.create({ baseURL: '/', timeout: 20000 })
@@ -111,6 +112,14 @@ export const api = {
   async completeTask(code: string, comment = ''): Promise<TaskOut> {
     const { data } = await http.post<TaskOut>(
       `/api/tasks/${encodeURIComponent(code)}/complete`, { comment },
+    )
+    return data
+  },
+
+  // 经办人补件：回填字段值 / 补充文件 + 补件说明
+  async supplementTask(code: string, payload: SupplementIn): Promise<TaskOut> {
+    const { data } = await http.post<TaskOut>(
+      `/api/tasks/${encodeURIComponent(code)}/supplement`, payload,
     )
     return data
   },
