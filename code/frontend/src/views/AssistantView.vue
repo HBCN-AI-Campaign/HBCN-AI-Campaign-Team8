@@ -10,12 +10,16 @@
         </div>
         <el-button class="new-session" type="primary" :icon="Plus" :disabled="loading" @click="newSession">新建会话</el-button>
         <div class="session-list">
-          <button v-for="item in sessions" :key="item.id" class="session-item"
-            :class="{ active: item.id === activeSessionId }" :disabled="loading" @click="openSession(item.id)">
+          <div v-for="item in sessions" :key="item.id" class="session-item"
+            :class="{ active: item.id === activeSessionId, disabled: loading }" role="button" tabindex="0"
+            @click="!loading && openSession(item.id)" @keydown.enter="!loading && openSession(item.id)">
             <span class="session-dot"></span>
             <span class="session-title">{{ item.title }}</span>
             <span class="session-count">{{ item.message_count }}</span>
-          </button>
+            <button class="session-delete" title="删除会话" aria-label="删除会话" :disabled="loading" @click.stop="deleteSession(item.id)">
+              <el-icon><Delete /></el-icon>
+            </button>
+          </div>
           <div v-if="!sessions.length" class="empty-rail">暂无会话</div>
         </div>
         <div class="rail-foot">
@@ -148,12 +152,16 @@
     <el-drawer v-model="mobileSessionsVisible" title="会话" direction="ltr" size="min(88vw, 360px)">
       <el-button class="new-session" type="primary" :icon="Plus" :disabled="loading" @click="newSession">新建会话</el-button>
       <div class="mobile-session-list">
-        <button v-for="item in sessions" :key="item.id" class="session-item"
-          :class="{ active: item.id === activeSessionId }" :disabled="loading" @click="openSession(item.id)">
+        <div v-for="item in sessions" :key="item.id" class="session-item"
+          :class="{ active: item.id === activeSessionId, disabled: loading }" role="button" tabindex="0"
+          @click="!loading && openSession(item.id)" @keydown.enter="!loading && openSession(item.id)">
           <span class="session-dot"></span>
           <span class="session-title">{{ item.title }}</span>
           <span class="session-count">{{ item.message_count }}</span>
-        </button>
+          <button class="session-delete" title="删除会话" aria-label="删除会话" :disabled="loading" @click.stop="deleteSession(item.id)">
+            <el-icon><Delete /></el-icon>
+          </button>
+        </div>
       </div>
     </el-drawer>
     <el-drawer v-model="mobileSkillsVisible" title="审核技能" direction="rtl" size="min(88vw, 360px)">
@@ -173,12 +181,12 @@ import { computed, defineAsyncComponent, nextTick, onMounted, ref } from 'vue'
 import type { Component } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { assistantApi } from '@/assistant/api'
 import '@copilotkit/vue/styles.css'
 import type { AssistantCapabilities, AssistantMessage, AssistantSession, AssistantSkill, AssistantStep, AssistantTaskOption } from '@/assistant/types'
 import type { AssistantMessage as CopilotAssistantMessage, Message as CopilotMessage } from '@ag-ui/core'
-import { ArrowLeft, ArrowRight, Calendar, ChatDotRound, Check, CircleCheck, Close, Coin, CopyDocument, DataLine, DocumentChecked, FolderOpened, Loading, Lock, MagicStick, Plus, Reading, Search, Ship } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, Calendar, ChatDotRound, Check, CircleCheck, Close, Coin, CopyDocument, DataLine, Delete, DocumentChecked, FolderOpened, Loading, Lock, MagicStick, Plus, Reading, Search, Ship } from '@element-plus/icons-vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -266,6 +274,31 @@ async function openSession(id: number) {
     scrollToBottom()
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '无法打开会话')
+  }
+}
+
+async function deleteSession(id: number) {
+  if (loading.value) return
+  try {
+    await ElMessageBox.confirm('删除后该会话及其全部消息将无法恢复。', '删除会话', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  try {
+    await assistantApi.deleteSession(id)
+    sessions.value = sessions.value.filter((item) => item.id !== id)
+    if (activeSessionId.value === id) {
+      const next = sessions.value[0]
+      if (next) await openSession(next.id)
+      else await newSession()
+    }
+    ElMessage.success('会话已删除')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '删除会话失败')
   }
 }
 
@@ -436,8 +469,12 @@ onMounted(loadSessions)
 .new-session { width: 100%; height: 38px; margin-bottom: 14px; border-radius: 7px; font-weight: 600; }
 .session-list { flex: 1; overflow-y: auto; min-height: 0; }
 .session-item { display: flex; align-items: center; width: 100%; gap: 9px; padding: 10px 9px; margin-bottom: 3px; border: 0; border-radius: 7px; background: transparent; color: #435574; text-align: left; cursor: pointer; }
-.session-item:hover:not(:disabled), .session-item.active { background: #eaf1fd; color: #204f9e; }
-.session-item:disabled { cursor: wait; opacity: .72; }
+.session-item:hover:not(.disabled), .session-item.active { background: #eaf1fd; color: #204f9e; }
+.session-item.disabled { cursor: wait; opacity: .72; }
+.session-delete { display: none; align-items: center; justify-content: center; width: 22px; height: 22px; flex: 0 0 auto; padding: 0; border: 0; border-radius: 5px; background: transparent; color: #9aa9be; cursor: pointer; }
+.session-item:hover .session-delete { display: flex; }
+.session-delete:hover:not(:disabled) { background: #fdeaea; color: #d65353; }
+.session-delete:disabled { cursor: wait; opacity: .6; }
 .session-dot { width: 7px; height: 7px; border: 2px solid #b8c7dc; border-radius: 50%; flex: 0 0 auto; }
 .active .session-dot { border-color: #4e82dc; background: #4e82dc; }
 .session-title { min-width: 0; flex: 1; overflow: hidden; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }

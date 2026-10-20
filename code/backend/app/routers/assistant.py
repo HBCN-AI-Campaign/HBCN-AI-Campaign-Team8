@@ -153,6 +153,18 @@ def get_session(
     )
 
 
+@router.delete("/sessions/{session_id}")
+def delete_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    session = _session_for_user(db, session_id, user)
+    db.delete(session)
+    db.commit()
+    return {"deleted": True}
+
+
 @router.post("/sessions/{session_id}/messages/stream")
 async def stream_message(
     session_id: int,

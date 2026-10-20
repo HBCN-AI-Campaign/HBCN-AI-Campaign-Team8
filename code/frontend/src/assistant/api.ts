@@ -6,6 +6,8 @@ import type {
   AssistantSkill,
   AssistantTaskOption,
 } from './types'
+import { useAuthStore } from '@/stores/auth'
+import router from '@/router'
 
 const base = '/api/assistant'
 
@@ -20,9 +22,19 @@ function headers(json = false): HeadersInit {
   }
 }
 
+function rejectExpiredSession(): Error {
+  useAuthStore().logout()
+  const current = router.currentRoute.value
+  if (current.name !== 'login') {
+    void router.replace({ name: 'login', query: { redirect: current.fullPath } })
+  }
+  return new Error('登录已过期，请重新登录')
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init)
   if (!response.ok) {
+    if (response.status === 401) throw rejectExpiredSession()
     const body = await response.json().catch(() => ({})) as { detail?: string }
     throw new Error(body.detail || `助手请求失败（${response.status}）`)
   }
@@ -58,6 +70,10 @@ export const assistantApi = {
     return request(`${base}/sessions/${id}`, { headers: headers() })
   },
 
+  deleteSession(id: number): Promise<{ deleted: boolean }> {
+    return request(`${base}/sessions/${id}`, { method: 'DELETE', headers: headers() })
+  },
+
   async *streamMessage(id: number, content: string, taskCode?: string, skillId?: string, signal?: AbortSignal): AsyncGenerator<AssistantStreamEvent> {
     const response = await fetch(`${base}/sessions/${id}/messages/stream`, {
       method: 'POST',
@@ -66,6 +82,7 @@ export const assistantApi = {
       signal,
     })
     if (!response.ok || !response.body) {
+      if (response.status === 401) throw rejectExpiredSession()
       const body = await response.json().catch(() => ({})) as { detail?: string }
       throw new Error(body.detail || `助手流式请求失败（${response.status}）`)
     }
