@@ -13,6 +13,13 @@
   - `code/backend/app/parse_agent.py` — 文件解析 Agent（OCR/LLM 识别字段 + 定位原文位置）
   - `code/backend/app/review_agent.py` — 专项审核 Agent（节假日/汇率/提单验真/制裁名单/法规检索）
 
+## 技术栈决策（重要 · 2026-10-20）
+
+- **前端整体从 Vue 3 切换到 React**（已拍板）。前端架构由罗姐负责从 Vue 迁到 React；
+  AI 助手 UI（`code/frontend/src/views/AssistantView.vue`）也一并改用 React 重做。
+- 迁移完成前，现有 Vue 代码仍在使用、仍可运行；**新写的前端功能一律用 React**，不要再往 Vue 里加新页面/新组件。
+- 迁移完成后，更新本文档中所有 Vue 相关描述与运行命令。
+
 ## 目录结构
 
 - `code/backend/` — 后端，源码全在 `app/`（入口 `app/main.py`）
@@ -43,7 +50,7 @@ npm run build    # vue-tsc 类型检查 + vite build（提交前必须通过）
 ## 代码约定
 
 - 后端分层：`models / schemas / routers / rule_engine / security` 各司其职，不跨层混写
-- 前端：Vue 3 组合式 API + Pinia 状态 + axios 统一封装在 `src/api.ts`
+- 前端（迁移中）：Vue 3 组合式 API + Pinia 状态 + axios 统一封装在 `src/api.ts`；**已决定切 React**（见上「技术栈决策」），新功能用 React 实现
 - 两个 Agent 的输入/输出契约见各自文件顶部 docstring；**替换 Mock 实现时保持接口不变**
 - 提交前确认 `npm run build` 通过（前端类型检查）
 
