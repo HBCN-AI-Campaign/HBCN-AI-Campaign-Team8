@@ -1,152 +1,117 @@
-# AI 助手底座通信契约
+# 慧眼助手：React UI、OpenCode runtime 与业务接口
 
-本模块提供后端智能服务、通信协议和一个隔离的前端助手页面。现有审核/RAG页面不改；前端入口只增加 `/assistant` 路由和顶栏跳转，其他前端、任务编排器和专项审核 Agent 都通过 `/api/assistant` 调用它。
+本文是当前接入说明。早期《开发记录与交接》保留为历史记录，其中旧 UI/SDK 选型不再代表当前实现。
 
-## 技术选型
+## 技术选择与边界
 
-| 层 | 选型 | 边界 |
+| 层 | 当前实现 | 职责 |
 | --- | --- | --- |
-| Agent 编排 | OpenAI Agents SDK Python `0.4.2` | Agent、function tool、流式事件；通过 OpenAI-compatible client 接入模型服务 |
-| 模型服务 | 汇丰提供的阿里云百炼团队 API | `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL`；密钥只放运行环境，不进仓库 |
-| RAG | 现有 `rag_service.RAGClient` | 助手只调用 `search_knowledge_base` 工具，不依赖 RAGFlow 返回格式 |
-| API | FastAPI + JSON + SSE | 会话持久化在 `assistant_sessions` / `assistant_messages` |
+| UI | React 18、Ant Design 5、`@ant-design/x@1.6.1`（MIT） | 直接使用上游 Sender、Bubble、Conversations、ThoughtChain |
+| 状态/路由 | React hooks、Zustand、React Router | 共用主站 JWT 登录，助手路由懒加载 |
+| 文本 | marked 12 + DOMPurify | 流式 Markdown、表格、代码块，清洗不可信 HTML/链接 |
+| 业务后端 | FastAPI `/api/assistant` | 用户/任务授权、证据准备、会话及轨迹持久化 |
+| Agent runtime | `code/assistant-runtime`，`@opencode/sdk@2.0.32` | 隔离运行 OpenCode，调用汇丰模型 API |
+| 知识库 | RAG 会话负责的服务及 `app/rag_service.py` | 通过已有接口检索；本次未修改 RAG 实现 |
 
-前端沿用仓库已有的 Vue 3 + Element Plus，不新增 React 或另一套状态系统。问答体验按成熟 agent UI 的运行状态、工具轨迹和流式 Markdown 组织，通信层适配本项目已有的 FastAPI SSE 契约。助手页面的代码边界如下：
+上游：[Ant Design X](https://github.com/ant-design/x)，[1.6.1 发布元数据](https://registry.npmjs.org/@ant-design%2fx/1.6.1)，[OpenCode](https://github.com/anomalyco/opencode)。固定 X 1.6.1 是因为其 peer dependency 对应现有 Ant Design 5；X 2.9.0 要求 Ant Design 6，不应迁移助手时强制全站升级。组件直接来自 npm 上游，业务适配层负责协议、权限和会话，不复制第二套用户系统/运行时。
 
-### 开源 UI 选型记录
-
-| 项目 | 评估 | 决策 |
-| --- | --- | --- |
-| [CopilotKit](https://github.com/CopilotKit/CopilotKit) / `@copilotkit/vue` | MIT；约 3.8 万 GitHub stars；官方 Vue 3 组件覆盖消息渲染、Markdown、reasoning/activity、tool slots。Vue 消息组件可接收外部消息，因此保留本项目 SSE 与会话 API。 | 采用 `@copilotkit/vue@1.79.1` 的官方 assistant message renderer；组件动态导入，首次问答前不加载其大块运行时。 |
-| [assistant-ui](https://github.com/assistant-ui/assistant-ui) / `@assistant-ui/vue` | MIT；约 1.26 万 stars；Vue 包版本仍为 0.0.x，需要 shared runtime/AI SDK 适配；与当前 FastAPI SSE 消息形状不直接兼容。 | 作为交互设计参考，暂不替换现有传输层。 |
-| [Open WebUI](https://github.com/open-webui/open-webui) | 完整可部署产品，后端、认证和会话体系均较完整；嵌入本项目将形成第二套账户、权限和服务栈。 | 不作为嵌入式组件；参考其工具轨迹、引用和会话交互。 |
-
-本模块采用上游 Vue 消息渲染与 Markdown，不复制其整个产品后端。项目的 Agent SDK、汇丰百炼接口、RAG 调用、JWT 权限和历史会话仍由本仓库负责。上游包携带较大的通用 Agent UI 依赖，因此通过异步组件只在首次助手回答时载入；本次生产构建中 CopilotKit 相关最大异步块约 1.67 MB（gzip 约 463 KB），需要在汇丰部署网络实测首轮答复加载体验。当前仍保留本项目 SSE 和数据库消息契约，没有引入 CopilotKit Runtime 服务。
-
-- `code/frontend/src/assistant/api.ts`：只负责 `/api/assistant` 请求和 SSE 解析。
-- `code/frontend/src/assistant/types.ts`：会话、消息、步骤和引用的前端契约。
-- `code/frontend/src/assistant/markdown.ts`：早期自定义 Markdown helper，目前消息正文改由 CopilotKit Vue renderer 处理；除非重新接入调用点，否则不要把它当作当前渲染入口。
-- `code/frontend/src/views/AssistantView.vue`：三栏助手界面、可折叠执行活动、停止生成、官方 CopilotKit assistant message renderer、工具检索轨迹和证据引用面板，并提供一键复制回复。
-- `code/frontend/src/router/index.ts`、`code/frontend/src/layouts/MainLayout.vue`：仅提供页面入口，不改变现有业务页面。
-
-`openai-agents==0.4.2` 是当前仓库 `pydantic==2.10.3` 的兼容锁定版本，同时锁定 `openai==2.44.0`。这是因为 `openai==2.45.0` 起新增的 usage 字段会让该 Agents SDK 版本在运行前初始化失败。更新 SDK 时必须重新验证 FastAPI/Pydantic 依赖和网关的 Chat Completions 兼容性。
-
-## 权限和业务边界
-
-- 所有助手接口需要 JWT。
-- 会话按 `user_id` 隔离；业务经办人只能带入自己提交的任务，审核人员可以读取任务上下文。
-- 助手可以读取任务材料、规则结果和 RAG 证据，生成解释、风险摘要和人工复核草稿。
-- 助手不能写入任务状态、改写 `CheckResult`、调用 `/complete` 或 `/return`，也不能直接给出贷款最终审批结论。
-- 低置信度、证据冲突或无证据时必须提示人工确认。
-
-## 接口
-
-### `GET /api/assistant/capabilities`
-
-返回 SDK、模型网关、RAG 是否配置以及是否支持流式事件。
-
-### `GET /api/assistant/sessions`
-
-返回当前用户的会话列表。
-
-### `POST /api/assistant/sessions`
-
-```json
-{"title":"提款材料核对","task_code":"FOL LN20260315-008"}
+```mermaid
+flowchart LR
+  U[经办人 / 审核人员] --> UI[React 慧眼助手]
+  UI -->|JWT + JSON / SSE| API[FastAPI assistant 路由]
+  API --> DB[(用户隔离的会话 / 消息 / 轨迹)]
+  API -->|授权适配| RAG[独立 RAG 服务]
+  API -->|私网 token| RT[OpenCode runtime]
+  RT -->|服务端 key| HSBC[汇丰模型 API]
 ```
 
-`task_code` 可省略。带入任务时会立即执行数据级权限校验。
+## 同学如何接入
 
-### `GET /api/assistant/sessions/{session_id}`
+前端导航到 `/assistant?task_code=${encodeURIComponent(taskCode)}`。不传任务编号可做普通问答；任务相关问题应关联任务。切换任务开启新会话，避免混用材料。前后端均保留用户权限检查，前端选择器不是安全边界。
 
-返回会话消息、执行步骤和引用。
+以下 API 均要求 `Authorization: Bearer <JWT>`：
 
-### `POST /api/assistant/sessions/{session_id}/messages/stream`
-
-请求：
-
-```json
-{"content":"请解释当前不通过项，并列出需要人工核对的材料","task_code":"FOL LN20260315-008"}
-```
-
-响应为 `text/event-stream`。每条事件是标准 SSE 的 `event` + JSON `data`：
-
-| 事件 | 关键字段 | 用途 |
+| 方法/路径 | 入参/返回 | 场景 |
 | --- | --- | --- |
-| `message_start` | `message_id`, `task_code` | 创建本轮助手消息 |
-| `step` | `step.key`, `step.label`, `step.status` | 展示执行步骤时间线；不暴露模型内部思维链 |
-| `tool` | `tool.name`, `tool.status` | 展示知识库/证据工具开始和完成 |
-| `delta` | `delta` | 渲染最终答复文本片段；不会转发模型原始 delta |
-| `citations` | `citations[]` | 文件、规则或知识库证据引用 |
-| `message_end` | `message` | 本轮持久化消息和最终状态 |
-| `error` | `message` | 可恢复错误 |
+| `GET /api/assistant/capabilities` | `configured,model,rag_available,sdk,supports_stream,message` | 实际服务就绪状态；不是每轮请求成功保证 |
+| `GET /api/assistant/sessions` | `AssistantSession[]` | 当前用户的会话目录 |
+| `POST /api/assistant/sessions` | `{title,task_code?}` → 会话 | 第一条消息时创建，挂载页面不写库 |
+| `GET /api/assistant/sessions/{id}` | 会话及 `messages[]` | 历史正文、步骤、引用 |
+| `DELETE /api/assistant/sessions/{id}` | `{deleted:true}` | 确认后删除自己的会话 |
+| `GET /api/assistant/skills` | 项目发布的技能目录 | 名称、版本、权限；没有远程安装功能 |
+| `POST /api/assistant/sessions/{id}/messages/stream` | `{content,task_code?,skill_id?}` → SSE | 最多 8000 字，正常结束必须有 `message_end` |
+| `GET /api/tasks?mine=true/false` | 已有任务接口 | 经办人查本人任务；审核人员按现有授权查询 |
 
-前端只需按事件类型更新自己的状态机，不需要知道 Agent SDK 的内部对象。Agent SDK 的原始响应 delta 可能含有思维草稿、工具参数或不完整内容，因此服务端不向浏览器转发这些原始片段；Agent 运行结束后，只对最终 `final_output` 做安全检查，再分片发送 `delta`。因此执行步骤和工具状态会实时显示，答复文本在本轮 Agent 执行结束后才开始出现，不代表逐 token 的模型生成流。
+### SSE 契约
 
-最终输出会检查常见的内部推演/工具规划标记；命中时丢弃模型输出并使用本地审核辅助兜底。历史消息接口也应用相同检查，旧记录若命中则返回“已隐藏”的提示文本，页面正文与复制操作再做一层保护。数据库原始历史不做自动改写，避免静默篡改审计记录。执行轨迹在 `steps` 字段持久化并随会话历史返回；旧记录若没有工具步骤，不会补造历史轨迹。
+事件内容均为 JSON，见 `assistant_schemas.py`、`src/assistant/types.ts`。错误事件的 `message` 是字符串；完成事件的 `message` 是持久化消息对象。
 
-安全标记检测属于纵深防护，不能替代模型网关对 reasoning channel 的正确隔离。上线前仍需确认 HSBC 百炼部署模型不会把隐藏推理放进 `final_output`，并对真实部署模型补充输出回归样例。
+| 事件 | 字段 | UI 行为 |
+| --- | --- | --- |
+| `message_start` | `message_id,task_code` | 本轮开始 |
+| `step` | `step:{key,label,detail?,status}` | 更新同 key 业务步骤 |
+| `tool` | `tool:{name,status,result_count?}` | 真实授权证据读取状态 |
+| `delta` | `delta:string` | 追加公开答复正文 |
+| `citations` | `citations[]` | 引用及页码 |
+| `message_end` | `message:{id,role,content,status,steps,citations}` | 以落库版本为准，结束 loading，自动折叠步骤 |
+| `error` | `message:string` | 显示错误并恢复发送，已有片段标为未完成 |
 
-## 时序图
+未知事件（包括 reasoning）不拼接正文。业务操作轨迹不等于模型内部推理；不请求、不展示内部推理。后端负责最终答复检查与审核权限提示。HTTP 401 清理当前失效登录，由受保护路由保留返回路径；403 不清理登录。
 
 ```mermaid
 sequenceDiagram
-    actor U as 用户/前端
-    participant API as FastAPI assistant router
-    participant DB as AssistantSession/Message
-    participant Agent as OpenAI Agents SDK
-    participant GW as 汇丰百炼 OpenAI-compatible API
-    participant RAG as RAG 知识库服务
-    participant Task as 任务/规则只读数据
-
-    U->>API: POST /sessions/{id}/messages/stream
-    API->>DB: 校验 user_id 与 task_code 权限
-    API->>Task: 读取授权任务材料、规则结果
-    API-->>U: message_start + step(context)
-    API->>Agent: Agent + 受控 search_knowledge_base tool
-    Agent->>RAG: 查询知识库（business_rules / project_design）
-    RAG-->>Agent: 知识库证据片段与来源
-    API->>API: 合并本地任务/规则证据与知识库证据
-    Agent->>GW: OpenAI-compatible 流式请求
-    loop 执行期间
-        GW-->>Agent: 模型原始流事件
-        Agent-->>API: tool / step 状态
-        API-->>U: SSE 活动事件（原始模型 delta 不外发）
-    end
-    Agent-->>API: final_output
-    API->>API: 检查是否包含内部推演标记
-    API-->>U: 安全的最终答复 delta + citations
-    API->>DB: 持久化用户消息和助手消息
-    API-->>U: citations + message_end
+  actor User as 业务人员
+  participant UI as React / Ant Design X
+  participant API as FastAPI
+  participant DB as 会话数据库
+  participant RAG as 知识库
+  participant RT as OpenCode runtime
+  participant LLM as 汇丰模型 API
+  User->>UI: 关联任务、发送问题
+  opt 尚无会话
+    UI->>API: POST sessions（JWT、task_code）
+    API->>DB: 验证权限并创建
+    API-->>UI: session.id
+  end
+  UI->>API: POST messages/stream
+  API->>DB: 保存用户消息、加载授权任务证据
+  API->>RAG: 通过已有 RAGClient 检索
+  RAG-->>API: 证据 / 不可用提示
+  API->>RT: /runs（限本轮授权证据）
+  RT->>LLM: 服务端 key 调用
+  RT-->>API: 工具 / 执行 / 答复事件
+  API-->>UI: step / tool / delta / citations
+  UI-->>User: 答复与可展开的执行轨迹
+  API->>DB: 保存最终答复、步骤、引用
+  API-->>UI: message_end
+  UI-->>User: 自动折叠轨迹，结论须授权人员确认
 ```
 
-任务材料和规则结果由助手后端按当前用户权限直接读取；RAG 仅负责知识库检索，不接收或替代任务权限校验。任务会话也只查询 `knowledge_base` 范围；RAG 暂不支持 `task_documents` 时，不会因此跳过知识库检索。
+停止会取消客户端请求和 reader；已写入的用户消息不会回滚，片段不代表完整结论。若没有 `message_end` 就断流，显示中断，不能无限等待或伪装完成。
 
-## 运行配置
+## 环境与部署
 
-本项目默认使用汇丰比赛提供的百炼团队 API。复制 `code/backend/.env.example` 为 `.env`，并配置：
+1. 按 `code/backend/.env.example` 配置主后端：`ASSISTANT_RUNTIME_URL`、`ASSISTANT_RUNTIME_TOKEN`、`RAG_BASE_URL`、`RAG_SERVICE_TOKEN`。各 token 与对应服务匹配。
+2. 按 `code/assistant-runtime/.env.example` 配置 runtime：汇丰授权 `AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL` 及 runtime token。本机验证模型为 `qwen3.8-flash`。真实 key 不写入文档/前端，不依赖个人 CC Switch 或中转站。
+3. runtime 目录执行 `bun install --frozen-lockfile`、`bun run start`（默认 8090）。主后端执行 `.venv\Scripts\python -m app.seed`（首次）、`.venv\Scripts\python -m uvicorn app.main:app --port 8000`。RAG 按其文档启动（默认 8010）。
+4. 前端执行 `npm ci`、`npm run dev`，访问 5173。主后端本机改用 8001 时，在忽略提交的 `.env.local` 设置 `HBCN_API_TARGET=http://127.0.0.1:8001`，重启 Vite。
+5. 生产部署使用 `dist/` 与 SPA 回退；`/api`、`/pdf`、`/uploads` 代理主后端。SSE 关闭代理缓冲，延长读超时。runtime/token/key 只在私网服务端可见，不直接对浏览器暴露。
 
-```dotenv
-AI_BASE_URL=https://llm-tlndh47wd9ustbss.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
-AI_API_KEY=<从汇丰安全渠道获取的 refresh 后团队密钥>
-AI_MODEL=qwen3.8-flash
-AI_REQUEST_TIMEOUT=45
-RAG_BASE_URL=http://127.0.0.1:8010
-RAG_SERVICE_TOKEN=<与 rag-service 的 SERVICE_TOKEN 相同>
-RAG_REQUEST_TIMEOUT=15
-```
+拉取代码后必须通过团队授权方式取得环境配置；仓库只提供模板，没有 key 的电脑不能直接调用模型。RAG UI 独立构建到 `code/rag-service/app/static/ui-build`，由 RAG 服务提供 `/ui/`。
 
-`AI_API_KEY` 应由本机环境变量或部署平台 Secret 注入；团队成员从 Git 拉取代码后，需通过汇丰指定的安全渠道取得同一团队的有效 refresh 密钥，再在各自运行环境设置该变量。不要把 CSV、密钥、`.env` 或密钥写入前端构建变量，也不要通过 Git/聊天记录分发。生产部署还需由部署负责人把该 Secret 配置到 HSBC ECS 的服务运行环境。仅拉取仓库不会自动获得团队密钥，这是凭证管理的必要边界。
-
-模型连接走汇丰百炼 OpenAI 兼容接口的**直连地址**，不经过任何本地代理（如 CCSwitch）。`code/assistant-runtime` 启动时会清除继承的 `HTTP(S)_PROXY` / `ALL_PROXY` 环境变量并设置 `NO_PROXY=*`，确保始终直连 `AI_BASE_URL`；不要在本机代理或 CCSwitch 中拦截该域名，也不要为汇丰模型地址配置代理转发。
-
-本地启动完整助手时，先启动 `code/rag-service`（端口 `8010`），并在两个服务的忽略 `.env` 中分别配置 `SERVICE_TOKEN` 和同值的 `RAG_SERVICE_TOKEN`。RAG 的百炼 Embedding/视觉模型使用汇丰团队 API Key；rag-service 的 `SERVICE_TOKEN` 只是内部服务鉴权，不是模型 API Key。部署到 ECS 时将 `RAG_BASE_URL` 改为服务可达的内网地址，并把两项 Secret 配置到后端运行环境。`rag_available` 表示连接配置已启用；实际检索依赖 RAG 服务已启动且对应知识库已索引。
-
-可在 PowerShell 当前进程中设置本地密钥后启动后端：
+## 验证与交接
 
 ```powershell
-$env:AI_API_KEY = "<从汇丰安全渠道获取的 refresh 后团队密钥>"
-python -m uvicorn app.main:app --port 8000
+cd code/frontend
+npm ci
+npm test
+npm run build
+cd ../backend
+.venv\Scripts\python -m unittest tests.test_assistant_api
+cd ../rag-service/ui
+npm run build
 ```
 
-Linux/macOS 服务进程可通过部署平台 Secret 或 systemd `EnvironmentFile` 注入相同变量。未配置模型服务时，接口仍可启动并返回本地演示回答；该模式仅用于界面联调，不代表模型 API 已配置成功。
+前端测试使用真实 Ant Design X 组件，模拟网络边界，覆盖首条发送、进度/折叠、引用、停止、断流、失败保留草稿、历史、任务技能、401；不替代真实模型验证。真实链路结果见 [React迁移与验证记录](React迁移与验证记录.md)。
+
+多人共享聊天室、邀请专家、远程技能商店尚未实现；会话仍为用户私有，不能分享 session ID 绕过权限。后续须独立定义成员/可见性/审计契约。

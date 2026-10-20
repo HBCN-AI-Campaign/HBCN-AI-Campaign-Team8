@@ -8,19 +8,17 @@
 硬核检查 → **专项审核 Agent** 处理外部能力项 → 给出通过 / 不通过 / 需人工处置结论。
 
 - 后端：FastAPI + SQLAlchemy（Python）
-- 前端：Vite + Vue 3 + TypeScript + Element Plus
+- 前端：Vite + React 18 + TypeScript + Ant Design 5；助手使用 Ant Design X
 - 两个核心模块当前是 **Mock 桩**，待协作实现：
   - `code/backend/app/parse_agent.py` — 文件解析 Agent（OCR/LLM 识别字段 + 定位原文位置）
   - `code/backend/app/review_agent.py` — 专项审核 Agent（节假日/汇率/提单验真/制裁名单/法规检索）
 
 ## 技术栈决策（重要 · 2026-10-20）
 
-- **前端整体从 Vue 3 切换到 React**（已拍板）。前端架构由罗姐负责从 Vue 迁到 React；
-  AI 助手 UI（`code/frontend/src/views/AssistantView.vue`）也一并改用 React 重做。
-- **RAG 知识库工作台（`code/rag-service/ui`）同样切 React**：该目录当前是 Vue 3 + Element Plus，属于架构错位，
-  正在改为 Vite + React + TypeScript（构建产物仍输出到 `app/static/ui-build`，由 rag-service 在 `/ui/` 提供）。
-- 迁移完成前，现有 Vue 代码仍在使用、仍可运行；**新写的前端功能一律用 React**，不要再往 Vue 里加新页面/新组件。
-- 迁移完成后，更新本文档中所有 Vue 相关描述与运行命令。
+- **自有前端统一 React**：`code/frontend` 和 `code/rag-service/ui` 均为 Vite + React + TypeScript；助手入口为 `src/views/AssistantView.tsx`。
+- RAG UI 构建产物仍输出到 `app/static/ui-build`，由 rag-service 在 `/ui/` 提供。不要覆盖 RAG 会话负责的后端与适配层。
+- 新功能使用 React；聊天、消息、执行轨迹优先采用成熟上游组件，只编写本项目业务适配，不自建通用 Agent 框架或聊天组件库。选型及许可证记录在模块文档。
+- 助手底层使用 `code/assistant-runtime` 的 OpenCode SDK；模型凭证只在服务端配置，使用汇丰提供的 API，不依赖个人 CC Switch。
 
 ## 目录结构
 
@@ -47,19 +45,23 @@ python -m venv .venv
 ```
 npm install
 npm run dev      # Vite 开发服务器，端口 5173，/api 代理到后端 8000
-npm run build    # vue-tsc 类型检查 + vite build（提交前必须通过）
+npm run build    # tsc -b 类型检查 + vite build（提交前必须通过）
+npm test         # 助手接口、Markdown 安全与 React 交互回归
 ```
+
+后端端口冲突时，在 `code/frontend/.env.local` 设置 `HBCN_API_TARGET`；不要把 RAG 端口当作主业务 API。RAG UI 在 `code/rag-service/ui` 下执行 `npm ci && npm run build`。
 
 ## 代码约定
 
 - 后端分层：`models / schemas / routers / rule_engine / security` 各司其职，不跨层混写
-- 前端（迁移中）：Vue 3 组合式 API + Pinia 状态 + axios 统一封装在 `src/api.ts`；**已决定切 React**（见上「技术栈决策」），新功能用 React 实现
+- 前端：React 函数组件 + hooks，Zustand 管理鉴权，React Router 管理受保护路由；JSON 请求在 `src/api.ts`，助手 JSON/SSE 在 `src/assistant/api.ts`
 - 两个 Agent 的输入/输出契约见各自文件顶部 docstring；**替换 Mock 实现时保持接口不变**
 - 提交前确认 `npm run build` 通过（前端类型检查）
 
 ## 测试
 
-- 当前无自动化测试套件；改动后端后至少确认 `uvicorn` 能正常启动、`/docs` 可访问
+- 助手后端回归：`cd code/backend && python -m unittest tests.test_assistant_api`；前端：`cd code/frontend && npm test && npm run build`
+- 其他后端改动后至少确认 `uvicorn` 能正常启动、`/docs` 可访问
 - 新增逻辑尽量补测试；接口契约以 docstring 为准
 
 ## 安全注意事项

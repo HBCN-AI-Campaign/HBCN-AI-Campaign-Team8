@@ -7,12 +7,11 @@ import type {
   AssistantTaskOption,
 } from './types'
 import { useAuthStore } from '@/stores/auth'
-import router from '@/router'
 
 const base = '/api/assistant'
 
 function token(): string {
-  return localStorage.getItem('token') || ''
+  return useAuthStore.getState().token
 }
 
 function headers(json = false): HeadersInit {
@@ -22,19 +21,18 @@ function headers(json = false): HeadersInit {
   }
 }
 
-function rejectExpiredSession(): Error {
-  useAuthStore().logout()
-  const current = router.currentRoute.value
-  if (current.name !== 'login') {
-    void router.replace({ name: 'login', query: { redirect: current.fullPath } })
-  }
+function rejectExpiredSession(requestToken: string): Error {
+  // ProtectedRoute reacts to the store and retains the current URL for login.
+  // An old request must not sign out a user who has since logged in again.
+  if (token() === requestToken) useAuthStore.getState().logout()
   return new Error('登录已过期，请重新登录')
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const requestToken = token()
   const response = await fetch(url, init)
   if (!response.ok) {
-    if (response.status === 401) throw rejectExpiredSession()
+    if (response.status === 401) throw rejectExpiredSession(requestToken)
     const body = await response.json().catch(() => ({})) as { detail?: string }
     throw new Error(body.detail || `助手请求失败（${response.status}）`)
   }
@@ -75,6 +73,7 @@ export const assistantApi = {
   },
 
   async *streamMessage(id: number, content: string, taskCode?: string, skillId?: string, signal?: AbortSignal): AsyncGenerator<AssistantStreamEvent> {
+    const requestToken = token()
     const response = await fetch(`${base}/sessions/${id}/messages/stream`, {
       method: 'POST',
       headers: { ...headers(true), Accept: 'text/event-stream' },
@@ -82,9 +81,12 @@ export const assistantApi = {
       signal,
     })
     if (!response.ok || !response.body) {
-      if (response.status === 401) throw rejectExpiredSession()
+      if (response.status === 401) throw rejectExpiredSession(requestToken)
       const body = await response.json().catch(() => ({})) as { detail?: string }
       throw new Error(body.detail || `助手流式请求失败（${response.status}）`)
+    }
+    if (!response.headers.get('content-type')?.includes('text/event-stream')) {
+      throw new Error('助手未返回事件流，请检查前端代理和后端地址')
     }
 
     const reader = response.body.getReader()
@@ -100,14 +102,16 @@ export const assistantApi = {
         for (const frame of frames) {
           const data = frame.split(/\r?\n/).filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trimStart()).join('\n')
           if (data) {
-            const event = JSON.parse(data) as AssistantStreamEvent
-            if (event.event === 'error') event.error_message = (event as AssistantStreamEvent & { message?: string }).message
+            const raw = JSON.parse(data)
+            const event = raw as AssistantStreamEvent
+            if (event.event === 'error') event.error_message = typeof raw.message === 'string' ? raw.message : '助手请求失败'
             yield event
           }
         }
         if (done) break
       }
     } finally {
+      await reader.cancel().catch(() => undefined)
       reader.releaseLock()
     }
   },
