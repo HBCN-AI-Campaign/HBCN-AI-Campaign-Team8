@@ -21,13 +21,8 @@ import { useAuthStore } from '@/stores/auth'
 import type { TaskOut } from '@/types'
 import { fmt, statusText, statusType } from '@/utils'
 
-// ---- 搜索条件下拉 ----
-const STATUS_OPTIONS = [
-  { value: 'created', label: '待受理' },
-  { value: 'reviewing', label: '审核中' },
-  { value: 'need_supplement', label: '待补件' },
-  { value: 'completed', label: '已完成' },
-]
+// ---- 搜索条件下拉（底层状态值，label 在组件内按角色渲染）----
+const STATUS_VALUES = ['pending', 'ai_reviewing', 'to_recheck', 'need_supplement', 'completed']
 
 interface SearchState {
   status: string
@@ -63,8 +58,11 @@ function fmtDate(iso?: string | null): string {
 
 function matchTab(status: string, t: string): boolean {
   if (t === 'all') return true
-  if (t === 'progress') return status === 'created' || status === 'reviewing'
-  if (t === 'to_review') return status === 'need_supplement' || status === 'supplemented'
+  // 经办人「进行中」= 待处理 + 智能审核中 + 待复核
+  if (t === 'progress')
+    return status === 'pending' || status === 'ai_reviewing' || status === 'to_recheck'
+  // 审核人「待复核」= 待复核 + 退回待补件（均在复核流程内）
+  if (t === 'to_review') return status === 'to_recheck' || status === 'need_supplement'
   return status === t
 }
 
@@ -87,8 +85,8 @@ export default function DashboardView() {
       ]
     : [
         { value: 'all', label: '全部' },
-        { value: 'created', label: '待受理' },
-        { value: 'reviewing', label: '审核中' },
+        { value: 'pending', label: '待处理' },
+        { value: 'ai_reviewing', label: '智能审核中' },
         { value: 'to_review', label: '待复核' },
         { value: 'completed', label: '已完成' },
       ]
@@ -98,14 +96,17 @@ export default function DashboardView() {
   // 单条任务是否命中搜索条件
   const matchSearch = (x: TaskOut): boolean => {
     if (search.status && x.status !== search.status) return false
-    if (search.borrower && !x.borrower.toLowerCase().includes(search.borrower.toLowerCase()))
-      return false
+    if (search.borrower) {
+      const k = search.borrower.toLowerCase()
+      const inBorrower = x.borrower.toLowerCase().includes(k)
+      const inCustName = (x.customer_name ?? '').toLowerCase().includes(k)
+      if (!inBorrower && !inCustName) return false
+    }
     if (search.contract && !x.task_code.toLowerCase().includes(search.contract.toLowerCase()))
       return false
     if (search.customerNo) {
       const k = search.customerNo.toLowerCase()
-      if (!x.task_code.toLowerCase().includes(k) && !x.borrower.toLowerCase().includes(k))
-        return false
+      if (!(x.customer_no ?? '').toLowerCase().includes(k)) return false
     }
     if (search.dateRange && search.dateRange[0] && search.dateRange[1]) {
       const dk = dateKey(x.created_at)
@@ -131,7 +132,18 @@ export default function DashboardView() {
   }, [isOperator])
 
   const columns: TableColumnsType<TaskOut> = [
-    { title: '任务编号 / 贷款合同', dataIndex: 'task_code', width: 210 },
+    { title: '任务编号', dataIndex: 'task_code', width: 130 },
+    {
+      title: '客户号',
+      dataIndex: 'customer_no',
+      width: 110,
+      render: (_, row) =>
+        row.customer_no ? (
+          <Tag>{row.customer_no}</Tag>
+        ) : (
+          <span style={{ color: 'var(--muted)' }}>—</span>
+        ),
+    },
     { title: '借款人（客户名）', dataIndex: 'borrower' },
     {
       title: '金额',
@@ -141,7 +153,7 @@ export default function DashboardView() {
     {
       title: '状态（节点）',
       width: 120,
-      render: (_, row) => <Tag color={statusType(row.status)}>{statusText(row.status)}</Tag>,
+      render: (_, row) => <Tag color={statusType(row.status)}>{statusText(row.status, role)}</Tag>,
     },
     {
       title: '提交时间',
@@ -200,7 +212,7 @@ export default function DashboardView() {
               placeholder="全部节点"
               allowClear
               style={{ width: 150 }}
-              options={STATUS_OPTIONS}
+              options={STATUS_VALUES.map((v) => ({ value: v, label: statusText(v, role) }))}
               onChange={(v) => setSearch((s) => ({ ...s, status: v || '' }))}
             />
           </Form.Item>
@@ -222,10 +234,10 @@ export default function DashboardView() {
               onChange={(e) => setSearch((s) => ({ ...s, borrower: e.target.value }))}
             />
           </Form.Item>
-          <Form.Item label="贷款合同" style={{ marginBottom: 12 }}>
+          <Form.Item label="任务编号" style={{ marginBottom: 12 }}>
             <Input
               value={search.contract}
-              placeholder="合同号/任务编号"
+              placeholder="任务编号"
               allowClear
               style={{ width: 180 }}
               onChange={(e) => setSearch((s) => ({ ...s, contract: e.target.value }))}

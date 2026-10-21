@@ -50,6 +50,22 @@ class User(Base):
 # ============================================================
 # 业务实体（切片子集）
 # ============================================================
+class Customer(Base):
+    """客户主数据：客户号 + 客户名称。
+
+    客户号 `customer_no` 为对外展示/检索的业务编号（唯一），`name` 为客户名称。
+    创建审核任务时按客户号关联到 ReviewTask。
+    """
+    __tablename__ = "customers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    customer_no: Mapped[str] = mapped_column(String(32), unique=True, index=True)  # C0001
+    name: Mapped[str] = mapped_column(String(256), index=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)
+
+    tasks: Mapped[list["ReviewTask"]] = relationship(back_populates="customer")
+
+
 class DocumentType(str, enum.Enum):
     FACILITY_LETTER = "FACILITY_LETTER"
     DRAWDOWN_INSTRUCTION = "DRAWDOWN_INSTRUCTION"
@@ -62,22 +78,29 @@ class DocumentType(str, enum.Enum):
 
 
 class TaskStatus(str, enum.Enum):
-    CREATED = "created"                     # 经办人已提交，待审核人受理
-    REVIEWING = "reviewing"                 # 审核中（规则核对 / agent / 人工终审统一为此态）
+    PENDING = "pending"                     # 待处理：经办人创建后 / 补件后，等待审核人开始智能审核
+    AI_REVIEWING = "ai_reviewing"           # 智能审核中：审核人已启动 AI 智能审核
+    TO_RECHECK = "to_recheck"               # 待复核：智能审核完成，等待审核人复核并完成
     NEED_SUPPLEMENT = "need_supplement"     # 待补件：审核人退回，需经办人补充材料
-    SUPPLEMENTED = "supplemented"           # 已补件：经办人已补充并重新提交，待审核人复核
-    COMPLETED = "completed"                 # 审核通过，已完成
+    COMPLETED = "completed"                 # 已完成：审核通过，已归档
 
 
 class ReviewTask(Base):
     __tablename__ = "review_tasks"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    task_code: Mapped[str] = mapped_column(String(64), unique=True, index=True)  # FOL LN20260315-008
+    task_code: Mapped[str] = mapped_column(String(64), unique=True, index=True)  # 2026-0001（自增生成）
+    customer_id: Mapped[int | None] = mapped_column(
+        ForeignKey("customers.id"), index=True, nullable=True
+    )
     borrower: Mapped[str] = mapped_column(String(256))
     drawdown_currency: Mapped[str] = mapped_column(String(8))
     drawdown_amount: Mapped[float] = mapped_column(Numeric(18, 2))
-    status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), default=TaskStatus.CREATED)
+    status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), default=TaskStatus.PENDING)
+
+    # 字段被编辑（经办人/审核人修改抓取内容）后置 True，提示需重新核对；
+    # 重新核对（run_checks）完成后置回 False。
+    needs_recheck: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # 审核人退回补件时填写的说明（经办人补件时可见）
     review_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -87,6 +110,7 @@ class ReviewTask(Base):
     submitted_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)
 
+    customer: Mapped["Customer | None"] = relationship(back_populates="tasks")
     documents: Mapped[list["Document"]] = relationship(
         back_populates="task", cascade="all, delete-orphan"
     )

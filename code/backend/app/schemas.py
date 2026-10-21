@@ -12,6 +12,15 @@ class Token(BaseModel):
     display_name: str
 
 
+# --- customers ---
+class CustomerOut(BaseModel):
+    """客户主数据对外 DTO。"""
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    customer_no: str
+    name: str
+
+
 # --- documents ---
 class DocumentIn(BaseModel):
     doc_code: str
@@ -28,7 +37,8 @@ class DocumentOut(DocumentIn):
 
 # --- tasks ---
 class TaskCreate(BaseModel):
-    task_code: str
+    # 任务编号由后端自增生成（2026-0001），前端不再传入
+    customer_no: str | None = None   # 关联客户号（经办人识别/搜索选定）
     borrower: str
     drawdown_currency: str
     drawdown_amount: float
@@ -39,10 +49,13 @@ class TaskOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     task_code: str
+    customer_no: str | None = None         # 客户号
+    customer_name: str | None = None       # 客户名称
     borrower: str
     drawdown_currency: str
     drawdown_amount: float
     status: str
+    needs_recheck: bool = False            # 字段被编辑后待重新核对
     created_at: datetime | None = None
     review_comment: str | None = None      # 审核人退回补件说明
     supplement_note: str | None = None     # 经办人补件说明
@@ -89,13 +102,24 @@ class SupplementIn(BaseModel):
     added_files: list[str] = []                      # 新补充的文件名（仅登记，便于展示）
 
 
+# --- 字段级编辑（经办人/审核人更正抓取内容）---
+class DocFieldUpdate(BaseModel):
+    field_key: str          # 字段键
+    value: object = None    # 新值（字符串 / 数字 / 列表等）
+
+
+class DocFieldsUpdateIn(BaseModel):
+    """批量更新一份单据的若干字段值。"""
+    updates: list[DocFieldUpdate] = []
+
+
 # --- 工作台统计 ---
 class DashboardStats(BaseModel):
     total_tasks: int        # 全部（经办人视角=我提交的；审核人视角=系统全部）
-    created: int            # 待受理（经办人视角计入"进行中"）
-    reviewing: int          # 审核中
+    pending: int            # 待处理
+    ai_reviewing: int       # 智能审核中
+    to_recheck: int         # 待复核
     need_supplement: int    # 待补件
-    supplemented: int = 0   # 已补件（待复核）
     completed: int          # 已完成
 
 
@@ -138,6 +162,9 @@ class ParseResult(BaseModel):
     suggested_borrower: str
     suggested_currency: str
     suggested_amount: float
+    # 按借款人名称匹配到的客户（可空；经办人可在前端重新搜索选定）
+    suggested_customer_no: str | None = None
+    suggested_customer_name: str | None = None
     documents: list[ParsedDocument]
 
 

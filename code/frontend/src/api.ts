@@ -4,6 +4,7 @@ import type { MessageInstance } from 'antd/es/message/interface'
 import { useAuthStore } from '@/stores/auth'
 import type {
   CheckResult,
+  Customer,
   DashboardStats,
   LoginResp,
   ParseResult,
@@ -72,13 +73,36 @@ export const api = {
     return data
   },
 
-  async listTasks(mine = false): Promise<TaskOut[]> {
-    const { data } = await http.get<TaskOut[]>('/api/tasks', { params: { mine } })
+  async listTasks(mine = false, customerNo?: string): Promise<TaskOut[]> {
+    const params: Record<string, unknown> = { mine }
+    if (customerNo) params.customer_no = customerNo
+    const { data } = await http.get<TaskOut[]>('/api/tasks', { params })
+    return data
+  },
+
+  // 客户搜索（按客户号 / 名称模糊）——创建任务、筛选均用
+  async searchCustomers(q = '', limit = 20): Promise<Customer[]> {
+    const { data } = await http.get<Customer[]>('/api/customers', {
+      params: { q, limit },
+    })
     return data
   },
 
   async taskDetail(code: string): Promise<TaskDetail> {
     const { data } = await http.get<TaskDetail>(`/api/tasks/${encodeURIComponent(code)}`)
+    return data
+  },
+
+  // 更正单据字段抓取值（经办人/审核人皆可）→ 返回最新任务详情（含 needs_recheck）
+  async updateDocFields(
+    code: string,
+    docId: number,
+    updates: { field_key: string; value: unknown }[],
+  ): Promise<TaskDetail> {
+    const { data } = await http.patch<TaskDetail>(
+      `/api/tasks/${encodeURIComponent(code)}/documents/${docId}/fields`,
+      { updates },
+    )
     return data
   },
 
@@ -139,6 +163,14 @@ export const api = {
   async aiStart(code: string): Promise<AISession> {
     const { data } = await http.post<AISession>(
       `/api/tasks/${encodeURIComponent(code)}/ai/start`, {}, { timeout: 60000 },
+    )
+    return data
+  },
+
+  // 智能审核：播放完成后，任务进入「待复核」
+  async aiComplete(code: string): Promise<TaskOut> {
+    const { data } = await http.post<TaskOut>(
+      `/api/tasks/${encodeURIComponent(code)}/ai/complete`, {},
     )
     return data
   },

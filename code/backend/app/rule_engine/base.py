@@ -64,8 +64,10 @@ class DocBundle:
         if not src:
             return None
         return {
+            "doc_id": meta.get("doc_id"),
             "doc_code": meta.get("doc_code"),
             "type_code": type_code,
+            "field_key": field_key,
             "pdf_file": meta.get("pdf_file"),
             "page": src.get("page", 1),
             "bbox": src.get("bbox"),

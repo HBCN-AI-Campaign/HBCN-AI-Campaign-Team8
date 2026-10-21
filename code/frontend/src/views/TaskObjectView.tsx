@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   App as AntdApp,
@@ -12,6 +12,7 @@ import {
   Empty,
   Form,
   Input,
+  Modal,
   Progress,
   Result,
   Row,
@@ -20,11 +21,13 @@ import {
   Table,
   Tabs,
   Tag,
+  Tooltip,
 } from 'antd'
 import {
   ArrowLeftOutlined,
   CheckOutlined,
   DownloadOutlined,
+  EditOutlined,
   EyeOutlined,
   FileDoneOutlined,
   MailOutlined,
@@ -35,6 +38,7 @@ import {
 } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { useAuthStore } from '@/stores/auth'
+import { api } from '@/api'
 import { checkText, checkType, DIMENSION_NAME, fmt, statusText, statusType, typeLabel } from '@/utils'
 import PdfSourceViewer from '@/components/PdfSourceViewer'
 import type { AIPending, CheckResult, DocumentOut } from '@/types'
@@ -42,6 +46,8 @@ import { useChecks, toRows, type RowData } from './task-object/hooks/useChecks'
 import { useAiSession } from './task-object/hooks/useAiSession'
 import { usePdfLocator } from './task-object/hooks/usePdfLocator'
 import { useSupplement } from './task-object/hooks/useSupplement'
+import { useObjectGraph } from './task-object/hooks/useObjectGraph'
+import ObjectGraph from './task-object/ObjectGraph'
 
 const statColor: Record<string, string> = {
   pass: 'var(--green)',
@@ -63,7 +69,6 @@ export default function TaskObjectView() {
     setDetail,
     results,
     loading,
-    running,
     acting,
     comment,
     setComment,
@@ -78,20 +83,26 @@ export default function TaskObjectView() {
     copyMail,
     load,
     refreshResults,
-    run,
+    patchFieldValue,
     doReturn,
     doComplete,
   } = checks
 
-  const ai = useAiSession(code, async () => {
-    await refreshResults()
-  })
+  const ai = useAiSession(
+    code,
+    async () => {
+      await refreshResults()
+    },
+    (status) => setDetail((prev) => (prev ? { ...prev, status } : prev)),
+  )
 
   const pdf = usePdfLocator(detail, message)
   const supp = useSupplement(code, (d) => setDetail(d), message)
 
-  const canSupplement =
-    !canReview && (detail?.status === 'need_supplement' || detail?.status === 'supplemented')
+  // 对象链路图 + 支付指令↔支持性材料匹配 + 节点状态灯
+  const graph = useObjectGraph(detail, results)
+
+  const canSupplement = !canReview && detail?.status === 'need_supplement'
 
   // 初始加载：详情 + 结果
   useEffect(() => {
@@ -113,14 +124,69 @@ export default function TaskObjectView() {
   }, [ai.aiWaiting, ai.aiRunning, ai.thoughtLines.length])
 
   // ======= Tab 1：规则审核结果 =======
+  // 字段编辑（经办人/审核人皆可更正抓取内容）
+  const [editRow, setEditRow] = useState<{
+    docId: number
+    fieldKey: string
+    label: string
+  } | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
+
+  const openEdit = (row: RowData) => {
+    const s = row.source
+    if (!s?.doc_id || !s?.field_key) {
+      message.info('该行无法定位到具体单据字段，暂不支持编辑')
+      return
+    }
+    setEditRow({ docId: s.doc_id, fieldKey: s.field_key, label: row.label })
+    setEditValue(row.value)
+  }
+
+  const saveEdit = async () => {
+    if (!editRow) return
+    setSavingEdit(true)
+    try {
+      const updated = await api.updateDocFields(code, editRow.docId, [
+        { field_key: editRow.fieldKey, value: editValue },
+      ])
+      setDetail(updated) // 后端已自动重跑核对
+      // 先即时把该字段显示值换成新值，再拉取最新核对结果
+      patchFieldValue(editRow.docId, editRow.fieldKey, editValue)
+      setEditRow(null)
+      await refreshResults()
+      message.success('已更新并自动重新核对')
+    } catch {
+      /* 拦截器已提示 */
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
   const detailColumns: ColumnsType<RowData> = [
     { title: '项目', dataIndex: 'label', width: 180 },
     {
       title: '值',
       dataIndex: 'value',
-      render: (v: string, row) => (
-        <span className={row.flag === 'bad' ? 'badvalue' : undefined}>{v}</span>
-      ),
+      render: (v: string, row) => {
+        const editable = !!(row.source?.doc_id && row.source?.field_key)
+        return (
+          <span className="rule-value-cell">
+            <span className={row.flag === 'bad' ? 'badvalue' : undefined}>{v}</span>
+            {editable && (
+              <Tooltip title="更正该字段抓取值">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<EditOutlined />}
+                  className="rule-edit-btn"
+                  onClick={() => openEdit(row)}
+                />
+              </Tooltip>
+            )}
+          </span>
+        )
+      },
     },
     {
       title: '原文定位',
@@ -150,11 +216,6 @@ export default function TaskObjectView() {
         ) : (
           <span className="muted">尚未核对</span>
         )}
-        {canReview && (
-          <Button type="primary" icon={<FileDoneOutlined />} loading={running} onClick={() => void run()}>
-            {results.length ? '重新核对' : '开始规则核对'}
-          </Button>
-        )}
       </div>
 
       {!canReview && (
@@ -162,72 +223,84 @@ export default function TaskObjectView() {
           type="info"
           showIcon
           style={{ margin: '10px 0' }}
-          message="规则核对由审核人员执行，您可查看核对结果。"
+          message="核对结果在任务创建时已自动生成。如发现抓取内容有误，可在下方结果中点击字段旁的编辑图标更正，系统将自动重新核对。"
         />
       )}
 
-      {detail && (
-        <div className="docs">
-          <span className="muted">已归集单据：</span>
-          {detail.documents.map((d) => (
-            <Tag
-              key={d.id}
-              className={`doctag${d.pdf_file ? ' clickable' : ''}`}
-              onClick={() => d.pdf_file && pdf.viewDoc(d.id)}
-            >
-              {d.doc_code} · {d.type_code}
-              {d.pdf_file && <EyeOutlined className="doc-eye" />}
-            </Tag>
-          ))}
-        </div>
-      )}
-
-      {!results.length ? (
-        <Empty description="尚未核对，点击右上角「开始规则核对」" />
-      ) : (
-        <Collapse
-          accordion
-          items={results.map((r: CheckResult) => ({
-            key: r.rule_id,
-            label: (
-              <span>
-                <Tag color={checkType(r.status)} style={{ marginRight: 10 }}>
-                  {checkText(r.status)}
-                </Tag>
-                <span className="rname">{r.rule_name}</span>
-                <Tag style={{ marginLeft: 10 }}>
-                  {r.dimension} · {DIMENSION_NAME[r.dimension]}
-                </Tag>
-                <code className="rid">{r.rule_id}</code>
-              </span>
-            ),
-            children: (
-              <div>
-                <div className="why">
-                  <strong>判定说明：</strong>
-                  {r.why}
-                </div>
-                {r.detail?.length > 0 && (
-                  <Table<RowData>
-                    columns={detailColumns}
-                    dataSource={toRows(r.detail)}
-                    size="small"
-                    bordered
-                    pagination={false}
-                    style={{ margin: '10px 0' }}
-                  />
-                )}
-                {r.suggestion && (
-                  <div className="sug">
-                    <strong>处理建议：</strong>
-                    {r.suggestion}
+      <Row gutter={16} style={{ marginTop: 10 }}>
+        {/* 左：规则核对结果（主内容，占更宽） */}
+        <Col xs={24} lg={16}>
+          {!results.length ? (
+            <Empty description="暂无核对结果" />
+          ) : (
+            <Collapse
+              accordion
+              items={results.map((r: CheckResult) => ({
+                key: r.rule_id,
+                label: (
+                  <span>
+                    <Tag color={checkType(r.status)} style={{ marginRight: 10 }}>
+                      {checkText(r.status)}
+                    </Tag>
+                    <span className="rname">{r.rule_name}</span>
+                    <Tag style={{ marginLeft: 10 }}>
+                      {r.dimension} · {DIMENSION_NAME[r.dimension]}
+                    </Tag>
+                    <code className="rid">{r.rule_id}</code>
+                  </span>
+                ),
+                children: (
+                  <div>
+                    <div className="why">
+                      <strong>判定说明：</strong>
+                      {r.why}
+                    </div>
+                    {r.detail?.length > 0 && (
+                      <Table<RowData>
+                        columns={detailColumns}
+                        dataSource={toRows(r.detail)}
+                        size="small"
+                        bordered
+                        pagination={false}
+                        style={{ margin: '10px 0' }}
+                      />
+                    )}
+                    {r.suggestion && (
+                      <div className="sug">
+                        <strong>处理建议：</strong>
+                        {r.suggestion}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ),
-          }))}
-        />
-      )}
+                ),
+              }))}
+            />
+          )}
+        </Col>
+
+        {/* 右：对象链路树（可折叠；左侧规则很长时右侧可缩起避免失衡） */}
+        <Col xs={24} lg={8}>
+          <Collapse
+            defaultActiveKey={['graph']}
+            className="og-collapse"
+            items={[
+              {
+                key: 'graph',
+                label: <span className="og-collapse-title">🔗 对象链路（业务对象为主键）</span>,
+                children: detail ? (
+                  <ObjectGraph
+                    nodes={graph.nodes}
+                    supports={graph.supports}
+                    onView={(docId) => pdf.viewDoc(docId)}
+                  />
+                ) : (
+                  <Empty description="加载中…" />
+                ),
+              },
+            ]}
+          />
+        </Col>
+      </Row>
     </>
   )
 
@@ -557,14 +630,10 @@ export default function TaskObjectView() {
           ) : canSupplement ? (
             <>
               <Alert
-                type={detail?.status === 'supplemented' ? 'info' : 'warning'}
+                type="warning"
                 showIcon
                 style={{ marginBottom: 14 }}
-                message={
-                  detail?.status === 'supplemented'
-                    ? '您已提交补件，等待审核人复核。如需再次更正可继续补件。'
-                    : '审核人已退回，请根据下方补件意见更正字段或补充材料后提交。'
-                }
+                message="审核人已退回，请根据下方补件意见更正字段或补充材料后提交。"
               />
 
               {detail?.review_comment && (
@@ -667,7 +736,7 @@ export default function TaskObjectView() {
           ) : (
             <Result
               status={detail?.status === 'completed' ? 'success' : 'info'}
-              title={statusText(detail?.status || '')}
+              title={statusText(detail?.status || '', role)}
               subTitle={
                 detail?.status === 'completed' ? '任务已审核通过并归档' : '审核进行中，请等待审核人处理'
               }
@@ -726,13 +795,49 @@ export default function TaskObjectView() {
               返回工作台
             </Button>
             <h2>{code}</h2>
-            {detail && <Tag color={statusType(detail.status)}>{statusText(detail.status)}</Tag>}
+            {(counts.fail > 0 || counts.warn > 0) && (
+              <Tag color={counts.fail > 0 ? 'error' : 'warning'} className="hdr-redline">
+                <Badge color={counts.fail > 0 ? 'red' : 'orange'} />
+                {counts.fail > 0 && `存在 ${counts.fail} 项红线`}
+                {counts.fail > 0 && counts.warn > 0 && ' · '}
+                {counts.warn > 0 && `${counts.warn} 项待复核`}
+              </Tag>
+            )}
+            {detail?.customer_name && (
+              <span className="hdr-customer">客户：{detail.customer_name}</span>
+            )}
+            {detail && <Tag color={statusType(detail.status)}>{statusText(detail.status, role)}</Tag>}
           </div>
           {detail && (
-            <p className="muted">
-              借款人 {detail.borrower} · 提款 {detail.drawdown_currency} {fmt(detail.drawdown_amount)} · 单据{' '}
-              {detail.documents.length} 份
-            </p>
+            <div className="hdr-facts">
+              {graph.headerFacts.contractNo && (
+                <span className="hf">合同号 <b>{graph.headerFacts.contractNo}</b></span>
+              )}
+              {graph.headerFacts.facilityAmount && (
+                <span className="hf">额度 <b>{graph.headerFacts.facilityAmount}</b></span>
+              )}
+              {graph.headerFacts.purpose && (
+                <span className="hf">用途 <b>{graph.headerFacts.purpose}</b></span>
+              )}
+              {graph.headerFacts.rate && (
+                <span className="hf">利率 <b>{graph.headerFacts.rate}</b></span>
+              )}
+              {(graph.headerFacts.termStart || graph.headerFacts.termEnd) && (
+                <span className="hf">
+                  期限 <b>{graph.headerFacts.termStart ?? '—'} ~ {graph.headerFacts.termEnd ?? '—'}</b>
+                </span>
+              )}
+              <span className="hf">
+                提款金额 <b>{detail.drawdown_currency} {fmt(detail.drawdown_amount)}</b>
+              </span>
+              {graph.headerFacts.drawdownDate && (
+                <span className="hf">放款日 <b>{graph.headerFacts.drawdownDate}</b></span>
+              )}
+              {graph.headerFacts.maturityDate && (
+                <span className="hf">到期日 <b>{graph.headerFacts.maturityDate}</b></span>
+              )}
+              <span className="hf muted">单据 {detail.documents.length} 份</span>
+            </div>
           )}
         </div>
       </div>
@@ -742,6 +847,29 @@ export default function TaskObjectView() {
       </Card>
 
       <PdfSourceViewer visible={pdf.pdfVisible} source={pdf.pdfSource} onClose={pdf.close} />
+
+      {/* 字段更正弹窗（经办人/审核人皆可） */}
+      <Modal
+        title={`更正字段：${editRow?.label ?? ''}`}
+        open={!!editRow}
+        onCancel={() => setEditRow(null)}
+        onOk={() => void saveEdit()}
+        confirmLoading={savingEdit}
+        okText="保存并重新核对"
+        cancelText="取消"
+        destroyOnHidden
+      >
+        <p className="muted" style={{ marginBottom: 8 }}>
+          修改抓取到的识别值。保存后系统将自动重新核对并刷新判定结果。
+        </p>
+        <Input
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onPressEnter={() => void saveEdit()}
+          placeholder="请输入正确的值"
+          autoFocus
+        />
+      </Modal>
     </div>
   )
 }
