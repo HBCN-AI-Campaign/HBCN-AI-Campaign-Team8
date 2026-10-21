@@ -8,6 +8,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from .. import models
 from ..assistant_schemas import (
@@ -24,30 +25,36 @@ from ..assistant_skills import get_skill, list_skills
 from ..config import settings
 from ..database import get_db
 from ..security import get_current_user
+from ..assistant_collaboration import (admit_run, author_out, expire_runs, is_shared, public_event,
+    session_for_user, visible_sessions, run_out)
+from ..assistant_models import AssistantAudit, AssistantEvent, AssistantMember, AssistantMessageAuthor, AssistantRun
+from .assistant_collaboration import router as collaboration_router
 
 router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 logger = logging.getLogger(__name__)
+router.include_router(collaboration_router)
 
 
 def _session_for_user(db: Session, session_id: int, user: models.User) -> models.AssistantSession:
-    session = db.query(models.AssistantSession).filter_by(id=session_id, user_id=user.id).first()
-    if not session:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="助手会话不存在")
-    return session
+    return session_for_user(db, session_id, user)
 
 
-def _session_out(session: models.AssistantSession) -> AssistantSessionOut:
+def _session_out(session: models.AssistantSession, db: Session, user: models.User) -> AssistantSessionOut:
     return AssistantSessionOut(
         id=session.id,
         title=session.title,
         task_code=session.task_code,
         message_count=len(session.messages),
         updated_at=session.updated_at,
+        owner_id=session.user_id,
+        shared=is_shared(db, session.id),
+        can_manage=session.user_id == user.id,
     )
 
 
-def _message_out(message: models.AssistantMessage) -> AssistantMessageOut:
+def _message_out(message: models.AssistantMessage, db: Session) -> AssistantMessageOut:
     result = AssistantMessageOut.model_validate(message, from_attributes=True)
+    result = result.model_copy(update=author_out(db, message))
     if message.role == "assistant" and _safe_final_answer(message.content) is None:
         return result.model_copy(update={
             "content": "这条历史答复包含不可展示的内部过程，已隐藏。请重新发送问题以获取审核辅助答复。"
@@ -105,13 +112,7 @@ async def capabilities(user: models.User = Depends(get_current_user)):
 
 @router.get("/sessions", response_model=list[AssistantSessionOut])
 def list_sessions(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
-    sessions = (
-        db.query(models.AssistantSession)
-        .filter_by(user_id=user.id)
-        .order_by(models.AssistantSession.updated_at.desc())
-        .all()
-    )
-    return [_session_out(session) for session in sessions]
+    return [_session_out(session, db, user) for session in visible_sessions(db, user)]
 
 
 @router.get("/skills", response_model=list[AssistantSkillOut])
@@ -137,7 +138,7 @@ def create_session(
     db.add(session)
     db.commit()
     db.refresh(session)
-    return _session_out(session)
+    return _session_out(session, db, user)
 
 
 @router.get("/sessions/{session_id}", response_model=AssistantSessionDetail)
@@ -147,9 +148,15 @@ def get_session(
     user: models.User = Depends(get_current_user),
 ):
     session = _session_for_user(db, session_id, user)
+    expire_runs(db, session_id)
+    # Read cursor BEFORE messages: concurrent events after this point will be
+    # replayed and deduplicated by message id, never silently skipped.
+    cursor = db.query(func.max(AssistantEvent.id)).filter_by(session_id=session_id).scalar() or 0
+    active = db.query(AssistantRun).filter_by(active_session_id=session_id).first()
     return AssistantSessionDetail(
-        **_session_out(session).model_dump(),
-        messages=[_message_out(item) for item in session.messages],
+        **_session_out(session, db, user).model_dump(),
+        messages=[_message_out(item, db) for item in session.messages],
+        event_cursor=cursor, active_run=run_out(active) if active else None,
     )
 
 
@@ -160,6 +167,15 @@ def delete_session(
     user: models.User = Depends(get_current_user),
 ):
     session = _session_for_user(db, session_id, user)
+    if session.user_id != user.id:
+        raise HTTPException(403, detail="仅会话创建者可删除会话")
+    if db.query(AssistantRun).filter_by(active_session_id=session_id).first():
+        raise HTTPException(409, detail="请先停止当前 AI 运行再删除会话")
+    # Explicit cleanup also works with SQLite deployments without FK cascades.
+    ids = db.query(models.AssistantMessage.id).filter_by(session_id=session_id)
+    db.query(AssistantMessageAuthor).filter(AssistantMessageAuthor.message_id.in_(ids)).delete(synchronize_session=False)
+    for table in (AssistantEvent, AssistantAudit, AssistantMember, AssistantRun):
+        db.query(table).filter_by(session_id=session_id).delete(synchronize_session=False)
     db.delete(session)
     db.commit()
     return {"deleted": True}
@@ -173,6 +189,10 @@ async def stream_message(
     user: models.User = Depends(get_current_user),
 ):
     session = _session_for_user(db, session_id, user)
+    if is_shared(db, session_id):
+        raise HTTPException(409, detail="共享会话请使用 runs 和 events 接口，避免断线重复调用")
+    if session.task_code and payload.task_code and payload.task_code != session.task_code:
+        raise HTTPException(409, detail="会话任务固定，请新建会话切换任务")
     # StreamingResponse consumes the generator after the endpoint returns. Load the
     # relationship now so the generator does not trigger a detached lazy load.
     _ = list(session.messages)
@@ -181,18 +201,30 @@ async def stream_message(
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="任务不存在或无权访问")
     if payload.skill_id and not get_skill(payload.skill_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="审核技能不存在或未发布")
+    run, created = admit_run(db, user, session, payload)
+    if not created:
+        raise HTTPException(409, detail="该请求已处理，请通过 events 接口读取结果")
 
     async def event_stream():
         try:
             async for item in stream_assistant(
-                db, user, session, payload.content, task_code, payload.skill_id
+                db, user, session, payload.content, task_code, payload.skill_id, run_id=run.id
             ):
+                public_event(db, session_id, item, run.id)
+                db.commit()
+                if item.get("event") == "message_end":
+                    run.status = "completed"
                 event = item.get("event", "message")
                 yield f"event: {event}\ndata: {json.dumps(item, ensure_ascii=False)}\n\n"
         except Exception:
             db.rollback()
             logger.exception("Assistant stream failed")
             yield f"event: error\ndata: {json.dumps({'event': 'error', 'message': '助手请求失败，请稍后重试'}, ensure_ascii=False)}\n\n"
+        finally:
+            run.status = "error" if run.status == "running" else run.status
+            run.active_session_id = None
+            public_event(db, session_id, {"event": "run_end", "status": run.status}, run.id)
+            db.commit()
 
     return StreamingResponse(
         event_stream(),

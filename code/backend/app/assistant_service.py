@@ -9,11 +9,13 @@ import asyncio
 import httpx
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from collections.abc import AsyncIterator
 from typing import Any
 
 from . import models
+from .assistant_models import AssistantExpertProfile, AssistantMessageAuthor
 from .assistant_skills import get_skill
 from .config import settings
 
@@ -22,6 +24,7 @@ ASSISTANT_INSTRUCTIONS = (
     "不得直接批准、拒绝或改变贷款审核结论；结论必须交给有权限的审核人员。"
     "回答要引用任务材料或规则结果，证据不足时明确说需要人工确认。"
     "不得输出内部思维链、草稿推理或工具参数，只给用户可见的结论、依据和简洁的执行摘要。"
+    "如建议邀请专家，只能引用本轮授权专家目录中的人员和其本人填写的专业资料；没有匹配资料时请审核人员自行搜索，不得编造人物或资历。"
 )
 logger = logging.getLogger(__name__)
 
@@ -255,6 +258,7 @@ async def run_agent_events(
     # 不再作为强制步骤前置展示；检索告警也不单独暴露给用户。
     retrieval_warnings: list[str] = []
     retrieved = await asyncio.to_thread(_rag_search, context, message, retrieval_warnings)
+    retrieved.extend(context.get("expert_candidates", []))
     try:
         timeout = httpx.Timeout(settings.AI_REQUEST_TIMEOUT, connect=5.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -334,15 +338,29 @@ async def stream_assistant(
     message: str,
     task_code: str | None,
     skill_id: str | None = None,
+    run_id: str | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     task = task_for_user(db, user, task_code or session.task_code)
     context = task_context(task)
     citations = context.get("citations", [])[:8]
-    conversation = [
-        {"role": item.role, "content": item.content}
-        for item in session.messages[-12:]
-    ]
+    conversation = []
+    for item in session.messages[-12:]:
+        identity = db.get(AssistantMessageAuthor, item.id)
+        # Author labels are server-generated context, never a client-supplied role.
+        label = f"[讨论成员：{identity.display_name}] " if identity and item.role == "user" else ""
+        conversation.append({"role": item.role, "content": label + item.content})
     context["conversation"] = conversation
+    if user.role == models.Role.REVIEWER and task is not None:
+        query_text = message + ' '.join(item['content'] for item in conversation[-4:])
+        profiles = db.query(models.User, AssistantExpertProfile).join(
+            AssistantExpertProfile, models.User.id == AssistantExpertProfile.user_id
+        ).filter(models.User.is_active.is_(True), models.User.role == models.Role.REVIEWER, models.User.id != user.id).all()
+        context['expert_candidates'] = [
+            {"type": "expert", "id": f"expert:{person.id}", "source": "内部专家目录 · 本人维护",
+             "text": f"{person.display_name}；专业方向：{profile.specialty}；介绍：{profile.bio}；标签：{'、'.join(profile.tags)}。仅供邀请参与讨论，不授予审批权。"}
+            for person, profile in profiles
+            if any(tag and tag in query_text for tag in profile.tags) and task_for_user(db, person, task.task_code)
+        ][:3]
     skill = get_skill(skill_id)
     instructions = ASSISTANT_INSTRUCTIONS
     if skill:
@@ -352,7 +370,10 @@ async def stream_assistant(
             f"<project_skill_instructions>\n{skill['instructions']}\n</project_skill_instructions>"
         )
 
-    db.add(models.AssistantMessage(session_id=session.id, role="user", content=message))
+    user_message = models.AssistantMessage(session_id=session.id, role="user", content=message)
+    db.add(user_message)
+    db.flush()
+    db.add(AssistantMessageAuthor(message_id=user_message.id, user_id=user.id, display_name=user.display_name, run_id=run_id))
     if task_code:
         session.task_code = task_code
     if session.title == "新会话":
@@ -364,6 +385,9 @@ async def stream_assistant(
         "event": "message_start",
         "message_id": f"assistant:{session.id}",
         "task_code": task.task_code if task else None,
+        "user_message": {"id": user_message.id, "role": "user", "content": message,
+                         "author_id": user.id, "author_name": user.display_name, "run_id": run_id,
+                         "status": "completed", "steps": [], "citations": []},
     }
     answer: str | None = None
     rag_citations: list[dict[str, Any]] = []
@@ -419,7 +443,14 @@ async def stream_assistant(
         }
         return
     disclaimer = "\n\n以上为审核辅助意见，不是贷款最终审批决定，请由有权限的审核人员复核。"
-    if disclaimer not in answer:
+    # Keep the authority reminder mandatory without repeating a clear reminder
+    # already written by the model (e.g. when the user requested two sentences).
+    confirms_authority = re.search(
+        r"(?:必须|应当|需要|需|应|须|请)[^。！？\n]{0,16}"
+        r"(?:有权限|经授权|获授权)[^。！？\n]{0,8}"
+        r"(?:审核|复核|审批)?人员[^。！？\n]{0,8}(?:确认|复核|决定|审批)", answer,
+    )
+    if disclaimer not in answer and not confirms_authority:
         answer += disclaimer
         yield {"event": "delta", "delta": disclaimer}
     if rag_citations:
@@ -444,6 +475,8 @@ async def stream_assistant(
         citations=citations,
     )
     db.add(persisted)
+    db.flush()
+    db.add(AssistantMessageAuthor(message_id=persisted.id, display_name="慧眼助手", run_id=run_id))
     db.commit()
     yield {
         "event": "message_end",
@@ -454,5 +487,7 @@ async def stream_assistant(
             "status": persisted.status,
             "steps": persisted.steps,
             "citations": persisted.citations,
+            "author_name": "慧眼助手",
+            "run_id": run_id,
         },
     }

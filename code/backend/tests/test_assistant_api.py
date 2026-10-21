@@ -384,6 +384,26 @@ class AssistantApiTests(unittest.TestCase):
         self.assertEqual(len(detail.json()["messages"][-1]["steps"]), 1)
         self.assertEqual(detail.json()["messages"][-1]["steps"][0]["status"], "completed")
 
+    def test_explicit_authority_reminder_is_not_duplicated(self):
+        answer = "慧眼助手可梳理授权材料并提示审核风险。最终审核结论必须由有权限的审核人员确认。"
+
+        async def fake_agent_events(*args, **kwargs):
+            yield {"event": "delta", "delta": answer}
+            yield {"event": "assistant_result", "answer": answer, "citations": []}
+
+        created = self.client.post(
+            "/api/assistant/sessions", headers=self.reviewer_headers, json={"title": "两句话"}
+        ).json()
+        with patch("app.assistant_service.run_agent_events", fake_agent_events):
+            self.client.post(
+                f"/api/assistant/sessions/{created['id']}/messages/stream",
+                headers=self.reviewer_headers, json={"content": "用两句话介绍助手"},
+            )
+        history = self.client.get(
+            f"/api/assistant/sessions/{created['id']}", headers=self.reviewer_headers,
+        ).json()
+        self.assertEqual(history['messages'][-1]['content'], answer)
+
     def test_unconfigured_model_does_not_fabricate_a_local_answer(self):
         created = self.client.post(
             "/api/assistant/sessions", headers=self.reviewer_headers, json={"title": "no runtime"}
