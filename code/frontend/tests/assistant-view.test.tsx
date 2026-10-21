@@ -28,7 +28,12 @@ beforeEach(() => {
   vi.mocked(assistantApi.capabilities).mockResolvedValue({ sdk: 'opencode-sdk', configured: true, model: 'test-model', rag_available: true, supports_stream: true, message: '就绪' })
   vi.mocked(assistantApi.tasks).mockResolvedValue([{ id: 1, task_code: 'TASK-1', borrower: '测试企业', status: 'created' }])
   vi.mocked(assistantApi.skills).mockResolvedValue([{ id: 'risk-review', name: '风险梳理', desc: '梳理风险', version: '1.0', owner: '项目组', license: 'Internal', permissions: ['task:read'] }])
-  vi.mocked(assistantApi.createSession).mockResolvedValue(session)
+  vi.mocked(assistantApi.createSession).mockImplementation(async () => {
+    // The real API directory includes committed creations. Keep the network
+    // fixture consistent, otherwise polling correctly treats it as revoked.
+    vi.mocked(assistantApi.sessions).mockResolvedValue([session])
+    return session
+  })
 })
 
 function mount(url = '/assistant') {
@@ -107,7 +112,11 @@ describe('React assistant user flows with real Ant Design X components', () => {
 
   it('opens persisted history and sends a selected skill with task context', async () => {
     vi.mocked(assistantApi.sessions).mockResolvedValue([session])
-    vi.mocked(assistantApi.createSession).mockResolvedValue({ ...session, id: 8, title: '新会话' })
+    vi.mocked(assistantApi.createSession).mockImplementation(async () => {
+      const created = { ...session, id: 8, title: '新会话' }
+      vi.mocked(assistantApi.sessions).mockResolvedValue([created, session])
+      return created
+    })
     vi.mocked(assistantApi.session).mockResolvedValue({ ...session, messages: [{ ...final, steps: [
       { ...final.steps[0], status: 'running' }, ...final.steps,
     ] }] })

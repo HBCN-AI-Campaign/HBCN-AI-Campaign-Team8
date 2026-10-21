@@ -85,12 +85,28 @@ export function useAssistant(initialTask = '') {
   }, [shared, activeId, sending, refreshSession])
 
   useEffect(() => {
+    let current = true
     const timer = setInterval(() => {
       if (document.visibilityState === 'hidden' || stream.current) return
-      void assistantApi.sessions().then(setSessions).catch(() => undefined)
+      const request = generation.current
+      void assistantApi.sessions().then((items) => {
+        if (!current || request !== generation.current) return
+        setSessions(items)
+        // A directory response can arrive before the room refresh. Do not stop
+        // polling a revoked room while leaving its cached material on screen.
+        if (activeId !== null && !items.some((item) => item.id === activeId)) {
+          generation.current += 1
+          setMessages([])
+          setActiveRun(null)
+          replay.current = null
+          setActiveId(null)
+          setTaskCode('')
+          setError('此会话的访问权限已变更，请重新选择会话。')
+        }
+      }).catch(() => undefined)
     }, 5000)
-    return () => clearInterval(timer)
-  }, [])
+    return () => { current = false; clearInterval(timer) }
+  }, [activeId])
 
   useEffect(() => {
     let current = true
@@ -145,6 +161,8 @@ export function useAssistant(initialTask = '') {
     try {
       const session = await assistantApi.session(id)
       if (request !== generation.current) return
+      setSessions((items) => items.some((item) => item.id === id)
+        ? items.map((item) => item.id === id ? session : item) : [session, ...items])
       setActiveId(id)
       setMessages(session.messages.map(restoredMessage))
       setActiveRun(session.active_run || null)
