@@ -49,6 +49,7 @@ describe("OpenCode assistant runtime", () => {
         if (modelRequests === 1) {
           exposedTools = toolNames
           return new Response(chunks([
+            responseChunk({ content: 'TOOL_PREAMBLE_MUST_NOT_BE_AN_ANSWER' }),
             responseChunk({
               tool_calls: [{
                 index: 0,
@@ -149,6 +150,7 @@ describe("OpenCode assistant runtime", () => {
       expect(stream).toContain('"status":"completed"')
       expect(stream, JSON.stringify({ stdout, stderr })).toContain("This is a safe mock answer.")
       expect(stream).not.toContain(evidenceMarker)
+      expect(stream).not.toContain('TOOL_PREAMBLE_MUST_NOT_BE_AN_ANSWER')
       expect(stream).not.toContain("reasoning")
     } finally {
       child.kill()

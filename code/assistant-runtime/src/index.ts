@@ -4,6 +4,7 @@ import { timingSafeEqual } from "node:crypto"
 import { cp, mkdir, mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { finalAnswer } from './final-answer'
 
 // The HSBC Model Studio API (AI_BASE_URL) is a direct endpoint and must never be
 // routed through a local proxy such as CCSwitch. Clear any inherited HTTP(S)_PROXY
@@ -205,14 +206,6 @@ function sendSse(controller: ReadableStreamDefaultController<Uint8Array>, event:
   }
 }
 
-function finalText(message: any): string {
-  if (!message || message.type !== "assistant" || !Array.isArray(message.content)) return ""
-  return message.content
-    .filter((part: any) => part?.type === "text" && typeof part.text === "string")
-    .map((part: any) => part.text)
-    .join("")
-}
-
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -275,11 +268,7 @@ async function handleRun(request: Request) {
               sendSse(controller, "tool", { tool: { name: EVIDENCE_TOOL, status: "error" } })
             } else if (event.type === "session.execution.succeeded") {
               const result = await opencode!.message.list({ sessionID: session.id })
-              const messages = result.data.filter((item: any) => item.type === "assistant")
-              const assistantMessage = messages.find((item: any) =>
-                Array.isArray(item.content) && item.content.some((part: any) => part?.type === "text" && typeof part.text === "string"),
-              ) || messages[0]
-              const answer = finalText(assistantMessage)
+              const answer = finalAnswer(result.data)
               sendSse(controller, "step", {
                 step: { key: "compose", label: "生成审核建议", status: answer ? "completed" : "error" },
               })
