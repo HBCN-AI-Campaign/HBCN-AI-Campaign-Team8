@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test"
+import { cp, mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 
 const toolName = "read_authorized_evidence"
 const evidenceMarker = "AUTHORIZED_EVIDENCE_MARKER"
@@ -25,7 +28,20 @@ function responseChunk(delta: Record<string, unknown>, finishReason: string | nu
 }
 
 describe("OpenCode assistant runtime", () => {
-  test("runs the authorized evidence tool, streams safe state, and rejects unauthenticated calls", async () => {
+  for (const packaged of [false, true]) {
+  test(`${packaged ? 'isolated release bundle' : 'source'} runs the authorized evidence tool and rejects unauthenticated calls`, async () => {
+    const root = import.meta.dir.replace(/[\\/]src$/, "")
+    const release = packaged ? await mkdtemp(join(tmpdir(), 'hbcn-runtime-release-')) : undefined
+    if (release) {
+      try {
+        const build = await Bun.build({ entrypoints: [join(root, 'src/index.ts')], outdir: join(release, 'dist'), target: 'bun' })
+        if (!build.success) throw new Error(build.logs.map(String).join('\n'))
+        await cp(join(root, '.opencode'), join(release, '.opencode'), { recursive: true })
+      } catch (error) {
+        await rm(release, { recursive: true, force: true })
+        throw error
+      }
+    }
     let modelRequests = 0
     let modelAuthorizationSeen = false
     let exposedTools: string[] = []
@@ -67,9 +83,8 @@ describe("OpenCode assistant runtime", () => {
       },
     })
 
-    const cwd = import.meta.dir.replace(/[\\/]src$/, "")
-    const child = Bun.spawn([process.execPath, "run", "src/index.ts"], {
-      cwd,
+    const child = Bun.spawn([process.execPath, "run", packaged ? "dist/index.js" : "src/index.ts"], {
+      cwd: release || root,
       env: {
         ...Bun.env,
         AI_API_KEY: "test-hsbc-key",
@@ -79,6 +94,7 @@ describe("OpenCode assistant runtime", () => {
         ASSISTANT_RUNTIME_PORT: "0",
         AI_REQUEST_TIMEOUT_MS: "10000",
         ASSISTANT_RUNTIME_MAX_CONCURRENT_RUNS: "1",
+        NODE_PATH: "",
       },
       stdout: "pipe",
       stderr: "pipe",
@@ -157,6 +173,8 @@ describe("OpenCode assistant runtime", () => {
       model.stop(true)
       await Promise.race([child.exited, Bun.sleep(3_000)])
       await Promise.allSettled([runtimeOutput, runtimeErrors])
+      if (release) await rm(release, { recursive: true, force: true, maxRetries: 4 })
     }
   }, 45_000)
+  }
 })
