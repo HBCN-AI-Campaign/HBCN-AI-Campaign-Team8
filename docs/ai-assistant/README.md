@@ -2,6 +2,18 @@
 
 本文是慧眼助手的基石文档，记录当前已实现内容与稳定设计。临时改动范围见[本轮修改规划](多人协作AI对话调研与优化方案.md)，重要取舍见[决策记录](决策记录.md)。旧开发记录保留作历史材料，不代表当前实现。
 
+## 一页现状
+
+| 项目 | 当前事实 |
+|---|---|
+| 前端 | 主站 React 18 / Ant Design 5，慧眼助手使用 Ant Design X |
+| 业务边界 | FastAPI 校验登录和任务权限，读取获准证据后再调用模型；最终审核仍由有权限的人员完成 |
+| Agent runtime | 独立 OpenCode SDK 服务端进程，汇丰模型凭证只在服务端配置 |
+| 对话数据 | 用户私有会话；消息、状态、执行步骤和引用持久化。步骤/引用保存在消息 JSON 字段中 |
+| 已具备 | JSON/SSE 接口、任务证据、RAG 适配、工具轨迹、引用展示和历史消息 |
+| 尚未具备 | 多人共享会话、成员专家目录、事件序号回放、真正的模型 token 实时输出、ECS 统一部署验收 |
+| 交接入口 | 本文是当前实现总览；多人/专家/技能方向属于[规划文档](多人协作AI对话调研与优化方案.md)，不代表已经落地 |
+
 ## 文档怎么维护
 
 | 文档 | 回答的问题 | 更新时机 |
@@ -41,7 +53,7 @@
 
 ```mermaid
 flowchart LR
-  U[经办人 / 审核人员] --> UI[React 18 慧眼助手<br/>Ant Design X]
+  U[审核人员<br/>慧眼助手核心使用者] --> UI[React 18 慧眼助手<br/>Ant Design X]
   UI -->|JWT · JSON / SSE| API[FastAPI<br/>assistant router/service]
   API -->|用户隔离| DB[(SQLite 默认<br/>PostgreSQL 可配置)]
   API -->|校验任务权限并加载| TASK[任务单据字段 / 规则结果]
@@ -56,6 +68,41 @@ flowchart LR
   API -->|SSE: step/tool/delta/citations| UI
   API -->|完整答复及 steps/citations| DB
 ```
+
+## 当前数据关系
+
+以下是代码中已实现的会话表关系；`task_code` 是可选任务关联字段，当前没有单独的会话成员、运行事件或审计表。
+
+```mermaid
+erDiagram
+  USERS ||--o{ ASSISTANT_SESSIONS : owns
+  ASSISTANT_SESSIONS ||--o{ ASSISTANT_MESSAGES : contains
+  USERS {
+    int id PK
+    string username
+    string role
+  }
+  ASSISTANT_SESSIONS {
+    int id PK
+    int user_id FK
+    string title
+    string task_code
+    datetime created_at
+    datetime updated_at
+  }
+  ASSISTANT_MESSAGES {
+    int id PK
+    int session_id FK
+    string role
+    text content
+    string status
+    json steps
+    json citations
+    datetime created_at
+  }
+```
+
+慧眼助手面向审核人员，支持其基于任务材料和规则结果开展审核分析；经办人负责提交材料，不是这里默认的对话发起者。多人方案里的 `SESSION_MEMBERS / RUNS / EVENTS / AUDIT_EVENTS` 属于目标模型，当前尚未实现；请勿把规划图当作当前数据库 ER 图。
 
 当前由主后端保存会话、用户消息和最终助手消息；执行步骤及引用随最终助手消息一起保存。SSE 逐事件还没有独立的持久事件日志，因此断线后不能按事件序号恢复执行过程。OpenCode session 是每轮临时创建并清理的，跨轮上下文由业务后端传入历史消息。
 
@@ -136,6 +183,8 @@ sequenceDiagram
 停止会取消客户端请求和 reader；已写入的用户消息不会回滚，片段不代表完整结论。若没有 `message_end` 就断流，显示中断，不能无限等待或伪装完成。
 
 ## 环境与部署
+
+本机开发命令和配置项仍见下方。若要将助手和 RAG 搬到团队 Linux ECS，按 [本机服务迁移到汇丰 ECS 实施方案](../部署到汇丰ECS实施方案.md) 分阶段执行；该文档是实施计划，不表示远端已完成部署。
 
 1. 按 `code/backend/.env.example` 配置主后端：`ASSISTANT_RUNTIME_URL`、`ASSISTANT_RUNTIME_TOKEN`、`RAG_BASE_URL`、`RAG_SERVICE_TOKEN`。各 token 与对应服务匹配。
 2. 按 `code/assistant-runtime/.env.example` 配置 runtime：汇丰授权 `AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL` 及 runtime token。本机验证模型为 `qwen3.8-flash`。真实 key 不写入文档/前端，不依赖个人 CC Switch 或中转站。
