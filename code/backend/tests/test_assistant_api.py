@@ -385,7 +385,7 @@ class AssistantApiTests(unittest.TestCase):
         self.assertEqual(detail.json()["messages"][-1]["steps"][0]["status"], "completed")
 
     def test_explicit_authority_reminder_is_not_duplicated(self):
-        answer = "慧眼助手可梳理授权材料并提示审核风险。最终审核结论必须由有权限的审核人员确认。"
+        answer = "慧眼助手可梳理授权材料并提示审核风险。最终审核结论必须由**具备相应权限的审核人员确认**。"
 
         async def fake_agent_events(*args, **kwargs):
             yield {"event": "delta", "delta": answer}

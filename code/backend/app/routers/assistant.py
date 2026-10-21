@@ -4,10 +4,11 @@ from __future__ import annotations
 import json
 import logging
 import httpx
+import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy import func
 
 from .. import models
@@ -193,9 +194,6 @@ async def stream_message(
         raise HTTPException(409, detail="共享会话请使用 runs 和 events 接口，避免断线重复调用")
     if session.task_code and payload.task_code and payload.task_code != session.task_code:
         raise HTTPException(409, detail="会话任务固定，请新建会话切换任务")
-    # StreamingResponse consumes the generator after the endpoint returns. Load the
-    # relationship now so the generator does not trigger a detached lazy load.
-    _ = list(session.messages)
     task_code = payload.task_code or session.task_code
     if task_code and not task_for_user(db, user, task_code):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="任务不存在或无权访问")
@@ -204,27 +202,48 @@ async def stream_message(
     run, created = admit_run(db, user, session, payload)
     if not created:
         raise HTTPException(409, detail="该请求已处理，请通过 events 接口读取结果")
+    # FastAPI may close its dependency before StreamingResponse consumes the
+    # generator. Capture scalar identities only, and own a DB session for the
+    # entire stream, matching the collaboration worker lifecycle.
+    actor_id, run_id = user.id, run.id
+    factory = sessionmaker(bind=db.get_bind(), expire_on_commit=False)
 
     async def event_stream():
-        try:
-            async for item in stream_assistant(
-                db, user, session, payload.content, task_code, payload.skill_id, run_id=run.id
-            ):
-                public_event(db, session_id, item, run.id)
-                db.commit()
-                if item.get("event") == "message_end":
-                    run.status = "completed"
-                event = item.get("event", "message")
-                yield f"event: {event}\ndata: {json.dumps(item, ensure_ascii=False)}\n\n"
-        except Exception:
-            db.rollback()
-            logger.exception("Assistant stream failed")
-            yield f"event: error\ndata: {json.dumps({'event': 'error', 'message': '助手请求失败，请稍后重试'}, ensure_ascii=False)}\n\n"
-        finally:
-            run.status = "error" if run.status == "running" else run.status
-            run.active_session_id = None
-            public_event(db, session_id, {"event": "run_end", "status": run.status}, run.id)
-            db.commit()
+        with factory() as stream_db:
+            active = stream_db.get(AssistantRun, run_id)
+            if active is None:
+                return
+            try:
+                actor = stream_db.get(models.User, actor_id)
+                room = session_for_user(stream_db, session_id, actor)
+                if active.status != "running":
+                    raise HTTPException(409, "运行已经结束")
+                async with asyncio.timeout(240):
+                    async for item in stream_assistant(
+                        stream_db, actor, room, payload.content, task_code, payload.skill_id, run_id=run_id
+                    ):
+                        stream_db.refresh(active)
+                        if active.status != "running":
+                            break
+                        session_for_user(stream_db, session_id, actor)
+                        public_event(stream_db, session_id, item, run_id)
+                        if item.get("event") == "message_end":
+                            active.status = "completed"
+                        stream_db.commit()
+                        event = item.get("event", "message")
+                        yield f"event: {event}\ndata: {json.dumps(item, ensure_ascii=False)}\n\n"
+            except Exception:
+                stream_db.rollback()
+                logger.exception("Assistant stream failed")
+                error = {"event": "error", "message": "助手请求失败，请稍后重试"}
+                public_event(stream_db, session_id, error, run_id)
+                stream_db.commit()
+                yield f"event: error\ndata: {json.dumps(error, ensure_ascii=False)}\n\n"
+            finally:
+                active.status = "error" if active.status == "running" else active.status
+                active.active_session_id = None
+                public_event(stream_db, session_id, {"event": "run_end", "status": active.status}, run_id)
+                stream_db.commit()
 
     return StreamingResponse(
         event_stream(),

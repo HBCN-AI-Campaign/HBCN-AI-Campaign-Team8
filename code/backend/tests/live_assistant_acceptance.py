@@ -20,7 +20,7 @@ from pathlib import Path
 import httpx
 
 
-async def verify():
+def seed_fixture(password):
     # Import settings/engine only after pointing this fresh process at a new DB.
     from app import models
     from app.assistant_models import AssistantExpertProfile
@@ -29,7 +29,6 @@ async def verify():
     from app.security import hash_password
 
     Base.metadata.create_all(engine)
-    password = secrets.token_urlsafe(24)
     with SessionLocal() as db:
         people = [models.User(username=name, display_name=label, role=models.Role.REVIEWER,
                               hashed_password=hash_password(password)) for name, label in (
@@ -41,6 +40,14 @@ async def verify():
                                 drawdown_currency='USD', drawdown_amount=100, submitted_by=people[0].id))
         db.add(AssistantExpertProfile(user_id=expert_id, specialty='合成资料验收', bio='仅用于隔离测试', tags=['合同']))
         db.commit()
+    return expert_id
+
+
+async def verify():
+    from app.database import engine
+    from app.main import app
+    password = secrets.token_urlsafe(24)
+    expert_id = seed_fixture(password)
 
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://acceptance', timeout=30) as client:
         async def login(name):
@@ -103,13 +110,25 @@ async def verify():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--live', action='store_true', required=True, help='explicitly allow a real HSBC model call')
-    parser.parse_args()
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument('--live', action='store_true', help='explicitly allow a real HSBC model call')
+    mode.add_argument('--browser-fixture', action='store_true', help='serve a disposable loopback API for manual browser QA')
+    parser.add_argument('--port', type=int, default=8033)
+    args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix='hbcn-live-assistant-') as temporary:
         os.environ['DATABASE_URL'] = 'sqlite:///' + (Path(temporary) / 'acceptance.db').as_posix()
         os.environ['DEBUG'] = 'false'
         try:
-            asyncio.run(verify())
+            if args.live:
+                asyncio.run(verify())
+            else:
+                # Public test password for synthetic data in a loopback-only,
+                # disposable process. Never use these accounts in a shared DB.
+                seed_fixture('local-acceptance-only')
+                import uvicorn
+                from app.main import app
+                print('Disposable browser QA: acceptance-owner / acceptance-expert; password: local-acceptance-only', flush=True)
+                uvicorn.run(app, host='127.0.0.1', port=args.port, access_log=False)
         finally:
             # Release pooled SQLite file handles even when an assertion fails.
             from app.database import engine

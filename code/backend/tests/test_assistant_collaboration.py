@@ -97,6 +97,20 @@ class CollaborationTests(unittest.TestCase):
                 admit_run(db, user, room, AssistantChatIn(content="新问题", client_message_id="retry-key-002"))
             self.assertEqual(busy.exception.status_code, 409)
 
+    def test_legacy_stream_owns_database_session_through_response(self):
+        # Match production SessionLocal. An admission commit expires ORM state,
+        # and FastAPI may close the HTTP dependency before consuming the SSE body.
+        self.session_factory.configure(expire_on_commit=True)
+        async def final(*args, **kwargs):
+            yield {"event": "assistant_result", "answer": "请由有权限的审核人员确认结论。", "citations": []}
+        with patch('app.assistant_service.run_agent_events', final):
+            response = self.client.post(self.base + '/messages/stream', headers=self.reviewer_headers,
+                                        json={"content": "解释关联任务", "task_code": "REVIEWER-ONLY"})
+        self.assertIn('event: message_end', response.text)
+        history = self.client.get(self.base, headers=self.reviewer_headers).json()
+        self.assertEqual([row['role'] for row in history['messages']], ['user', 'assistant'])
+        self.assertIsNone(history['active_run'])
+
     def test_background_run_is_shared_and_retry_does_not_call_model_twice(self):
         self.invite()
         calls = []
@@ -121,6 +135,21 @@ class CollaborationTests(unittest.TestCase):
             self.assertEqual(room['messages'][0]['author_id'], self.expert_id)
             self.assertEqual(room['messages'][-1]['author_name'], '慧眼助手')
             self.assertIsNone(room['active_run'])
+
+    def test_cancelled_run_cannot_commit_a_completed_answer(self):
+        async def cancelled_before_final(*args, **kwargs):
+            with self.session_factory() as db:
+                run = db.query(AssistantRun).filter_by(active_session_id=self.room).one()
+                run.status = 'cancelled'
+                db.commit()
+            yield {"event": "assistant_result", "answer": "请由有权限的审核人员确认结论。", "citations": []}
+        with patch('app.assistant_service.run_agent_events', cancelled_before_final):
+            response = self.client.post(self.base + '/messages/stream', headers=self.reviewer_headers,
+                                        json={"content": "取消同时模型返回"})
+        self.assertNotIn('event: message_end', response.text)
+        history = self.client.get(self.base, headers=self.reviewer_headers).json()
+        self.assertEqual([row['role'] for row in history['messages']], ['user'])
+        self.assertIsNone(history['active_run'])
 
     def test_inactive_invited_user_loses_access(self):
         self.invite()

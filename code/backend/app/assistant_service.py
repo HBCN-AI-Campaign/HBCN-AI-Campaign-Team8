@@ -15,7 +15,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from . import models
-from .assistant_models import AssistantExpertProfile, AssistantMessageAuthor
+from .assistant_models import AssistantExpertProfile, AssistantMessageAuthor, AssistantRun
 from .assistant_skills import get_skill
 from .config import settings
 
@@ -447,7 +447,7 @@ async def stream_assistant(
     # already written by the model (e.g. when the user requested two sentences).
     confirms_authority = re.search(
         r"(?:必须|应当|需要|需|应|须|请)[^。！？\n]{0,16}"
-        r"(?:有权限|经授权|获授权)[^。！？\n]{0,8}"
+        r"(?:有权限|(?:具备|具有)(?:相应)?权限|经授权|获授权|获得授权)[^。！？\n]{0,8}"
         r"(?:审核|复核|审批)?人员[^。！？\n]{0,8}(?:确认|复核|决定|审批)", answer,
     )
     if disclaimer not in answer and not confirms_authority:
@@ -463,6 +463,17 @@ async def stream_assistant(
         } for item in rag_citations)
     if citations:
         yield {"event": "citations", "citations": citations}
+    if run_id:
+        # A run can be cancelled or its actor revoked while the model generates.
+        # Revalidate before committing a completed answer, not only at event read.
+        from .assistant_collaboration import session_for_user
+        active = db.get(AssistantRun, run_id)
+        if not active:
+            return
+        db.refresh(active)
+        if active.status != "running":
+            return
+        session_for_user(db, session.id, user)
     persisted = models.AssistantMessage(
         session_id=session.id,
         role="assistant",
