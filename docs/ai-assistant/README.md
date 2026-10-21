@@ -1,6 +1,16 @@
-# 慧眼助手：React UI、OpenCode runtime 与业务接口
+# 慧眼助手总规划：架构、职责与运行方式
 
-本文是当前接入说明。早期《开发记录与交接》保留为历史记录，其中旧 UI/SDK 选型不再代表当前实现。
+本文是慧眼助手的基石文档，记录当前已实现内容与稳定设计。临时改动范围见[本轮修改规划](多人协作AI对话调研与优化方案.md)，重要取舍见[决策记录](决策记录.md)。旧开发记录保留作历史材料，不代表当前实现。
+
+## 文档怎么维护
+
+| 文档 | 回答的问题 | 更新时机 |
+|---|---|---|
+| 本总规划（本文） | 模块有哪些部分、怎么连接、当前真实状态是什么 | 行为、接口、权限或架构变更落地时，同一改动中更新 |
+| [本轮修改规划](多人协作AI对话调研与优化方案.md) | 这一波要改什么、为什么、完成标准是什么 | 开始一波工作时创建；执行中勾选；完成后把已实现事实同步回本文 |
+| [决策记录](决策记录.md) | 当时有哪些长期选项、为什么选这个 | 重要取舍被确认时追加；新决策取代旧决策时标记 superseded，不抹去历史 |
+
+**不按日历定期复制。** 以接口/行为/架构变化和阶段完成为同步点；每次发版或竞赛演示前做一次短审阅，清理过期状态。这个做法参考 [MADR 的逐项决策记录](https://adr.github.io/madr/)和 [C4 按层级画架构图](https://c4model.com/diagrams)，只保留团队能用来做决定的信息。
 
 ## 技术选择与边界
 
@@ -13,7 +23,21 @@
 | Agent runtime | `code/assistant-runtime`，`@opencode/sdk@2.0.32` | 隔离运行 OpenCode，调用汇丰模型 API |
 | 知识库 | RAG 会话负责的服务及 `app/rag_service.py` | 通过已有接口检索；本次未修改 RAG 实现 |
 
+### 谁负责什么
+
+| 部分 | 职责与边界 |
+|---|---|
+| React 慧眼助手 | 会话、任务选择、消息、公开执行轨迹、引用和技能目录；不承载模型密钥或权限决策 |
+| FastAPI 助手 API | JWT/任务授权、证据准备、RAG 适配、会话/消息持久化、SSE 契约；是业务访问边界 |
+| OpenCode runtime | 通过服务端配置的汇丰模型生成答复；仅启用本轮授权的只读证据工具，不读业务数据库或文件 |
+| RAG 服务 | 检索共享知识库；不替代主站任务权限、规则引擎或人工审批 |
+| 业务工作流/其他 Agent | 当前还没有独立的 Agent-to-Agent 服务身份契约；未来应调用 FastAPI 业务接口，不直接接 OpenCode SDK 或共享 runtime session |
+
+技能目前是随仓库发布的只读目录，可选择应用于本轮指引；还没有远程发布、安装或审核流程，因此当前不是技能市场。
+
 上游：[Ant Design X](https://github.com/ant-design/x)，[1.6.1 发布元数据](https://registry.npmjs.org/@ant-design%2fx/1.6.1)，[OpenCode](https://github.com/anomalyco/opencode)。固定 X 1.6.1 是因为其 peer dependency 对应现有 Ant Design 5；X 2.9.0 要求 Ant Design 6，不应迁移助手时强制全站升级。组件直接来自 npm 上游，业务适配层负责协议、权限和会话，不复制第二套用户系统/运行时。
+
+当前锁定 `@opencode/sdk@2.0.32`；截至 2026-10-21，npm 已发布 2.1.2，升级尚未经过本项目回归。是否升级和兼容性理由记录在[本轮修改规划](多人协作AI对话调研与优化方案.md)，不要把当前 pin 描述成全生态最新版本。
 
 ```mermaid
 flowchart LR
@@ -115,7 +139,7 @@ sequenceDiagram
 
 1. 按 `code/backend/.env.example` 配置主后端：`ASSISTANT_RUNTIME_URL`、`ASSISTANT_RUNTIME_TOKEN`、`RAG_BASE_URL`、`RAG_SERVICE_TOKEN`。各 token 与对应服务匹配。
 2. 按 `code/assistant-runtime/.env.example` 配置 runtime：汇丰授权 `AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL` 及 runtime token。本机验证模型为 `qwen3.8-flash`。真实 key 不写入文档/前端，不依赖个人 CC Switch 或中转站。
-3. runtime 目录执行 `bun install --frozen-lockfile`、`bun run start`（默认 8090）。主后端执行 `.venv\Scripts\python -m app.seed`（首次）、`.venv\Scripts\python -m uvicorn app.main:app --port 8000`。RAG 按其文档启动（默认 8010）。
+3. runtime 目录执行 `bun install --frozen-lockfile`、`bun run start`（默认 8090）。主后端执行 `.venv\Scripts\python -m app.seed`（首次）、`.venv\Scripts\python -m uvicorn app.main:app --port 8000`。RAG 地址以 `RAG_BASE_URL` 配置为准；模板中的端口只是本地示例，不代表团队当前服务端口。
 4. 前端执行 `npm ci`、`npm run dev`，访问 5173。主后端本机改用 8001 时，在忽略提交的 `.env.local` 设置 `HBCN_API_TARGET=http://127.0.0.1:8001`，重启 Vite。
 5. 生产部署使用 `dist/` 与 SPA 回退；`/api`、`/pdf`、`/uploads` 代理主后端。SSE 关闭代理缓冲，延长读超时。runtime/token/key 只在私网服务端可见，不直接对浏览器暴露。
 
@@ -136,4 +160,13 @@ npm run build
 
 前端测试使用真实 Ant Design X 组件，模拟网络边界，覆盖首条发送、进度/折叠、引用、停止、断流、失败保留草稿、历史、任务技能、401；不替代真实模型验证。真实链路结果见 [React迁移与验证记录](React迁移与验证记录.md)。
 
-多人共享聊天室、邀请专家、远程技能商店尚未实现；会话仍为用户私有，不能分享 session ID 绕过权限。后续须独立定义成员/可见性/审计契约。
+## 后续优先级
+
+| 顺序 | 优化项 | 进入完成状态的条件 |
+|---|---|---|
+| P0 | 真正的模型正文增量与稳定公开事件契约 | runtime 能转发真实模型增量；断流、取消和内部 reasoning 隔离有回归 |
+| P1 | 多人团队会话 | 成员 + 任务 ACL、幂等 run、有序事件回放、邀请/撤权审计通过双用户验收 |
+| P1 | 给前端 workflow/其他 Agent 的受控服务接口 | 明确服务身份、可访问任务范围、会话关联与审计；不让 Agent 直接访问 OpenCode runtime |
+| P2 | 技能发布/商店 | 先有审核、版本、来源和权限策略；当前仓库内置只读目录不是商店 |
+
+详细范围与界面方向见[本轮修改规划](多人协作AI对话调研与优化方案.md)。当前会话仍为用户私有，不能分享 session ID 绕过权限。
