@@ -1,221 +1,151 @@
-# 慧眼助手总规划：架构、职责与运行方式
+# 慧眼助手总规划
 
-本文是慧眼助手的基石文档，记录当前已实现内容与稳定设计。临时改动范围见[本轮修改规划](多人协作AI对话调研与优化方案.md)，重要取舍见[决策记录](决策记录.md)。旧开发记录保留作历史材料，不代表当前实现。
+跨模块协作请先看[全组接线总览](../integration/README.md)与[详细接口/时序](../integration/接口与时序.md)：区分业务专项审核与独立助手，明确RAG证据、SDK能力、任务状态和人工处置的边界；新增接口为草案，不代表本模块已实现。
 
-## 一页现状
+> 当前实现：审核人员与 AI 先讨论，需要时邀请有任务权限的同事进入同一会话，阅读历史、共同讨论或继续问 AI。助手只提供辅助意见，审核结论必须由有权限人员确认。
 
-| 项目 | 当前事实 |
+## 1. 当前做到哪里
+
+| 已实现 | 真实边界 |
 |---|---|
-| 前端 | 主站 React 18 / Ant Design 5，慧眼助手使用 Ant Design X |
-| 业务边界 | FastAPI 校验登录和任务权限，读取获准证据后再调用模型；最终审核仍由有权限的人员完成 |
-| Agent runtime | 独立 OpenCode SDK 服务端进程，汇丰模型凭证只在服务端配置 |
-| 对话数据 | 用户私有会话；消息、状态、执行步骤和引用持久化。步骤/引用保存在消息 JSON 字段中 |
-| 已具备 | JSON/SSE 接口、任务证据、RAG 适配、工具轨迹、引用展示和历史消息 |
-| 尚未具备 | 多人共享会话、成员专家目录、事件序号回放、真正的模型 token 实时输出、ECS 统一部署验收 |
-| 交接入口 | 本文是当前实现总览；多人/专家/技能方向属于[规划文档](多人协作AI对话调研与优化方案.md)，不代表已经落地 |
+| React 正式助手，复用 Ant Design X | [HTML 原型](../../mockup/mockup_assistant_collab.html)仅用于产品讨论 |
+| 汇丰模型 → OpenCode SDK → 助手 API → 页面 | 本机真实调用已通过；密钥仅在服务端，不依赖 CC Switch |
+| 同会话邀请、具名消息、撤销成员 | 仅审核人员；共享前必须关联任务；邀请不授予任务访问权或审批权 |
+| 专家搜索、介绍、标签匹配推荐 | 真实账号及本人资料；不编造专家，不自动邀请 |
+| 可恢复的 AI 运行及公开事件 | 幂等请求、单会话运行槽、数据库游标；协作页增量轮询 |
+| 任务证据、RAG 适配、引用、折叠轨迹 | RAG 由另一模块负责；健康状态不等于检索质量保证 |
+| 技能库：目录、加入/移除、版本更新提示 | 仅仓库审核发布的指引；不执行任意远程技能或上传脚本 |
+| 工作流调用适配器 AssistantClient | 委托的业务 JWT；独立机器身份尚未实现 |
 
-## 文档怎么维护
+**尚未验收：** 汇丰 ECS/真实 PostgreSQL、多实例协调与压力测试；正文尚非模型 token 实时流。不能据此宣称生产级，或给出未经用户测试的高分。
 
-| 文档 | 回答的问题 | 更新时机 |
-|---|---|---|
-| 本总规划（本文） | 模块有哪些部分、怎么连接、当前真实状态是什么 | 行为、接口、权限或架构变更落地时，同一改动中更新 |
-| [本轮修改规划](多人协作AI对话调研与优化方案.md) | 这一波要改什么、为什么、完成标准是什么 | 开始一波工作时创建；执行中勾选；完成后把已实现事实同步回本文 |
-| [决策记录](决策记录.md) | 当时有哪些长期选项、为什么选这个 | 重要取舍被确认时追加；新决策取代旧决策时标记 superseded，不抹去历史 |
+## 2. 架构与模块边界
 
-**不按日历定期复制。** 以接口/行为/架构变化和阶段完成为同步点；每次发版或竞赛演示前做一次短审阅，清理过期状态。这个做法参考 [MADR 的逐项决策记录](https://adr.github.io/madr/)和 [C4 按层级画架构图](https://c4model.com/diagrams)，只保留团队能用来做决定的信息。
-
-## 技术选择与边界
-
-| 层 | 当前实现 | 职责 |
-| --- | --- | --- |
-| UI | React 18、Ant Design 5、`@ant-design/x@1.6.1`（MIT） | 直接使用上游 Sender、Bubble、Conversations、ThoughtChain |
-| 状态/路由 | React hooks、Zustand、React Router | 共用主站 JWT 登录，助手路由懒加载 |
-| 文本 | marked 12 + DOMPurify | 流式 Markdown、表格、代码块，清洗不可信 HTML/链接 |
-| 业务后端 | FastAPI `/api/assistant` | 用户/任务授权、证据准备、会话及轨迹持久化 |
-| Agent runtime | `code/assistant-runtime`，`@opencode/sdk@2.0.32` | 隔离运行 OpenCode，调用汇丰模型 API |
-| 知识库 | RAG 会话负责的服务及 `app/rag_service.py` | 通过已有接口检索；本次未修改 RAG 实现 |
-
-### 谁负责什么
-
-| 部分 | 职责与边界 |
-|---|---|
-| React 慧眼助手 | 会话、任务选择、消息、公开执行轨迹、引用和技能目录；不承载模型密钥或权限决策 |
-| FastAPI 助手 API | JWT/任务授权、证据准备、RAG 适配、会话/消息持久化、SSE 契约；是业务访问边界 |
-| OpenCode runtime | 通过服务端配置的汇丰模型生成答复；仅启用本轮授权的只读证据工具，不读业务数据库或文件 |
-| RAG 服务 | 检索共享知识库；不替代主站任务权限、规则引擎或人工审批 |
-| 业务工作流/其他 Agent | 当前还没有独立的 Agent-to-Agent 服务身份契约；未来应调用 FastAPI 业务接口，不直接接 OpenCode SDK 或共享 runtime session |
-
-技能目前是随仓库发布的只读目录，可选择应用于本轮指引；还没有远程发布、安装或审核流程，因此当前不是技能市场。
-
-上游：[Ant Design X](https://github.com/ant-design/x)，[1.6.1 发布元数据](https://registry.npmjs.org/@ant-design%2fx/1.6.1)，[OpenCode](https://github.com/anomalyco/opencode)。固定 X 1.6.1 是因为其 peer dependency 对应现有 Ant Design 5；X 2.9.0 要求 Ant Design 6，不应迁移助手时强制全站升级。组件直接来自 npm 上游，业务适配层负责协议、权限和会话，不复制第二套用户系统/运行时。
-
-当前锁定 `@opencode/sdk@2.0.32`；截至 2026-10-21，npm 已发布 2.1.2，升级尚未经过本项目回归。是否升级和兼容性理由记录在[本轮修改规划](多人协作AI对话调研与优化方案.md)，不要把当前 pin 描述成全生态最新版本。
-
-```mermaid
+~~~mermaid
 flowchart LR
-  U[审核人员<br/>慧眼助手核心使用者] --> UI[React 18 慧眼助手<br/>Ant Design X]
-  UI -->|JWT · JSON / SSE| API[FastAPI<br/>assistant router/service]
-  API -->|用户隔离| DB[(SQLite 默认<br/>PostgreSQL 可配置)]
-  API -->|校验任务权限并加载| TASK[任务单据字段 / 规则结果]
-  API -->|knowledge_base scope| RAG[RAG adapter<br/>独立 rag-service]
-  API -->|仅传入本轮授权证据<br/>私网 bearer token| RT[独立 Bun runtime<br/>OpenCode SDK]
+  R[审核人员] --> UI[React 18 / Ant Design X]
+  E[受邀同事] --> UI
+  W[业务工作流 / Agent] -->|AssistantClient + 业务 JWT| API
+  UI -->|JWT · JSON / SSE / 事件游标| API[FastAPI 助手 API]
+  API --> ACL[成员身份 AND 现有任务权限]
+  ACL --> DB[(会话 / 作者 / 运行 / 事件 / 审计)]
+  API --> TASK[获准的任务字段 / 规则结果]
+  API --> RAG[RAGClient · 现有知识库接口]
+  API -->|本轮授权上下文 · 私网 token| RT[独立 runtime / OpenCode SDK]
   RT -->|服务端 HSBC key| HSBC[汇丰模型 API]
-  RT -->|tool allowlist| TOOL[read_authorized_evidence<br/>只读本轮证据]
-  TASK --> API
-  RAG --> API
-  TOOL --> RT
-  RT -->|公开执行事件 / 答复<br/>不发送 reasoning| API
-  API -->|SSE: step/tool/delta/citations| UI
-  API -->|完整答复及 steps/citations| DB
-```
+  RT --> TOOL[只读授权证据工具]
+~~~
 
-## 当前数据关系
+| 层 | 当前组件 / 主要文件 | 职责 |
+|---|---|---|
+| 界面 | React 18、Ant Design 5、Ant Design X 1.6.1；AssistantView.tsx | 上游 Sender/Bubble/Conversations/ThoughtChain；成员管理用 Ant Design Drawer/List/Modal |
+| 页面适配 | useAssistant.ts、collaboration.ts | JWT 请求、状态、断线回放和目录同步；不做权限决策 |
+| 业务边界 | routers/assistant*.py、assistant_collaboration.py | 会话/任务鉴权、运行调度、持久事件、审计 |
+| 证据与回答 | assistant_service.py、既有 rag_service.py | 任务证据、知识检索、专家候选和答复校验；不修改审核状态 |
+| Agent 执行 | code/assistant-runtime、OpenCode SDK 2.0.32 | 仅本轮只读工具；不直接读业务库或任意业务文件 |
+| 数据 | assistant_models.py、独立 Alembic 迁移 | 新增助手专属表，不改队友任务表或 RAG 数据层 |
 
-以下是代码中已实现的会话表关系；`task_code` 是可选任务关联字段，当前没有单独的会话成员、运行事件或审计表。
+上游按锁文件安装：[Ant Design X](https://github.com/ant-design/x)（MIT）、[OpenCode](https://github.com/anomalyco/opencode)（MIT）。资源授权借鉴 [LibreChat ACL](https://www.librechat.ai/docs/features/access_control)。只写本项目业务适配，不重复引入认证/聊天框架；升级前先验证 React/Ant Design 和 SDK 兼容性。
 
-```mermaid
+## 3. 多人如何协作
+
+~~~mermaid
+sequenceDiagram
+  actor R as 创建审核人员
+  actor E as 受邀专家
+  participant API as 助手 API
+  participant DB as 数据库
+  participant AI as OpenCode / 汇丰
+  R->>API: 关联任务、与 AI 对话
+  R->>API: 搜索专家，确认共享完整历史并邀请
+  API->>DB: 检查角色与任务权限，保存成员/审计
+  E->>API: 登录后读取同一会话历史
+  E->>API: 发给成员（仅讨论，不调用模型）
+  R->>API: 问 AI（content + client_message_id）
+  API->>DB: 幂等校验、占用会话运行槽
+  API->>AI: 历史 + 授权材料 + 技能
+  AI-->>API: 公开步骤、工具结果、最终答复
+  API->>DB: 保存事件和最终消息
+  par 双方同步
+    R->>API: 从游标读取事件
+  and
+    E->>API: 从游标读取事件
+  end
+  API-->>E: 同一答复、作者、引用；完成后折叠轨迹
+~~~
+
+- 创建者管理成员；成员可讨论/问 AI；创建者和运行发起者可停止 AI。未受邀、停用、撤权或失去任务权限的用户不能继续读取。
+- 会话任务固定；切换任务须新建会话。任务授权仍沿用主站角色规则，助手没有擅自实现全平台细粒度任务 ACL。
+- 每会话最多一个 AI 运行；期间仍可发讨论，新消息在后续 AI 轮次纳入上下文。
+- 相同 client_message_id + 相同内容返回同一运行；同键不同内容返回 409。调用方重试须复用原键，显式重新提问用新键。
+- 协作发送者约 0.7 秒读取本轮事件，旁观成员约 1.8 秒同步，目录约 5 秒刷新；隐藏标签页暂停后台同步。这不是 WebSocket/presence。
+- 刷新可重建正在运行的公开轨迹；协作运行独立于事件读取连接。进程崩溃后，过期运行明确失败，不自动再次调用模型。
+
+## 4. 数据与回答边界
+
+~~~mermaid
 erDiagram
   USERS ||--o{ ASSISTANT_SESSIONS : owns
   ASSISTANT_SESSIONS ||--o{ ASSISTANT_MESSAGES : contains
-  USERS {
-    int id PK
-    string username
-    string role
-  }
-  ASSISTANT_SESSIONS {
-    int id PK
-    int user_id FK
-    string title
-    string task_code
-    datetime created_at
-    datetime updated_at
-  }
-  ASSISTANT_MESSAGES {
-    int id PK
-    int session_id FK
-    string role
-    text content
-    string status
-    json steps
-    json citations
-    datetime created_at
-  }
-```
+  ASSISTANT_MESSAGES ||--o| ASSISTANT_MESSAGE_AUTHORS : attributed
+  USERS ||--o{ ASSISTANT_MEMBERS : joins
+  ASSISTANT_SESSIONS ||--o{ ASSISTANT_MEMBERS : admits
+  ASSISTANT_SESSIONS ||--o{ ASSISTANT_RUNS : executes
+  ASSISTANT_SESSIONS ||--o{ ASSISTANT_EVENTS : appends
+  ASSISTANT_SESSIONS ||--o{ ASSISTANT_AUDIT : records
+  USERS ||--o| ASSISTANT_EXPERT_PROFILES : maintains
+  USERS ||--o{ ASSISTANT_USER_SKILLS : pins
+~~~
 
-慧眼助手面向审核人员，支持其基于任务材料和规则结果开展审核分析；经办人负责提交材料，不是这里默认的对话发起者。多人方案里的 `SESSION_MEMBERS / RUNS / EVENTS / AUDIT_EVENTS` 属于目标模型，当前尚未实现；请勿把规划图当作当前数据库 ER 图。
+旧会话继续可用，旧用户消息归属创建者。最终消息保存步骤/引用，新增事件日志支持回放。OpenCode session 每轮临时创建并清理，业务历史由后端管理。
 
-当前由主后端保存会话、用户消息和最终助手消息；执行步骤及引用随最终助手消息一起保存。SSE 逐事件还没有独立的持久事件日志，因此断线后不能按事件序号恢复执行过程。OpenCode session 是每轮临时创建并清理的，跨轮上下文由业务后端传入历史消息。
+**过程与答案分开：** UI 仅接收公开步骤、工具、答复和引用；未知/reasoning 事件不进正文。runtime 只选成功结束且没有工具调用的最终消息，避免把工具前言当答复。后端还检查文本和人工确认提示，已有明确提醒时不重复追加。
 
-**正文的“流式”需要准确理解：** runtime 当前等模型完整生成后才发送 `assistant_result`；FastAPI 再将完整答复按 80 字符切成 `delta` 事件。页面会逐段显示，但这不是模型 token 到达时的实时流。步骤与工具状态则是在运行过程中按事件显示。若要达到 Copilot/Codex 那种边生成边显示体验，下一步应验证当前 OpenCode SDK/模型通道的真实增量事件能力，并让 runtime 转发文本增量；不可仅靠缩小后端切片大小冒充实时生成。
+正文目前在完整答复校验后分段显示，**不是 token 实时流**。运行中步骤/工具状态来自真实事件；不展示内部推理，不制造固定检查项假装执行。
 
-RAG scope 的实际范围需要按接口解释：`knowledge_base` 会检索 RAG 服务的 `business_rules` 与 `project_design`；任务单据和规则结果由主后端在通过任务权限检查后从业务数据库读取，不走 RAG。`task_documents` 和外部 `law` scope 当前未开放。`rag_available=true` 只代表 RAG 健康检查成功，不代表某条问题一定命中证据或回答质量已验收。
+RAG 按现有接口检索共享资料；任务字段/规则结果先经主站授权再读取。知识库不可用会显示提示，保留已有授权材料，不伪造命中。外部法规/任务文档 scope 以 RAG 模块实际接口为准。
 
-### 当前技术栈和成熟度判断
+## 5. 同学如何调用
 
-- 仓库自有前端已统一为 React：主站 React 18 + Ant Design 5，助手复用 `@ant-design/x@1.6.1`；`code/` 扫描无 `.vue` 源文件，两份前端锁文件也没有 Vue 运行时/构建依赖。历史交接记录仍保留为档案，不能视为当前实现。
-- AI runtime 使用锁定的 `@opencode/sdk@2.0.32`，未使用 OpenAI Agents SDK。模型 key 放在 runtime 服务端，助手通过 汇丰提供的模型 API 配置调用。
-- 任务权限目前沿用主站角色规则；`task_for_user` 对经办人检查任务提交人，对审核人员沿用既有角色权限。它不是可邀请的细粒度任务 ACL。
-- 这是适合演示的模块化单用户版本，不应描述为已达到成熟多人协作或生产级：会话目前归属单个用户；SQLite 为默认数据库；执行事件不能按事件序号恢复；回答正文并非模型 token 实时流；RAG 法规与任务文档 scope 未开放；没有多人访问审计。真实部署还需按环境配置数据库、密钥、RAG/runtime 服务并做并发、重连和授权测试。
-- GitHub 方案调研及多人对话目标架构见[多人协作 AI 对话调研与优化方案](多人协作AI对话调研与优化方案.md)。
+页面入口：/assistant?task_code=任务编号，或 /assistant?session_id=会话ID。ID 不授予访问权。所有 API 均要求 Authorization: Bearer 业务JWT。
 
-## 同学如何接入
+| API（前缀 /api/assistant） | 用途 |
+|---|---|
+| GET /capabilities；GET/POST /sessions | 就绪状态、本人及受邀会话、新建 |
+| GET/DELETE /sessions/{id} | 授权历史 / 创建者删除（运行中拒绝） |
+| GET /experts?session_id=&q=；PUT /experts/me | 搜索真实人员 / 本人专业资料 |
+| GET/POST /sessions/{id}/members；DELETE /sessions/{id}/members/{user_id} | 查成员、邀请、撤权 |
+| POST /sessions/{id}/messages | {content}：具名讨论，不调用模型 |
+| POST /sessions/{id}/runs | {content,client_message_id,skill_id?} → 202 和运行 ID |
+| GET /sessions/{id}/events?after_id=&run_id= | events,cursor,has_more,active_run；每页最多 100 条 |
+| POST /sessions/{id}/runs/{run_id}/cancel | 创建者/发起者停止运行 |
+| GET /sessions/{id}/audit | 创建者查看邀请/撤权/取消记录 |
+| GET /skill-library；PUT/DELETE /skill-library/{skill_id} | 发布目录、个人加入/更新/移除 |
+| GET /skills；POST /sessions/{id}/messages/stream | 兼容单人目录/SSE；共享会话用 runs/events |
 
-前端导航到 `/assistant?task_code=${encodeURIComponent(taskCode)}`。不传任务编号可做普通问答；任务相关问题应关联任务。切换任务开启新会话，避免混用材料。前后端均保留用户权限检查，前端选择器不是安全边界。
+事件：message_start / step / tool / delta / citations / message_end / error；协作增加 discussion / members_changed / run_end。持久事件带 id、run_id；message_end 的落库消息为权威正文，run_end.status 为最终运行状态。字段及调试见后端 /docs。
 
-以下 API 均要求 `Authorization: Bearer <JWT>`：
+业务工作流用 app.assistant_client.AssistantClient(base_url, user_jwt) 的 create_session / ask / events / cancel；ask 的 client_message_id 使用业务请求唯一键。无需 HSBC key 或 runtime token，不绕过任务权限；自主后台服务身份需另外设计授权。
 
-| 方法/路径 | 入参/返回 | 场景 |
-| --- | --- | --- |
-| `GET /api/assistant/capabilities` | `configured,model,rag_available,sdk,supports_stream,message` | 实际服务就绪状态；不是每轮请求成功保证 |
-| `GET /api/assistant/sessions` | `AssistantSession[]` | 当前用户的会话目录 |
-| `POST /api/assistant/sessions` | `{title,task_code?}` → 会话 | 第一条消息时创建，挂载页面不写库 |
-| `GET /api/assistant/sessions/{id}` | 会话及 `messages[]` | 历史正文、步骤、引用 |
-| `DELETE /api/assistant/sessions/{id}` | `{deleted:true}` | 确认后删除自己的会话 |
-| `GET /api/assistant/skills` | 项目发布的技能目录 | 名称、版本、权限；没有远程安装功能 |
-| `POST /api/assistant/sessions/{id}/messages/stream` | `{content,task_code?,skill_id?}` → SSE | 最多 8000 字，正常结束必须有 `message_end` |
-| `GET /api/tasks?mine=true/false` | 已有任务接口 | 经办人查本人任务；审核人员按现有授权查询 |
+## 6. 拉取与部署
 
-### SSE 契约
+1. 团队授权渠道提供配置。后端按 .env.example 设置 runtime/RAG 地址及 token；runtime 按模板设置 AI_BASE_URL / AI_API_KEY / AI_MODEL。真实 key 不入仓库/浏览器。
+2. code/backend：安装 requirements-assistant.txt（包含原 requirements），首次按主站流程初始化业务数据库，再执行下方 Alembic 命令。只增加助手表；旧库缺业务字段时先按业务模块要求升级，不删除/重建业务库。
+3. code/assistant-runtime：bun install --frozen-lockfile，bun run start。后端：python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1。
+4. code/frontend：npm ci、npm run dev。端口变化在忽略提交的 .env.local 设置 HBCN_API_TARGET；生产 npm run build，静态服务设 SPA 回退及 /api 代理，SSE 关闭缓冲。
+5. **当前单 API 实例/单 worker**：数据库保存事件/唯一运行槽，执行与取消仍是进程内 asyncio 任务。多实例须先引入持久队列及跨进程取消验证。SQLite 用于本机演示；真实 PostgreSQL/ECS 另做环境验收。
 
-事件内容均为 JSON，见 `assistant_schemas.py`、`src/assistant/types.ts`。错误事件的 `message` 是字符串；完成事件的 `message` 是持久化消息对象。
+没有汇丰授权配置的电脑不能直接请求模型；拉取可部署不等于把私密 key 随仓库分发。RAG/OCR/业务审核部署由对应模块负责。
 
-| 事件 | 字段 | UI 行为 |
-| --- | --- | --- |
-| `message_start` | `message_id,task_code` | 本轮开始 |
-| `step` | `step:{key,label,detail?,status}` | 更新同 key 业务步骤 |
-| `tool` | `tool:{name,status,result_count?}` | 真实授权证据读取状态 |
-| `delta` | `delta:string` | 追加公开答复正文 |
-| `citations` | `citations[]` | 引用及页码 |
-| `message_end` | `message:{id,role,content,status,steps,citations}` | 以落库版本为准，结束 loading，自动折叠步骤 |
-| `error` | `message:string` | 显示错误并恢复发送，已有片段标为未完成 |
+## 7. 验证与文档维护
 
-未知事件（包括 reasoning）不拼接正文。业务操作轨迹不等于模型内部推理；不请求、不展示内部推理。后端负责最终答复检查与审核权限提示。HTTP 401 清理当前失效登录，由受保护路由保留返回路径；403 不清理登录。
+~~~text
+code/backend:           python -m unittest tests.test_assistant_api tests.test_assistant_collaboration
+code/frontend:          npm test && npm run build
+code/assistant-runtime: bun test && bun run typecheck
+code/backend:           python -m alembic -c assistant-alembic.ini upgrade head
+~~~
 
-```mermaid
-sequenceDiagram
-  actor User as 业务人员
-  participant UI as React / Ant Design X
-  participant API as FastAPI
-  participant DB as 会话数据库
-  participant RAG as 知识库
-  participant RT as OpenCode runtime
-  participant LLM as 汇丰模型 API
-  User->>UI: 关联任务、发送问题
-  opt 尚无会话
-    UI->>API: POST sessions（JWT、task_code）
-    API->>DB: 验证权限并创建
-    API-->>UI: session.id
-  end
-  UI->>API: POST messages/stream
-  API->>DB: 保存用户消息、加载授权任务证据
-  API->>RAG: 通过已有 RAGClient 检索
-  RAG-->>API: 证据 / 不可用提示
-  API->>RT: /runs（限本轮授权证据）
-  RT->>LLM: 服务端 key 调用
-  RT-->>API: 工具 / 执行 / 答复事件
-  API-->>UI: step / tool / delta / citations
-  UI-->>User: 答复与可展开的执行轨迹
-  API->>DB: 保存最终答复、步骤、引用
-  API-->>UI: message_end
-  UI-->>User: 自动折叠轨迹，结论须授权人员确认
-```
+测试覆盖权限、撤权、幂等、并发拒绝、取消/超时、作者、旧消息、技能和 React 邀请/轨迹/异常；mock 不代替真实链路。本机另用汇丰 qwen3.8-flash 完成真实问答（约 11.6 / 16 秒），以及隔离双 JWT 账号的真实模型协作验收（约 12.9 秒）。后端显式执行 python -m tests.live_assistant_acceptance --live 可重做后一项：仅用临时库与合成数据，直接调用真实 ASGI 路由，模型走真实 HTTP；不等于双浏览器/反向代理验收。结果与待办见[当前修改规划](持续优化实施规划.md)。
 
-停止会取消客户端请求和 reader；已写入的用户消息不会回滚，片段不代表完整结论。若没有 `message_end` 就断流，显示中断，不能无限等待或伪装完成。
-
-## 环境与部署
-
-本机开发命令和配置项仍见下方。若要将助手和 RAG 搬到团队 Linux ECS，按 [本机服务迁移到汇丰 ECS 实施方案](../部署到汇丰ECS实施方案.md) 分阶段执行；该文档是实施计划，不表示远端已完成部署。
-
-1. 按 `code/backend/.env.example` 配置主后端：`ASSISTANT_RUNTIME_URL`、`ASSISTANT_RUNTIME_TOKEN`、`RAG_BASE_URL`、`RAG_SERVICE_TOKEN`。各 token 与对应服务匹配。
-2. 按 `code/assistant-runtime/.env.example` 配置 runtime：汇丰授权 `AI_BASE_URL`、`AI_API_KEY`、`AI_MODEL` 及 runtime token。本机验证模型为 `qwen3.8-flash`。真实 key 不写入文档/前端，不依赖个人 CC Switch 或中转站。
-3. runtime 目录执行 `bun install --frozen-lockfile`、`bun run start`（默认 8090）。主后端执行 `.venv\Scripts\python -m app.seed`（首次）、`.venv\Scripts\python -m uvicorn app.main:app --port 8000`。RAG 地址以 `RAG_BASE_URL` 配置为准；模板中的端口只是本地示例，不代表团队当前服务端口。
-4. 前端执行 `npm ci`、`npm run dev`，访问 5173。主后端本机改用 8001 时，在忽略提交的 `.env.local` 设置 `HBCN_API_TARGET=http://127.0.0.1:8001`，重启 Vite。
-5. 生产部署使用 `dist/` 与 SPA 回退；`/api`、`/pdf`、`/uploads` 代理主后端。SSE 关闭代理缓冲，延长读超时。runtime/token/key 只在私网服务端可见，不直接对浏览器暴露。
-
-拉取代码后必须通过团队授权方式取得环境配置；仓库只提供模板，没有 key 的电脑不能直接调用模型。RAG UI 独立构建到 `code/rag-service/app/static/ui-build`，由 RAG 服务提供 `/ui/`。
-
-## 验证与交接
-
-```powershell
-cd code/frontend
-npm ci
-npm test
-npm run build
-cd ../backend
-.venv\Scripts\python -m unittest tests.test_assistant_api
-cd ../rag-service/ui
-npm run build
-```
-
-前端测试使用真实 Ant Design X 组件，模拟网络边界，覆盖首条发送、进度/折叠、引用、停止、断流、失败保留草稿、历史、任务技能、401；不替代真实模型验证。真实链路结果见 [React迁移与验证记录](React迁移与验证记录.md)。
-
-## 后续优先级
-
-| 顺序 | 优化项 | 进入完成状态的条件 |
-|---|---|---|
-| P0 | 真正的模型正文增量与稳定公开事件契约 | runtime 能转发真实模型增量；断流、取消和内部 reasoning 隔离有回归 |
-| P1 | 多人团队会话 | 成员 + 任务 ACL、幂等 run、有序事件回放、邀请/撤权审计通过双用户验收 |
-| P1 | 给前端 workflow/其他 Agent 的受控服务接口 | 明确服务身份、可访问任务范围、会话关联与审计；不让 Agent 直接访问 OpenCode runtime |
-| P2 | 技能发布/商店 | 先有审核、版本、来源和权限策略；当前仓库内置只读目录不是商店 |
-
-详细范围与界面方向见[本轮修改规划](多人协作AI对话调研与优化方案.md)。当前会话仍为用户私有，不能分享 session ID 绕过权限。
+维护三层：[本文](README.md)说当前是什么；[修改规划](持续优化实施规划.md)记录本轮实现和验证；[决策记录](决策记录.md)解释长期取舍。接口/行为落地时同步，不按日期复制。[早期调研](多人协作AI对话调研与优化方案.md)与[旧交接](开发记录与交接.md)是历史，遇冲突以当前代码和本文为准。
