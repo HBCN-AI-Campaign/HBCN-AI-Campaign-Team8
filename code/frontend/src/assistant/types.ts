@@ -6,6 +6,9 @@ export interface AssistantSession {
   task_code?: string | null
   message_count: number
   updated_at: string
+  owner_id?: number
+  shared?: boolean
+  can_manage?: boolean
 }
 
 export interface AssistantStep {
@@ -33,10 +36,15 @@ export interface AssistantMessage {
   citations: AssistantCitation[]
   created_at?: string
   streaming?: boolean
+  author_id?: number | null
+  author_name?: string
+  run_id?: string | null
 }
 
 export interface AssistantSessionDetail extends AssistantSession {
   messages: AssistantMessage[]
+  event_cursor?: number
+  active_run?: import('./collaboration').Run | null
 }
 
 export interface AssistantTaskOption {

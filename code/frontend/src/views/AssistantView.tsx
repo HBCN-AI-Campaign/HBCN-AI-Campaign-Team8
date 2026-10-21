@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { Bubble, Conversations, Sender, ThoughtChain, XProvider } from '@ant-design/x'
-import { Alert, App, Badge, Button, Card, Collapse, Drawer, Empty, Select, Skeleton, Space, Tag, Tooltip, Typography } from 'antd'
+import { Alert, App, Badge, Button, Card, Collapse, Drawer, Empty, Segmented, Select, Skeleton, Space, Tag, Tooltip, Typography } from 'antd'
 import { CheckCircleOutlined, DeleteOutlined, HistoryOutlined, LoadingOutlined, PlusOutlined, ReloadOutlined, RobotOutlined, SafetyCertificateOutlined, ThunderboltOutlined, UserOutlined } from '@ant-design/icons'
 import { renderMarkdown } from '@/assistant/markdown'
 import { useAssistant } from '@/assistant/useAssistant'
 import type { AssistantMessage } from '@/assistant/types'
+import { CollaborationPanel } from '@/assistant/CollaborationPanel'
+import { collaborationApi } from '@/assistant/collaboration'
+import type { LibrarySkill } from '@/assistant/collaboration'
+import { useAuthStore } from '@/stores/auth'
 import './AssistantView.css'
 
 const suggestions = [
@@ -58,11 +62,29 @@ export default function AssistantView() {
   const [draft, setDraft] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
   const [skillsOpen, setSkillsOpen] = useState(false)
+  const [collaborationOpen, setCollaborationOpen] = useState(false)
+  const [messageMode, setMessageMode] = useState('问 AI')
+  const [library, setLibrary] = useState<LibrarySkill[] | null>(null)
+  const [libraryBusy, setLibraryBusy] = useState(false)
+  const role = useAuthStore((state) => state.role)
   const scrollArea = useRef<HTMLDivElement>(null)
   const follow = useRef(true)
   const disabled = assistant.loading || assistant.switching || assistant.sending
   const activeSession = assistant.sessions.find((item) => item.id === assistant.activeId)
   const activeSkill = assistant.skills.find((skill) => skill.id === assistant.skillId)
+  const requestedSession = query.get('session_id')
+
+  useEffect(() => {
+    if (!assistant.loading && requestedSession && /^\d+$/.test(requestedSession)) void assistant.selectSession(Number(requestedSession))
+  }, [requestedSession, assistant.loading, assistant.selectSession])
+
+  useEffect(() => {
+    if (!skillsOpen) return
+    let current = true
+    // Older deployments still expose the shipped read-only catalog.
+    void collaborationApi.library().then((items) => { if (current) setLibrary(items) }).catch(() => undefined)
+    return () => { current = false }
+  }, [skillsOpen])
 
   useEffect(() => {
     const area = scrollArea.current
@@ -75,7 +97,8 @@ export default function AssistantView() {
       return
     }
     follow.current = true
-    void assistant.send(value, () => setDraft(''))
+    if (messageMode === '发给成员' && assistant.shared) void assistant.discuss(value, () => setDraft(''))
+    else void assistant.send(value, () => setDraft(''))
   }
 
   const history = <>
@@ -84,11 +107,11 @@ export default function AssistantView() {
     <div className="hy-history-label">最近会话</div>
     {assistant.loading ? <Skeleton active paragraph={{ rows: 4 }} /> : assistant.sessions.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="开始你的第一轮问答" /> : <Conversations
       className="hy-conversations"
-      items={assistant.sessions.map((item) => ({ key: String(item.id), label: item.title, disabled, icon: <HistoryOutlined /> }))}
+      items={assistant.sessions.map((item) => ({ key: String(item.id), label: `${item.shared ? '协作 · ' : ''}${item.title}`, disabled, icon: <HistoryOutlined /> }))}
       activeKey={assistant.activeId === null ? '' : String(assistant.activeId)}
       onActiveChange={(key) => { follow.current = true; void assistant.selectSession(Number(key)); setHistoryOpen(false) }}
       menu={(item) => ({
-        items: [{ key: 'delete', label: '删除会话', icon: <DeleteOutlined />, danger: true, disabled }],
+        items: [{ key: 'delete', label: '删除会话', icon: <DeleteOutlined />, danger: true, disabled: disabled || assistant.sessions.find((session) => String(session.id) === item.key)?.can_manage === false }],
         onClick: () => modal.confirm({ title: '删除这段会话？', content: '会话及其消息将被永久删除。', okText: '删除', cancelText: '取消', okButtonProps: { danger: true }, onOk: () => assistant.deleteSession(Number(item.key)) }),
       })}
     />}
@@ -105,7 +128,7 @@ export default function AssistantView() {
       <Drawer title="会话记录" placement="left" open={historyOpen} onClose={() => setHistoryOpen(false)} width={290}><div className="hy-mobile-history">{history}</div></Drawer>
       <main className="hy-main">
         <header className="hy-toolbar">
-          <div className="hy-title"><Button className="hy-mobile-button" type="text" aria-label="打开会话记录" icon={<HistoryOutlined />} onClick={() => setHistoryOpen(true)} /><strong>{activeSession?.title || '新会话'}</strong><Tag color="blue">审核辅助</Tag></div>
+          <div className="hy-title"><Button className="hy-mobile-button" type="text" aria-label="打开会话记录" icon={<HistoryOutlined />} onClick={() => setHistoryOpen(true)} /><strong>{activeSession?.title || '新会话'}</strong><Tag color={assistant.shared ? 'green' : 'blue'}>{assistant.shared ? '协作会话' : '审核辅助'}</Tag></div>
           <Space wrap>
             <Select className="hy-task-select" aria-label="关联审核任务" placeholder="关联审核任务（可选）" allowClear showSearch optionFilterProp="label"
               value={assistant.taskCode || undefined} disabled={disabled}
@@ -116,6 +139,7 @@ export default function AssistantView() {
               onChange={(value?: string) => { assistant.newConversation(value || ''); setDraft('') }} />
             <Tooltip title="更换任务会开启新的会话，避免混用材料"><SafetyCertificateOutlined className="hy-muted" /></Tooltip>
             <Button aria-label="业务技能" icon={<ThunderboltOutlined />} onClick={() => setSkillsOpen(true)}>业务技能</Button>
+            {role === 'reviewer' && <Tooltip title={assistant.activeId ? '专家库、成员和共享权限' : '先开始一段对话，再邀请同事'}><Button disabled={!assistant.activeId} onClick={() => setCollaborationOpen(true)}>专家与成员</Button></Tooltip>}
           </Space>
         </header>
 
@@ -139,7 +163,7 @@ export default function AssistantView() {
                 placement={message.role === 'user' ? 'end' : 'start'}
                 variant={message.role === 'user' ? 'filled' : 'borderless'}
                 avatar={{ icon: message.role === 'user' ? <UserOutlined /> : <ThunderboltOutlined />, style: { background: message.role === 'user' ? '#edf1f8' : '#315fc4', color: message.role === 'user' ? '#58657d' : '#fff' } }}
-                header={message.role === 'user' ? '你' : '慧眼助手'}
+                header={message.role === 'user' ? message.author_name || (assistant.shared ? '审核成员' : '你') : '慧眼助手'}
                 content={message.role === 'user' ? <div className="hy-user-text">{message.content}</div> : <AssistantReply message={message} />}
               />)}
             </div>}
@@ -147,6 +171,8 @@ export default function AssistantView() {
         </div>
 
         <div className="hy-composer">
+          {assistant.shared && <div className="hy-collab-mode"><Segmented aria-label="消息发送方式" options={['问 AI', '发给成员']} value={messageMode} onChange={setMessageMode} disabled={assistant.sending} /><span className="hy-muted">{messageMode === '问 AI' ? '本轮回答将对全部会话成员可见' : '仅发给会话成员，不调用模型'}</span></div>}
+          {assistant.activeRun && !assistant.sending && <Alert type="info" showIcon message="会话中的 AI 正在工作，执行状态会自动同步。" action={activeSession?.can_manage ? <Button size="small" onClick={() => { void collaborationApi.cancel(assistant.activeId!, assistant.activeRun!.id).then(assistant.refreshSession).catch((cause: Error) => assistant.setError(cause.message)) }}>停止运行</Button> : undefined} />}
           {assistant.error && <Alert type="error" showIcon message={assistant.error} closable onClose={() => assistant.setError('')} />}
           {assistant.notice && <Alert type="warning" showIcon message={assistant.notice} />}
           {!assistant.loading && !assistant.capabilities?.configured && <Alert type="warning" showIcon
@@ -164,12 +190,23 @@ export default function AssistantView() {
           <div className="hy-composer-footer"><span role="status">{assistant.sending ? '正在处理，可随时停止接收' : 'Enter 发送 · Shift + Enter 换行'}</span><span>审核结论须由有权限人员确认</span></div>
         </div>
       </main>
+      <CollaborationPanel open={collaborationOpen} onClose={() => setCollaborationOpen(false)} session={activeSession} onChanged={assistant.refreshSession} context={assistant.messages.slice(-8).map((message) => message.content).join('\n')} />
       <Drawer title="业务技能" width={400} open={skillsOpen} onClose={() => setSkillsOpen(false)}>
-        <p className="hy-muted">已随项目发布的审核指引；选择后应用于下一轮问答，数据权限保持不变。</p>
+        <p className="hy-muted">项目审核目录：查看来源、版本和权限后加入个人技能库。选择后应用于下一轮问答，数据权限保持不变。</p>
         {assistant.skills.length === 0 && <Empty description="暂无可用技能" />}
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>{assistant.skills.map((skill) => <Card key={skill.id} size="small" title={skill.name} extra={<Tag>{skill.version}</Tag>}>
           <p>{skill.desc}</p><p className="hy-muted">{skill.owner} · {skill.license}</p>
           <div>{skill.permissions.map((permission) => <Tag key={permission}>{permission}</Tag>)}</div>
+          {library?.find((item) => item.id === skill.id) && <div className="hy-library-actions"><small className="hy-muted">{library.find((item) => item.id === skill.id)?.source}</small><Button size="small" loading={libraryBusy} onClick={async () => {
+            setLibraryBusy(true)
+            try {
+              const saved = library.find((item) => item.id === skill.id)!
+              if (saved.installed && !saved.update_available) await collaborationApi.uninstallSkill(skill.id)
+              else await collaborationApi.installSkill(skill.id)
+              setLibrary(await collaborationApi.library())
+            } catch (cause) { assistant.setError(cause instanceof Error ? cause.message : '技能库更新失败') }
+            finally { setLibraryBusy(false) }
+          }}>{library.find((item) => item.id === skill.id)?.update_available ? '确认更新版本' : library.find((item) => item.id === skill.id)?.installed ? '从我的技能移除' : '加入我的技能'}</Button></div>}
           <Button block type={skill.id === assistant.skillId ? 'primary' : 'default'} disabled={disabled} onClick={() => { assistant.setSkillId(skill.id); setSkillsOpen(false) }}>{skill.id === assistant.skillId ? '已选择' : '使用此技能'}</Button>
         </Card>)}</Space>
         {assistant.taskCode && <p><Link to={`/tasks/${encodeURIComponent(assistant.taskCode)}`}>返回关联任务核对原件</Link></p>}

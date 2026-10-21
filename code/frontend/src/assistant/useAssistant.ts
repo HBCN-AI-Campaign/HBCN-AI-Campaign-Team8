@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuthStore } from '@/stores/auth'
 import { assistantApi } from './api'
+import { collaborationApi, restoreActiveReply } from './collaboration'
+import type { Run } from './collaboration'
 import type { AssistantCapabilities, AssistantMessage, AssistantSession, AssistantSkill, AssistantStep, AssistantTaskOption } from './types'
 
 const errorText = (error: unknown) => error instanceof Error ? error.message : '助手请求失败，请稍后重试'
@@ -32,8 +34,63 @@ export function useAssistant(initialTask = '') {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [activeRun, setActiveRun] = useState<Run | null>(null)
   const stream = useRef<AbortController | null>(null)
+  const discussionLock = useRef(false)
   const generation = useRef(0)
+  const replay = useRef<{ runId: string; cursor: number; events: import('./collaboration').RoomEvent[] } | null>(null)
+  const shared = sessions.some((item) => item.id === activeId && item.shared)
+
+  const refreshSession = useCallback(async () => {
+    if (activeId === null || stream.current) return
+    const request = generation.current
+    try {
+      const detail = await assistantApi.session(activeId)
+      let restored = detail.messages.map(restoredMessage)
+      if (detail.active_run) {
+        const cache = replay.current?.runId === detail.active_run.id ? replay.current : { runId: detail.active_run.id, cursor: 0, events: [] }
+        // Full active-run reconstruction is bounded by the server run timeout.
+        for (let page = 0; page < 50; page++) {
+          const result = await collaborationApi.events(activeId, cache.cursor, detail.active_run.id)
+          cache.events.push(...result.events)
+          cache.cursor = result.cursor
+          if (!result.has_more) break
+        }
+        replay.current = cache
+        restored = restoreActiveReply(restored, cache.events, detail.active_run)
+      } else replay.current = null
+      if (request !== generation.current || stream.current) return
+      setMessages(restored)
+      setActiveRun(detail.active_run || null)
+      setSessions((items) => items.map((item) => item.id === detail.id ? detail : item))
+    } catch (cause) {
+      if (request === generation.current) {
+        setError(errorText(cause))
+        // Revoke cached material immediately when the server denies access.
+        setMessages([])
+        setActiveRun(null)
+      }
+    }
+  }, [activeId])
+
+  useEffect(() => {
+    if (!shared || activeId === null || sending) return
+    let busy = false
+    const timer = setInterval(() => {
+      if (busy || document.visibilityState === 'hidden') return
+      busy = true
+      void refreshSession().finally(() => { busy = false })
+    }, 1800)
+    return () => clearInterval(timer)
+  }, [shared, activeId, sending, refreshSession])
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'hidden' || stream.current) return
+      void assistantApi.sessions().then(setSessions).catch(() => undefined)
+    }, 5000)
+    return () => clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     let current = true
@@ -74,6 +131,8 @@ export function useAssistant(initialTask = '') {
     setSwitching(false)
     setActiveId(null)
     setMessages([])
+    setActiveRun(null)
+    replay.current = null
     setTaskCode(nextTask)
     setError('')
   }, [])
@@ -88,6 +147,7 @@ export function useAssistant(initialTask = '') {
       if (request !== generation.current) return
       setActiveId(id)
       setMessages(session.messages.map(restoredMessage))
+      setActiveRun(session.active_run || null)
       setTaskCode(session.task_code || '')
     } catch (cause) {
       if (request === generation.current) setError(errorText(cause))
@@ -115,6 +175,7 @@ export function useAssistant(initialTask = '') {
     const request = generation.current
     let localId: string | undefined
     let ended = false
+    let acceptedDraft = false
     const update = (apply: (message: AssistantMessage) => AssistantMessage) => {
       if (request === generation.current) {
         setMessages((items) => items.map((item) => item.id === localId ? apply(item) : item))
@@ -134,9 +195,11 @@ export function useAssistant(initialTask = '') {
       const user: AssistantMessage = { id: `user:${localId}`, role: 'user', content, status: 'completed', steps: [], citations: [] }
       const reply: AssistantMessage = { id: localId, role: 'assistant', content: '', status: 'running', streaming: true, steps: [], citations: [] }
       setMessages((items) => [...items, user, reply])
-      accepted?.()
-      for await (const event of assistantApi.streamMessage(id, content, taskCode, skillId, controller.signal)) {
+      if (!shared) { accepted?.(); acceptedDraft = true }
+      const adapter = shared ? collaborationApi : assistantApi
+      for await (const event of adapter.streamMessage(id, content, taskCode, skillId, controller.signal)) {
         if (controller.signal.aborted) break
+        if (!acceptedDraft) { accepted?.(); acceptedDraft = true }
         if (event.event === 'step' && event.step) {
           update((message) => ({ ...message, steps: upsertStep(message.steps, event.step!) }))
         } else if (event.event === 'tool' && event.tool) {
@@ -181,13 +244,28 @@ export function useAssistant(initialTask = '') {
         }).catch(() => undefined)
       }
       if (stream.current === controller) stream.current = null
+      if (shared) void refreshSession()
     }
-  }, [activeId, loading, switching, taskCode, skillId])
+  }, [activeId, loading, switching, taskCode, skillId, shared, refreshSession])
+
+  const discuss = useCallback(async (content: string, accepted?: () => void) => {
+    if (!content.trim() || activeId === null || discussionLock.current) return
+    discussionLock.current = true
+    const request = generation.current
+    try {
+      await collaborationApi.discuss(activeId, content.trim())
+      if (request !== generation.current) return
+      accepted?.()
+      await refreshSession()
+    } catch (cause) { if (request === generation.current) setError(errorText(cause)) }
+    finally { discussionLock.current = false }
+  }, [activeId, refreshSession])
 
   return {
     sessions, activeId, messages, capabilities, tasks, skills, taskCode, skillId,
     loading, switching, sending, error, notice, setSkillId, setError,
     refreshCapabilities, newConversation, selectSession, deleteSession, send,
+    shared, activeRun, refreshSession, discuss,
     stop: () => stream.current?.abort(),
   }
 }
