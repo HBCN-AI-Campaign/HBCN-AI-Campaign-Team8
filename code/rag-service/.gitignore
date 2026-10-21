@@ -6,3 +6,4 @@ rag_store.sqlite3
 app/static/ui-build/
 knowledge-base/docs/
 knowledge-base/manifest.json
+data/

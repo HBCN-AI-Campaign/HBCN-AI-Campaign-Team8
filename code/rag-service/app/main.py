@@ -3,6 +3,7 @@ import hmac
 import ipaddress
 import secrets
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Cookie, Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
@@ -21,8 +22,23 @@ from .ragflow import (
     RAGFlowNotConfiguredError,
 )
 from .schemas import Capabilities, Evidence, IndexResponse, QueryRequest, QueryResponse
+from .database import ResourceError
+from .runtime_client import RuntimeErrorResponse
+from sqlalchemy.exc import SQLAlchemyError
+from fastapi.responses import JSONResponse
 
-app = FastAPI(title="HBCN Business Knowledge Service", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(application):
+    if engine_kind() == "postgres":
+        try:
+            engine = await run_in_threadpool(get_engine)
+            await run_in_threadpool(engine.documents.recover_interrupted)
+        except Exception:
+            application.state.startup_error = "数据库初始化失败，请检查 /api/v1/ready"
+    yield
+
+app = FastAPI(title="HBCN Business Knowledge Service", version="0.2.0", lifespan=lifespan)
 UI_SESSION_COOKIE = "rag_ui_session"
 UI_SESSION_MAX_AGE = 8 * 60 * 60
 ALLOWED_EXTENSIONS = {
@@ -96,6 +112,11 @@ def health():
 @app.get("/api/v1/capabilities", response_model=Capabilities, dependencies=[Depends(require_service_token)])
 def capabilities():
     kind = engine_kind()
+    supported_extensions = ALLOWED_EXTENSIONS
+    if kind == "postgres":
+        from .postgres_engine import SUPPORTED_EXTENSIONS
+
+        supported_extensions = SUPPORTED_EXTENSIONS
     if kind == "ragflow":
         client = RAGFlowClient()
         configured_scopes = []
@@ -106,7 +127,7 @@ def capabilities():
                 continue
             configured_scopes.append(scope)
         configured = bool(configured_scopes)
-    elif kind == "local":
+    elif kind in {"local", "postgres"}:
         configured = True
         configured_scopes = ["business_rules", "project_design", "law"]
     else:
@@ -116,10 +137,13 @@ def capabilities():
         engine=kind,
         retrieval=configured,
         document_ingestion=configured,
+        agentic_orchestration=kind == "postgres",
+        answer_generation=kind == "postgres",
+        document_source=kind == "postgres",
         supported_scopes=configured_scopes,
         max_upload_bytes=settings.MAX_UPLOAD_BYTES,
         upload_timeout_seconds=settings.UPLOAD_TIMEOUT_SECONDS,
-        supported_file_extensions=sorted(ALLOWED_EXTENSIONS),
+        supported_file_extensions=sorted(supported_extensions),
     )
 
 
@@ -128,6 +152,8 @@ _QUERY_SCOPES = ("business_rules", "project_design", "law")
 
 def _retrieve_evidence(query: str, scope: str, top_k: int) -> list[dict]:
     """按 scope 检索；scope 为 ``all`` 时合并默认范围并去重排序。"""
+    if engine_kind() == "postgres":
+        return get_engine().retrieve(query=query, scope=scope, top_k=top_k)
     if scope == "all":
         merged: list[dict] = []
         seen: set[tuple[str, str]] = set()
@@ -187,8 +213,9 @@ async def index_document(
         content = await file.read(settings.MAX_UPLOAD_BYTES + 1)
         if len(content) > settings.MAX_UPLOAD_BYTES:
             raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "文件超过上传大小限制")
+        engine = get_engine()
         document_ids = await run_in_threadpool(
-            get_engine().upload,
+            engine.upload,
             scope=scope,
             filename=filename,
             content=content,
@@ -199,10 +226,10 @@ async def index_document(
     except (RAGFlowError, EmbeddingError) as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
     return IndexResponse(
-        status="processing",
+        status="ready" if getattr(engine, "synchronous_upload_ready", False) else "processing",
         scope=scope,
         document_ids=document_ids,
-        message="文件已提交解析与索引",
+        message="文件已完成解析与索引" if getattr(engine, "synchronous_upload_ready", False) else "文件已提交解析与索引",
     )
 
 
@@ -210,6 +237,8 @@ async def index_document(
 def list_documents():
     """列出已入库文档（供试用 UI 展示）。"""
     kind = engine_kind()
+    if kind == "postgres":
+        return {"engine": "postgres", "documents": get_engine().documents.list()}
     if kind == "local":
         return {"engine": "local", "documents": LocalVectorStore().list_documents()}
     if kind == "ragflow":
@@ -231,6 +260,23 @@ def list_documents():
                 })
         return {"engine": "ragflow", "documents": documents}
     return {"engine": "none", "documents": []}
+
+
+@app.exception_handler(ResourceError)
+@app.exception_handler(SQLAlchemyError)
+@app.exception_handler(RuntimeErrorResponse)
+def resource_failure(request, exc):
+    return JSONResponse(status_code=503, content={"detail": "依赖服务暂不可用或处理队列已满，请检查服务就绪状态后重试"})
+
+
+@app.exception_handler(EmbeddingError)
+def embedding_failure(request, exc):
+    return JSONResponse(status_code=502, content={"detail": "向量服务调用失败，请稍后重试"})
+
+
+from .backend_api import router as backend_router
+
+app.include_router(backend_router, dependencies=[Depends(require_service_token)])
 
 
 _STATIC_DIR = Path(__file__).resolve().parent / "static"

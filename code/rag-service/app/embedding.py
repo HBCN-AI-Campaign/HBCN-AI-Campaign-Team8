@@ -51,21 +51,22 @@ class EmbeddingClient:
                     headers={"Authorization": f"Bearer {self.api_key}"},
                     timeout=self.timeout,
                 )
-            except httpx.HTTPError as exc:
-                raise EmbeddingError(f"Embedding 请求失败：{exc}") from exc
+            except httpx.HTTPError:
+                raise EmbeddingError("Embedding 连接失败或超时") from None
             if response.status_code >= 400:
-                raise EmbeddingError(f"Embedding 返回 {response.status_code}：{response.text[:200]}")
+                raise EmbeddingError(f"Embedding 返回 HTTP {response.status_code}")
             try:
                 data = response.json()
             except ValueError as exc:
                 raise EmbeddingError("Embedding 返回了无效 JSON") from exc
 
-            items = data.get("data") or []
-            batch_vectors = [
-                [float(value) for value in item["embedding"]]
-                for item in sorted(items, key=lambda entry: entry.get("index", 0))
-                if isinstance(item.get("embedding"), list)
-            ]
+            try:
+                items = sorted(data.get("data") or [], key=lambda entry: entry["index"])
+                if [item["index"] for item in items] != list(range(len(batch))):
+                    raise ValueError("向量索引不匹配")
+                batch_vectors = [[float(value) for value in item["embedding"]] for item in items]
+            except (KeyError, ValueError, TypeError, AttributeError):
+                raise EmbeddingError("Embedding 响应的向量或索引格式无效") from None
             if len(batch_vectors) != len(batch):
                 raise EmbeddingError(
                     f"Embedding 返回数量不符：期望 {len(batch)}，实际 {len(batch_vectors)}"

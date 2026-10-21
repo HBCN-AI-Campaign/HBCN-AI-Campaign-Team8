@@ -1,6 +1,7 @@
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, SecretStr
 
 
 class Settings(BaseSettings):
@@ -10,7 +11,7 @@ class Settings(BaseSettings):
     BUSINESS_SOURCE_ROOT: str = ""
 
     # --- 正式检索底座：RAGFlow ---
-    RAG_ENGINE: Literal["ragflow", "local", "auto"] = "auto"
+    RAG_ENGINE: Literal["ragflow", "local", "postgres", "auto"] = "auto"
     RAGFLOW_BASE_URL: str = ""
     RAGFLOW_API_KEY: str = ""
     RAGFLOW_BUSINESS_RULES_DATASET_ID: str = ""
@@ -36,6 +37,24 @@ class Settings(BaseSettings):
     OCR_VISION_MODEL: str = "qwen3.8-flash"       # OCR 服务不可用时，图片走百炼视觉兜底
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 80
+
+    RAG_DATABASE_URL: SecretStr = SecretStr("")
+    RAG_DATABASE_RESOURCE_FILE: str = ""
+    RAG_SSH_RESOURCE_FILE: str = ""
+    RAG_SSH_HOST_KEY_SHA256: str = ""
+    RAG_POSTGRES_SSLMODE: Literal["require", "verify-full", "disable"] = "require"
+    RAG_DATABASE_SCHEMA: str = "hbcn_rag"
+    RAG_VECTOR_TABLE: str = "chunks_v1"
+    EMBEDDING_DIMENSIONS: int = Field(default=1024, ge=1, le=2000)
+    RAG_DATA_DIR: str = "data"
+    RAG_MAX_DOCUMENT_PAGES: int = Field(default=500, ge=1, le=2000)
+    RAG_MAX_TEXT_CHARS: int = Field(default=2_000_000, ge=1000)
+    RAG_RETRIEVAL_MIN_SCORE: float = Field(default=0.35, ge=0, le=1)
+    RAG_MAX_CONCURRENT_JOBS: int = Field(default=2, ge=1, le=8)
+    ASSISTANT_RUNTIME_URL: str = ""
+    ASSISTANT_RUNTIME_TOKEN: SecretStr = SecretStr("")
+    ASSISTANT_RUNTIME_RESOURCE_FILE: str = ""
+    RAG_ANSWER_TIMEOUT_SECONDS: float = Field(default=90, ge=5, le=240)
 
 
 settings = Settings()

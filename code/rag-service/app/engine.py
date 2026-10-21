@@ -87,6 +87,8 @@ class LocalEngine:
 
 
 def engine_kind() -> str:
+    if settings.RAG_ENGINE == "postgres":
+        return "postgres"
     ragflow_ready = bool(settings.RAGFLOW_BASE_URL and settings.RAGFLOW_API_KEY)
     local_ready = bool(settings.BAILIAN_BASE_URL and settings.BAILIAN_API_KEY)
 
@@ -104,6 +106,10 @@ def engine_kind() -> str:
 def get_engine() -> Any:
     """按配置返回可用引擎；都未配置时抛出 RAGFlowNotConfiguredError。"""
     kind = engine_kind()
+    if kind == "postgres":
+        from .postgres_engine import get_postgres_engine
+
+        return get_postgres_engine()
     if kind == "ragflow":
         return RAGFlowClient()
     if kind == "local":

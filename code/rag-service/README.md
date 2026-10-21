@@ -1,100 +1,97 @@
-# HBCN RAG Service
+# HBCN RAG Backend
 
-独立的业务知识库通信模块。它不修改 `code/backend` 和 `code/frontend`，也不实现自己的切片、向量库或 Agent 循环。
+独立的境外贷款知识查询模块。2026-10-21 已真实跑通 PostgreSQL/pgvector 入库、业务检索与 OpenCode SDK 引用问答；未修改主项目 backend/frontend 或 SDK 代码。完整验收见 `../../docs/RAG后端验收与运行.md`。
 
-当前状态：已提供两套引擎——① 正式引擎走 RAGFlow（需 Docker/RAGFlow 实例）；② 本地试运行引擎走
-百炼 Embedding + SQLite 向量库 + OCR（无需 Docker），并附带 `/ui` 试用页面（查询 + 文件导入）。
-本机尚未安装 Docker，因此 RAGFlow 实例和真实远端检索尚未启动；本地引擎已可运行试用。
+## 技术选择
 
-## 运行
+- 向量存储复用官方 [langchain-postgres](https://github.com/langchain-ai/langchain-postgres) `PGEngine` / `PGVectorStore`，连接汇丰 PostgreSQL/pgvector，创建独立 schema 与 HNSW 索引。
+- 切分复用 [LangChain Text Splitters](https://github.com/langchain-ai/langchain/tree/master/libs/text-splitters)；解析使用 pypdf、pypdfium2、python-docx、openpyxl，不自建向量相似度算法或切片器。
+- 编排复用 [LangGraph](https://github.com/langchain-ai/langgraph)：问题理解 → 检索 → SDK 核对相关性 → 必要时改写重检索（最多两轮）→ SDK 回答 → 引用编号校验。不展示模型内部思维链。
+- 智能调用已有 `code/assistant-runtime` OpenCode SDK `/runs`；当前 SDK 模型为汇丰百炼 `qwen3.8-flash`，Embedding 为 `qwen3.7-text-embedding-flash`、1024维。
+- 使用轻量成熟库而非复制完整平台：当前未部署 Docker/RAGFlow，不把旧 SQLite 冒充 PostgreSQL。旧 local/ragflow 引擎保留兼容；新增接口仅用于显式 `RAG_ENGINE=postgres`，不静默回退。
+
+## 安装与运行
+
+在本目录执行，Windows / Python 3.12 实测：
 
 ```powershell
-cd code/rag-service
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
 Copy-Item .env.example .env
-.venv\Scripts\python -m uvicorn app.main:app --port 8010
+# 配置完成后启动；已有 .env 时跳过复制，不要覆盖
+.\scripts\start-backend.ps1 -Port 8011
 ```
 
-运行前在 `.env` 配置 `SERVICE_TOKEN`；再按引擎二选一配置（见下）。`.env` 只保留在本机，不提交。示例配置默认选择正式 RAGFlow 引擎。
+本机现有 `.env` 已配置。后台隐藏运行，仅监听 `127.0.0.1:8011`；检测冲突，不杀已有进程。日志/PID 在忽略目录 `data/`。停止：`scripts/stop-backend.ps1 -Port 8011`。
 
-### 引擎选择
+| 配置 | 含义 |
+| --- | --- |
+| `SERVICE_TOKEN` | 服务鉴权，不提交、不发浏览器 |
+| `BAILIAN_BASE_URL` / `BAILIAN_API_KEY` | 已下发百炼地址/授权 |
+| `RAG_DATABASE_URL` | 直接连接串，与资源文件方式二选一 |
+| `RAG_DATABASE_RESOURCE_FILE` | PostgreSQL 资源文件路径，读取 PGHOST/PGPORT/PGDATABASE/PGUSER/PGPASSWORD |
+| `RAG_SSH_RESOURCE_FILE` / `RAG_SSH_HOST_KEY_SHA256` | 本机经 ECS 访问私网 RDS；固定主机指纹，不接受任意密钥 |
+| `RAG_POSTGRES_SSLMODE` | 默认 require；本次 RDS 不支持 TLS，经 SSH 隧道显式 disable，不能自行开放数据库公网 |
+| `ASSISTANT_RUNTIME_URL` | 已有 SDK 运行时，默认本机8090 |
+| `ASSISTANT_RUNTIME_TOKEN` / `ASSISTANT_RUNTIME_RESOURCE_FILE` | 服务 token，或仅读取已有 runtime `.env` 中的 token |
+| `RAG_DATABASE_SCHEMA` / `RAG_VECTOR_TABLE` | 默认 hbcn_rag / chunks_v1，不改主项目业务表 |
+| `RAG_DATA_DIR` | 原件目录，默认 data/，须与数据库一起备份 |
 
-- **RAGFlow 引擎**（正式底座）：设置 `RAG_ENGINE=ragflow`，配置 `RAGFLOW_BASE_URL` / `RAGFLOW_API_KEY` 和两个 dataset ID。缺少 RAGFlow 配置时服务报告未就绪，不会静默切到本地引擎。
-- **本地引擎**（试运行，无需 Docker）：配置 `BAILIAN_BASE_URL` / `BAILIAN_API_KEY`，
-  并设置 `RAG_ENGINE=local`，用百炼 `qwen3.7-text-embedding-flash` 生成向量并存入本地 SQLite。旧配置可暂用 `RAG_ENGINE=auto`，此时 RAGFlow 优先、本地引擎回退。
+**必须单实例、单 worker**：启动会将上次中断任务标为失败，不能运行两个实例共享此 schema 同时恢复任务。更换向量维度须配置新表并重新导入，不能覆盖旧表。不要使用 reload 作为长期部署方式。
 
-### 试用 UI
-
-先构建独立 UI（不修改主项目的 `code/frontend`）：
-
-```powershell
-cd code/rag-service/ui
-pnpm install
-pnpm build
-cd ..
-```
-
-启动服务后浏览器打开 `http://127.0.0.1:8010/ui/`。本机浏览器由服务签发短时 HttpOnly 会话，不需要在页面输入 Token；其他 API 客户端仍使用 `Authorization: Bearer <SERVICE_TOKEN>`。UI 支持：
-
-- **导入文件**（自动解析 + Embedding 入库）：文本直接读取；图片优先走队友 `code/ocr_demo`
-  的 OCR 服务（`OCR_BASE_URL` 默认 `http://127.0.0.1:8001`），不可用时自动回退百炼视觉 OCR；PDF / Word / Excel 需先启动
-  `code/ocr_demo`（其 PaddleOCR 环境见 `../ocr_demo/README.md`）。同机运行主后端（8000）时，OCR Demo 请使用 8001 端口。
-- **检索查询**：返回带来源文件、页码和原始检索分值的证据片段；分值不是审核结论或置信概率。同时支持查看已入库文档列表。
-- **证据阅读**：Markdown 标题、列表和表格按格式展示；长片段默认折叠，可展开查看原始证据。渲染结果经过 HTML 净化，不把资料内容当作可信页面代码。
-- **状态与范围**：传输文件时显示进度，传输完成后显示“解析与索引中”；成功资料进入列表，失败项保留错误原因。文档状态反映引擎返回的解析状态，未配置的数据集范围会在 UI 中禁用。
-- **文件选择**：前端只选择服务接受的 PDF、Office、文本、表格和图片格式；单文件上限 50 MB，最终校验仍由后端负责。
-
-## 初始化与入库（RAGFlow 引擎）
-
-先配置 `BUSINESS_SOURCE_ROOT` 指向旧业务资料目录。以下命令默认只检查白名单，不上传：
-
-```powershell
-.venv\Scripts\python -m app.cli ingest --json
-```
-
-RAGFlow 可用并确认资料范围后，先创建或复用 dataset，再执行真实上传：
-
-```powershell
-.venv\Scripts\python -m app.cli bootstrap --json
-.venv\Scripts\python -m app.cli ingest --execute --json
-```
-
-`--execute` 只会上传 `app/manifest.py` 中的白名单文件；敏感目录、视频、压缩包、样本单据和 API/云资源指南不在默认清单内。
-
-## 部署官方 RAGFlow
-
-部署脚本固定使用官方 `v1.0.0-rc2`，不会把 RAGFlow 源码复制进本项目：
-
-```powershell
-.\scripts\deploy-ragflow.ps1 -Start
-```
-
-脚本要求 Docker Desktop 和 Git 已安装。首次启动后访问 RAGFlow 管理页面配置 Embedding/LLM，并创建 API Key；再把 Key 写入本机 `.env` 的 `RAGFLOW_API_KEY`，不要提交。停止服务：
-
-```powershell
-.\scripts\deploy-ragflow.ps1 -Stop
-```
+本次应用在本地电脑，数据库在汇丰私网；电脑休眠、SDK 退出、SSH 中断都会影响服务。不是 ECS 常驻生产部署，也未开放公网入口。
 
 ## HTTP 契约
 
-除 `/health` 外，API 要求 `Authorization: Bearer <SERVICE_TOKEN>`；`/ui/` 仅允许本机访问，并使用短时 HttpOnly 会话调用同源 API。
+`/health` 仅判断进程存活。以下 API 全部要求 `Authorization: Bearer <SERVICE_TOKEN>` 或本机 `/ui/` 签发的同源 HttpOnly 会话。主系统仍负责用户与任务权限，本服务不开放 task_documents。
 
-- `GET /api/v1/capabilities`：能力探测（含 `engine`、可用范围、最大上传字节数、上传等待上限和允许的文件扩展名）。
-- `POST /api/v1/query`：业务规则或项目设计资料的检索，返回可追溯证据。
-- `POST /api/v1/documents`：以 `multipart/form-data` 接收已授权资料并索引（RAGFlow 引擎走 RAGFlow，本地引擎走 OCR + Embedding + SQLite）。
-- `GET /api/v1/documents`：列出已入库文档（试用 UI 使用）。
-- `GET /ui/`：本地试用页面（查询 + 文件导入 + 文档列表），仅本地引擎需要。
+| 方法与路径 | 用途 |
+| --- | --- |
+| `GET /api/v1/ready` | 实查数据库、pgvector、列维度和 SDK 健康状态；不产生模型费用，不冒充真实模型验收 |
+| `GET /api/v1/capabilities` | 配置能力、范围、格式及上传上限；不是就绪检测 |
+| `POST /api/v1/ingestions` | 推荐异步上传：multipart file、scope；可选 source_url、jurisdiction；返回202、document、status_url |
+| `GET /api/v1/documents` | 列表及 queued/processing/ready/failed 状态 |
+| `GET /api/v1/documents/{id}` | 状态、持久化处理事件 |
+| `POST /api/v1/documents/{id}/retry` | 仅重试失败文档；损坏原件仍会失败 |
+| `GET /api/v1/documents/{id}/content?chunk_id=...` | 全文 pages/sections、命中 focus 的真实页码/工作表/字符起点；拒绝跨文档片段 |
+| `GET /api/v1/documents/{id}/source` | 受鉴权原件；PDF inline，其他 attachment；HTML 不作为可信网页执行 |
+| `POST /api/v1/query` | 原有纯证据检索协议，不生成答案 |
+| `POST /api/v1/answers` | 真问答：answer、sources、warnings、grounding、retrieval_rounds |
+| `POST /api/v1/answers/stream` | 同一问答图，SSE step/result/error；不使用计时器模拟动态 |
+| `POST /api/v1/documents` | 旧同步入口，新接入改用 ingestions 与轮询 |
 
-当前不开放 `task_documents`：需要主项目任务权限过滤。`law`（法规与外部公开资料）范围已在本地引擎开放，
-用于入库从官方渠道下载的公开法规与银行公开资料（见 `knowledge-base/catalog.json` 与
-`scripts/fetch_knowledge_base.py`）；商业法规 API 的 MCP 授权适配仍保持独立，不与本地公开资料混淆。
-Agentic 编排由 SDK 模块负责，本服务只提供稳定的检索和入库边界。
+问答请求：
 
-## RAGFlow 映射
+```json
+{"query":"固定资产投资类贷款的用途应如何填写？","scope":"business_rules","top_k":5,"conversation":[]}
+```
 
-- 检索：`POST /api/v1/retrieval`。
-- 上传：`POST /api/v1/datasets/{dataset_id}/documents`。
-- 解析：`POST /api/v1/datasets/{dataset_id}/chunks`。
+scope 为 business_rules/project_design/law/all。conversation 最多12条 role(user/assistant) + content，仅用于补全指代，不作为事实依据。sources 返回引用编号、原文、document_id、chunk_id、物理 PDF 页码（Office/文本为 null）、原件/全文相对 URL。
 
-RAGFlow 由官方 GitHub 项目独立部署；本目录只做本项目协议适配。
+无足够相关证据时 grounding=insufficient，不能用相似度冒充置信概率或审批结论。引用编号校验不等同于法律真实性证明；法规始终附带效力/适用性复核提示，北大法宝商业 API/MCP 尚未接入。
+
+## 上传与原件
+
+真实阶段：received → parsing → splitting → embedding → indexing → ready；异常 failed，重启中断 interrupted。原件在 `data/originals/{UUID}/original`，元数据、解析全文、事件和向量在独立 PostgreSQL schema。处理中的向量不可检索，完成时事务性开放。按 scope/SHA256/embedding模型去重；失败重试用 retry。
+
+支持 PDF、DOCX、XLSX、TXT/MD/CSV/JSON/HTML、常见图片；旧版 DOC/XLS/PPT/PPTX 先转换。PDF保留真实页码，DOCX/Excel不伪造页码。扫描页/图片复用 OCR 客户端，失败时走百炼视觉；不保证所有扫描质量。默认50MiB/文件、500页PDF、200万字符、2个解析线程、8个处理/排队名额。问答并发4，每次SDK调用默认超时90秒，完整问答可包含多次调用，调用方须设更长请求超时。
+
+## 白名单导入与验收
+
+```powershell
+.venv\Scripts\python -m pip install -r requirements-dev.txt
+.venv\Scripts\python scripts/ingest-corpus.py --source-root '实际共享资料根目录'
+.venv\Scripts\python scripts/ingest-corpus.py --source-root '实际共享资料根目录' --execute
+.venv\Scripts\python scripts/verify-backend.py
+.venv\Scripts\python scripts/verify-backend.py --persistence-only
+$env:HBCN_TEST_SOURCE_ROOT = '实际共享资料根目录'
+.venv\Scripts\python -m unittest discover -s tests -v
+```
+
+导入默认预览，仅4份明确业务资料、2份已检查文本的境外贷款通知，不扫描资源凭证目录。真实验收会产生少量模型费用并创建明确标记的验收资料；报告在 data/，不含凭证与业务原文。新电脑需准备知识文件，见 `knowledge-base/README.md`；catalog 不能替代原文正确性检查。
+
+## 接入边界
+
+**后端跑通不等于 UI 已接通。** 当前 `ui/` React 页面仍含静态演示和模拟动态，本次未修改，不作为后端验收证据。下一步 UI 按新接口连接真实上传、阶段、问答及阅读器。
+
+主系统调用方需将 RAG_BASE_URL 指向实际8011服务，服务 token 仅留后端；本次没有修改队友配置/代码，未停止原有8010实例。旧 `scripts/deploy-ragflow.ps1` / `app.cli` 是 RAGFlow 工作流，不用于本次 PostgreSQL 验收。

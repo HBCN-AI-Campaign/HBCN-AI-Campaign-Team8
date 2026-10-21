@@ -34,6 +34,8 @@ class Capabilities(BaseModel):
     retrieval: bool
     document_ingestion: bool
     agentic_orchestration: bool = False
+    answer_generation: bool = False
+    document_source: bool = False
     external_law_mcp: bool = False
     supported_scopes: list[str]
     max_upload_bytes: int = 50 * 1024 * 1024
@@ -46,3 +48,26 @@ class IndexResponse(BaseModel):
     scope: KnowledgeScope
     document_ids: list[str]
     message: str
+
+
+class AnswerSource(BaseModel):
+    citation: int
+    content: str
+    document_id: str
+    document_name: str
+    page: int | None = None
+    score: float | None = None
+    chunk_id: str | None = None
+    source_url: str | None = None
+    reader_url: str | None = None
+    metadata: dict = Field(default_factory=dict)
+
+
+class AnswerResponse(BaseModel):
+    query: str
+    scope: KnowledgeScope
+    answer: str
+    sources: list[AnswerSource]
+    warnings: list[str] = Field(default_factory=list)
+    retrieval_rounds: int
+    grounding: Literal["cited", "insufficient"]
