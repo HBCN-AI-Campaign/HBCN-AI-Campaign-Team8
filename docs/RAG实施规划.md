@@ -1,7 +1,7 @@
 # 汇丰业务知识库与受控 Agentic RAG 实施规划
 
 > 目标：把业务资料、任务单据、法律法规查询和外部审核能力统一成一个可被前端、审核流程和其他 Agent 调用的查询服务。  
-> 当前状态：已完成独立服务、官方 RAGFlow REST 映射、资料白名单和本地验证；没有改动现有前端或共享后端。本机尚未安装 Docker，外部 RAGFlow、Embedding、LLM 和北大法宝 MCP 尚未配置。
+> **状态：早期 RAGFlow 方向规划，不代表当前部署现状。** 本文保留当时对 RAGFlow 的选型和范围讨论；当前已验收实现采用 PostgreSQL/pgvector 与百炼、OpenCode SDK，详见 [RAG 模块总览](../code/rag-service/README.md) 和 [真实后端验收记录](RAG后端验收与运行.md)。本文件里的端口、待配置项和“未部署”描述不可用作现状汇报。
 
 ## 1. 最终形态
 

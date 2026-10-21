@@ -1,6 +1,94 @@
-# HBCN RAG Backend
+# RAG 模块总览与运行说明
 
-独立的境外贷款知识查询模块。2026-10-21 已真实跑通 PostgreSQL/pgvector 入库、业务检索与 OpenCode SDK 引用问答；未修改主项目 backend/frontend 或 SDK 代码。完整验收见 `../../docs/RAG后端验收与运行.md`。
+独立的境外贷款知识查询模块。2026-10-21 已真实跑通 PostgreSQL/pgvector 入库、业务检索与 OpenCode SDK 引用问答。**当前主机验收不代表已经部署到团队 ECS，也不代表 RAG 工作台或主站助手已完成端到端联调。** 后端验收明细见 [`docs/RAG后端验收与运行.md`](../../docs/RAG后端验收与运行.md)，ECS 迁移步骤见 [`docs/部署到汇丰ECS实施方案.md`](../../docs/部署到汇丰ECS实施方案.md)。
+
+## 一页现状
+
+| 项目 | 当前事实 |
+| --- | --- |
+| 代码位置 | `code/rag-service/`，独立 FastAPI 服务；不并入主站后端进程 |
+| 已验收服务 | 本机 `127.0.0.1:8011`；旧 `8010` 是另一实例，不代表本次版本 |
+| 检索存储 | 汇丰 PostgreSQL 的 `hbcn_rag` schema，pgvector 1024 维向量表 `chunks_v1`，HNSW 索引 |
+| 已接能力 | 百炼 Embedding、OpenCode SDK、文件解析/切片、相关性核对与有限重检索、带引用回答、原文定位 |
+| 验收证据 | 自动回归 47 项通过；具体资料范围和测试边界见验收报告 |
+| 尚未完成 | ECS 常驻部署、真实 RAG UI 接线、主站助手到 8011 的部署联调、任务级资料权限、完整法规服务 |
+| 原件位置 | 当前验收环境为本机 `data/originals/`；迁移时必须与数据库记录一起搬迁并备份 |
+
+## 当前 RAG 架构
+
+此图说明已验收的独立后端。主站适配层代码已存在，但 ECS 上的服务地址、Token 和端到端调用仍须按部署方案验证。
+
+```mermaid
+flowchart LR
+  Caller[已授权的后端调用方] -->|Bearer · HTTP| API[FastAPI RAG 服务<br/>本机 127.0.0.1:8011]
+  API --> DOC[(PostgreSQL<br/>hbcn_rag.documents)]
+  API --> VEC[(pgvector<br/>chunks_v1 · 1024维 · HNSW)]
+  API --> FILES[(持久化原件目录<br/>data/originals)]
+  API -->|切片向量化| EMB[汇丰百炼 Embedding]
+  API --> GRAPH[LangGraph<br/>检索 / 相关性检查 / 有限重检索]
+  GRAPH --> VEC
+  GRAPH -->|生成带引用回答| RT[OpenCode SDK runtime<br/>本机 8090]
+  RT --> LLM[汇丰百炼 LLM]
+  UI[React RAG 工作台<br/>当前静态演示] -.尚未接通真实接口.-> API
+```
+
+## 入库时序
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Caller as 授权调用方
+  participant API as RAG FastAPI
+  participant Disk as 原件目录
+  participant DB as PostgreSQL documents
+  participant Parser as 解析与切片
+  participant Emb as 百炼 Embedding
+  participant PGV as pgvector chunks_v1
+  Caller->>API: POST /api/v1/ingestions（Bearer）
+  API->>Disk: 保存原始文件
+  API->>DB: 建立 queued / received 文档记录
+  API-->>Caller: 202 + document_id + status_url
+  API->>Parser: 提取页面/工作表并切片
+  Parser->>DB: 更新 parsing / splitting 阶段与原文位置
+  API->>Emb: 为片段生成 1024 维向量
+  Emb-->>API: 向量
+  API->>PGV: 保存片段、元数据和向量
+  API->>DB: 全部成功后标记 ready / searchable
+  Caller->>API: GET /api/v1/documents/{id}
+  API-->>Caller: 状态、处理事件与片段数
+```
+
+## 当前数据关系
+
+```mermaid
+erDiagram
+  DOCUMENTS ||--o{ CHUNKS_V1 : indexes
+  DOCUMENTS {
+    uuid id PK
+    string name
+    string scope
+    string sha256
+    string embedding_model
+    string state
+    string stage
+    int chunk_count
+    jsonb pages
+    jsonb provenance
+    jsonb events
+  }
+  CHUNKS_V1 {
+    uuid langchain_id PK
+    string document_id FK
+    string scope
+    string embedding_model
+    boolean searchable
+    text content
+    vector embedding
+    jsonb langchain_metadata
+  }
+```
+
+`DOCUMENTS.events/pages/provenance` 是文档记录中的 JSONB 字段，不是单独的事件表；原始文件存于文件系统，不是 PostgreSQL 大对象。`document_id` 是片段回到文档的逻辑关联。RAG 原件目录和数据库都要备份，不能只备份 pgvector。
 
 ## 技术选择
 

@@ -1,24 +1,25 @@
-# 项目设计文档
+# 项目设计文档索引
 
-这里记录当前工作区对应的系统设计。`legacy/` 保留从旧项目迁移来的方案，作为历史参考；`diagrams/` 中的 Mermaid 文件按当前代码结构重建，可继续编辑。
+本索引指向当前可作为现状依据的模块总览、验收记录和部署规划。详细设计请看对应模块文档；标注“历史”的材料只解释设计沿革，不代表当前代码或部署状态。
 
-## 当前版本
+## 项目管理入口
 
-- [RAG 模块技术方案](RAG模块技术方案.md)：当前 POC 的真实边界、RAG 接入位置和后续实现路线。
-- [RAG 实施规划](RAG实施规划.md)：独立 RAG 服务、资料范围、HTTP 契约和部署边界。
-- [知识库资料清单](knowledge-base-manifest.md)：安全资料范围与敏感目录排除规则。
-- [RAG 实施规划](RAG实施规划.md)：独立 RAG 服务、资料范围、HTTP 契约和部署边界。
-- [知识库资料清单](knowledge-base-manifest.md)：安全资料范围与敏感目录排除规则。
-- [当前系统架构图](diagrams/current-system-architecture.mmd)：前端、FastAPI、规则引擎、Agent、数据库和文件存储。
-- [当前审核时序图](diagrams/current-loan-review-sequence.mmd)：从上传、解析、建任务到人工终审的现有 API 流程。
-- [证据定位数据流图](diagrams/document-evidence-flow.mmd)：字段来源、规则结果与 PDF 高亮之间的数据关系。
-- [受控 RAG 接入时序图](diagrams/rag-integration-sequence.mmd)：未来接入 Embedding、知识库和受控 Agentic Retrieval 的边界。
-- [RAG 服务隔离图](diagrams/rag-service-boundary.mmd)：独立服务与现有项目、RAGFlow、SDK 的通信边界。
-- [RAG 服务隔离图](diagrams/rag-service-boundary.mmd)：独立服务与现有项目、RAGFlow、SDK 的通信边界。
+- [Team 8 项目管理主档](../TEAM_MASTER.md)：目标、分工、模块状态、行动项和资源台账。
+- [迁移到汇丰 ECS 实施方案](部署到汇丰ECS实施方案.md)：本机 RAG/runtime 迁移、主站接线、网络边界、验收和回滚。
 
-## 历史迁移
+## 当前模块总览
 
-- [历史 RAG 技术方案](legacy/RAG模块技术方案-历史版本.md)
-- [历史业务集成时序图](legacy/RAG-汇丰业务集成时序图-历史版本.mmd)
+- [RAG 模块总览与运行说明](../code/rag-service/README.md)：当前架构图、入库时序、实际 PostgreSQL/pgvector 数据关系、接口和限制。
+- [RAG 后端验收与运行](RAG后端验收与运行.md)：真实后端联调结果、已验证资料范围、测试证据和剩余部署工作。
+- [慧眼助手总规划](ai-assistant/README.md)：当前架构、对话时序、实际会话 ER、接口、权限与运行方式。
+- [慧眼助手多人协作规划](ai-assistant/多人协作AI对话调研与优化方案.md)：专家/团队会话方向和目标图表；以文内“当前/目标”标识区分已实现与规划。
+- [知识库资料清单](knowledge-base-manifest.md)：安全资料范围、白名单及敏感目录排除规则。
 
-历史文件保留原内容；当前开发和同步以 `docs/` 根目录下的方案与图为准。
+## 系统图与历史规划
+
+- [主站证据定位数据流图](diagrams/document-evidence-flow.mmd)：解析字段、规则结果和 PDF 原文定位。
+- `diagrams/current-system-architecture.mmd` 与 `diagrams/current-loan-review-sequence.mmd`：较早版本的主站图，仍包含 Vue 描述，需按 React 现状重画后再用于答辩。
+- `diagrams/rag-integration-sequence.mmd` 与 `diagrams/rag-service-boundary.mmd`：早期规划图，包含尚未落地的审核 Agent/RAGFlow 流程，不代表当前 RAG 实现。
+- [早期 RAG 技术方案](RAG模块技术方案.md)、[早期 RAGFlow 实施规划](RAG实施规划.md)、[RAG 旧交接记录](RAG模块交接说明.md)：历史决策材料，现状以 RAG 总览和验收记录为准。
+- [资源连通性阶段核验](RAG资源连通性核验.md)：阶段性审计记录；新旧结论应按日期和后续验收报告理解。
+- [历史迁移方案](legacy/)：保留旧项目迁移背景。

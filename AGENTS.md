@@ -13,6 +13,12 @@
   - `code/backend/app/parse_agent.py` — 文件解析 Agent（OCR/LLM 识别字段 + 定位原文位置）
   - `code/backend/app/review_agent.py` — 专项审核 Agent（节假日/汇率/提单验真/制裁名单/法规检索）
 
+## 技术选型铁律（全项目适用）
+
+- 先从业务目标、正确性、可验证质量与安全合规出发，比较成熟方案；不得把当前 ECS 配置、现有 API/模型或手头电脑的能力当成目标架构上限。
+- 若最优方案缺少算力、存储、模型或授权，明确列为资源申请/部署决策，并比较申请云资源、本地部署等路径；不得因资源暂缺而静默降级或把限制伪装成技术结论。
+- 预算、时延、合规、维护成本仍要透明评估；“追求最优”不等于忽略这些因素，也不等于盲目增加复杂度。
+
 ## 技术栈决策（重要 · 2026-10-20）
 
 - **自有前端统一 React**：`code/frontend` 和 `code/rag-service/ui` 均为 Vite + React + TypeScript；助手入口为 `src/views/AssistantView.tsx`。
