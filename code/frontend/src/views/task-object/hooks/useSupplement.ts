@@ -50,7 +50,7 @@ export function useSupplement(
     }
     setSupping(true)
     try {
-      const t = await api.supplementTask(code, {
+      await api.supplementTask(code, {
         note: suppNote,
         field_updates,
         added_files,
@@ -61,7 +61,7 @@ export function useSupplement(
       setSuppEdits({})
       setSuppFileList([])
       setSuppNote('')
-      message.success(`补件已提交，任务状态：${t.status}`)
+      message.success('补件已提交，任务已回到「待处理」，等待审核人重新智能审核')
     } catch {
       /* 拦截器已提示 */
     } finally {

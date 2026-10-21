@@ -167,11 +167,34 @@ export function useChecks(
     setResults(r)
   }, [code])
 
+  // 字段被更正后：即时把已展示的规则明细值替换为新值（判定仍需「重新核对」才会重算）
+  const patchFieldValue = useCallback(
+    (docId: number, fieldKey: string, newValue: string) => {
+      setResults((prev) =>
+        prev.map((r) => {
+          let touched = false
+          const detail = (r.detail as (string | FieldSource | null)[][]).map((row) => {
+            const src = row[3] as FieldSource | null
+            if (src && src.doc_id === docId && src.field_key === fieldKey) {
+              touched = true
+              return [row[0], newValue, row[2], row[3]]
+            }
+            return row
+          })
+          return touched ? { ...r, detail } : r
+        }),
+      )
+    },
+    [],
+  )
+
   const run = useCallback(async () => {
     setRunning(true)
     try {
       const res = await api.runChecks(code)
       setResults(res.results)
+      // 重新核对完成：清除「待重新核对」标记（后端已同步置 false，不改任务状态）
+      setDetail((prev) => (prev ? { ...prev, needs_recheck: false } : prev))
       message.success(
         `核对完成：${res.counts.pass || 0} 通过 / ${res.counts.fail || 0} 不通过 / ${
           res.counts.warn || 0
@@ -232,6 +255,7 @@ export function useChecks(
     copyMail,
     load,
     refreshResults,
+    patchFieldValue,
     run,
     doReturn,
     doComplete,

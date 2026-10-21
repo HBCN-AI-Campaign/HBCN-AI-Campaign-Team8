@@ -15,7 +15,11 @@ const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
  * 对应 Vue 版的：thoughtQueue / waitResolver（纯 let 变量）→ 这里用 useRef，
  * 不触发重渲染；pause 判定用 resolvedRef 镜像避免闭包读到旧值。
  */
-export function useAiSession(code: string, onResultsRefresh: () => void | Promise<void>) {
+export function useAiSession(
+  code: string,
+  onResultsRefresh: () => void | Promise<void>,
+  onStatusChange?: (status: string) => void,
+) {
   const [aiTree, setAiTree] = useState<AITreeNode[]>([])
   const [treeState, setTreeState] = useState<TreeState>({})
   const [aiParsed, setAiParsed] = useState(0)
@@ -74,6 +78,8 @@ export function useAiSession(code: string, onResultsRefresh: () => void | Promis
       setAiTree(session.tree)
       setAiTotal(session.tree.length)
       setPendings(session.pendings)
+      // 启动即进入「智能审核中」
+      onStatusChange?.('ai_reviewing')
 
       // 逐条播放思考流
       for (const t of session.thoughts) {
@@ -100,13 +106,21 @@ export function useAiSession(code: string, onResultsRefresh: () => void | Promis
 
       // 刷新规则结果（后端可能已在 start 时跑了规则）
       await onResultsRefresh()
+
+      // 智能审核播放完成 → 任务进入「待复核」
+      try {
+        const t = await api.aiComplete(code)
+        onStatusChange?.(t.status)
+      } catch {
+        /* 忽略，状态由后端兜底 */
+      }
     } catch {
       /* 拦截器已提示 */
     } finally {
       setAiRunning(false)
       setAiWaiting(false)
     }
-  }, [aiRunning, code, resetAi, scrollThink, waitForResolve, onResultsRefresh])
+  }, [aiRunning, code, resetAi, scrollThink, waitForResolve, onResultsRefresh, onStatusChange])
 
   const aiRestart = useCallback(() => {
     // fire-and-forget，和 Vue 版一致
