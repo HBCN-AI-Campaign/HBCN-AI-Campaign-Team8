@@ -15,7 +15,7 @@
 - Runtime 只注册 `read_authorized_evidence` direct tool；其余工具一律 deny。该工具只把 FastAPI 已筛选的本轮证据交给模型，不可读数据库、文件或执行 shell。
 - FastAPI 组合当前用户有权访问的任务材料、规则结果和 RAG 知识证据。RAG 查询使用 `knowledge_base` scope、`agentic=true`，不把任务 PDF 交给共享知识库，也不在这里启用外部法律 API。
 - `.opencode/skills/` 有六项项目内置审核指引；`GET /api/assistant/skills` 返回目录元信息，消息可通过 `skill_id` 选择指引。它是只读技能目录，当前没有独立的专家审批/发布流程，也不是可安装任意 GitHub 仓库的技能市场。
-- Vue 页面使用仓库现有 Vue/Element Plus，并使用 `@copilotkit/vue` 的 assistant message renderer；业务任务、SSE 执行记录和引用仍由现有页面负责。执行状态完成或失败后折叠，不把模型 reasoning 发送到前端。
+- React 页面使用仓库现有 React 18 / Ant Design 5，并使用 `@ant-design/x@1.6.1` 的 Sender、Bubble、Conversations、ThoughtChain；业务任务、SSE 执行记录和引用仍由现有页面负责。执行状态完成或失败后折叠，不把模型 reasoning 发送到前端。当前 UI 与接口说明以 [慧眼助手 README](README.md) 为准。
 - 用户消息、助手最终答复、公开步骤摘要和 citations 存入现有助手会话模型。无模型答复时返回错误，不生成本地伪造回答；生成答复会附“以上为审核辅助意见，不是贷款最终审批决定，请由有权限的审核人员复核。”
 
 ## 选型与取舍

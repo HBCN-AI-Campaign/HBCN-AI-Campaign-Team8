@@ -17,13 +17,35 @@
 
 ```mermaid
 flowchart LR
-  U[经办人 / 审核人员] --> UI[React 慧眼助手]
-  UI -->|JWT + JSON / SSE| API[FastAPI assistant 路由]
-  API --> DB[(用户隔离的会话 / 消息 / 轨迹)]
-  API -->|授权适配| RAG[独立 RAG 服务]
-  API -->|私网 token| RT[OpenCode runtime]
-  RT -->|服务端 key| HSBC[汇丰模型 API]
+  U[经办人 / 审核人员] --> UI[React 18 慧眼助手<br/>Ant Design X]
+  UI -->|JWT · JSON / SSE| API[FastAPI<br/>assistant router/service]
+  API -->|用户隔离| DB[(SQLite 默认<br/>PostgreSQL 可配置)]
+  API -->|校验任务权限并加载| TASK[任务单据字段 / 规则结果]
+  API -->|knowledge_base scope| RAG[RAG adapter<br/>独立 rag-service]
+  API -->|仅传入本轮授权证据<br/>私网 bearer token| RT[独立 Bun runtime<br/>OpenCode SDK]
+  RT -->|服务端 HSBC key| HSBC[汇丰模型 API]
+  RT -->|tool allowlist| TOOL[read_authorized_evidence<br/>只读本轮证据]
+  TASK --> API
+  RAG --> API
+  TOOL --> RT
+  RT -->|公开执行事件 / 答复<br/>不发送 reasoning| API
+  API -->|SSE: step/tool/delta/citations| UI
+  API -->|完整答复及 steps/citations| DB
 ```
+
+当前由主后端保存会话、用户消息和最终助手消息；执行步骤及引用随最终助手消息一起保存。SSE 逐事件还没有独立的持久事件日志，因此断线后不能按事件序号恢复执行过程。OpenCode session 是每轮临时创建并清理的，跨轮上下文由业务后端传入历史消息。
+
+**正文的“流式”需要准确理解：** runtime 当前等模型完整生成后才发送 `assistant_result`；FastAPI 再将完整答复按 80 字符切成 `delta` 事件。页面会逐段显示，但这不是模型 token 到达时的实时流。步骤与工具状态则是在运行过程中按事件显示。若要达到 Copilot/Codex 那种边生成边显示体验，下一步应验证当前 OpenCode SDK/模型通道的真实增量事件能力，并让 runtime 转发文本增量；不可仅靠缩小后端切片大小冒充实时生成。
+
+RAG scope 的实际范围需要按接口解释：`knowledge_base` 会检索 RAG 服务的 `business_rules` 与 `project_design`；任务单据和规则结果由主后端在通过任务权限检查后从业务数据库读取，不走 RAG。`task_documents` 和外部 `law` scope 当前未开放。`rag_available=true` 只代表 RAG 健康检查成功，不代表某条问题一定命中证据或回答质量已验收。
+
+### 当前技术栈和成熟度判断
+
+- 仓库自有前端已统一为 React：主站 React 18 + Ant Design 5，助手复用 `@ant-design/x@1.6.1`；`code/` 扫描无 `.vue` 源文件，两份前端锁文件也没有 Vue 运行时/构建依赖。历史交接记录仍保留为档案，不能视为当前实现。
+- AI runtime 使用锁定的 `@opencode/sdk@2.0.32`，未使用 OpenAI Agents SDK。模型 key 放在 runtime 服务端，助手通过 汇丰提供的模型 API 配置调用。
+- 任务权限目前沿用主站角色规则；`task_for_user` 对经办人检查任务提交人，对审核人员沿用既有角色权限。它不是可邀请的细粒度任务 ACL。
+- 这是适合演示的模块化单用户版本，不应描述为已达到成熟多人协作或生产级：会话目前归属单个用户；SQLite 为默认数据库；执行事件不能按事件序号恢复；回答正文并非模型 token 实时流；RAG 法规与任务文档 scope 未开放；没有多人访问审计。真实部署还需按环境配置数据库、密钥、RAG/runtime 服务并做并发、重连和授权测试。
+- GitHub 方案调研及多人对话目标架构见[多人协作 AI 对话调研与优化方案](多人协作AI对话调研与优化方案.md)。
 
 ## 同学如何接入
 
