@@ -1,0 +1,48 @@
+flowchart LR
+    subgraph Browser[浏览器]
+        Login[LoginView]
+        Create[CreateTaskView\n上传与解析预览]
+        Review[TaskObjectView\n规则与智能审核]
+        PDF[PdfSourceViewer\n原文定位]
+    end
+
+    APIClient[src/api.ts\naxios 统一封装]
+    Router[Vue Router\n鉴权守卫]
+    FastAPI[FastAPI\napp/main.py]
+
+    subgraph Backend[后端应用]
+        Auth[routers/auth.py\n登录与当前用户]
+        Tasks[routers/tasks.py\n任务与文件接口]
+        Parse[parse_agent.py\n当前 Mock 解析]
+        Rules[rule_engine\n确定性规则]
+        ReviewAgent[review_agent.py\n专项审核会话]
+        Security[security.py\nJWT 与角色权限]
+    end
+
+    DB[(SQLite / PostgreSQL\nusers, tasks, documents, results)]
+    Files[(sample_pdfs\nuploads 运行时文件)]
+    FutureRAG[[后续：OCR / RAG / 外部核验服务]]
+
+    Login --> Router
+    Create --> APIClient
+    Review --> APIClient
+    PDF --> APIClient
+    Router --> APIClient
+    APIClient --> FastAPI
+    FastAPI --> Auth
+    FastAPI --> Tasks
+    Auth --> Security
+    Tasks --> Security
+    Tasks --> Parse
+    Tasks --> Rules
+    Tasks --> ReviewAgent
+    Auth --> DB
+    Tasks --> DB
+    Tasks --> Files
+    Parse -. 后续替换 .-> FutureRAG
+    ReviewAgent -. 专项检索接入 .-> FutureRAG
+
+    classDef current fill:#e8f3ff,stroke:#3978b8,color:#102a43
+    classDef planned fill:#fff7e6,stroke:#c68a1b,color:#5b3b00
+    class Login,Create,Review,PDF,APIClient,Router,FastAPI,Auth,Tasks,Parse,Rules,ReviewAgent,Security,DB,Files current
+    class FutureRAG planned

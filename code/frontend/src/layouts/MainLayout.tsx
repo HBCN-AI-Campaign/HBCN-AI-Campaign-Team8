@@ -1,5 +1,6 @@
-import { Layout, Tag, Avatar, Dropdown, type MenuProps } from 'antd'
-import { Outlet, useNavigate } from 'react-router-dom'
+import { Layout, Tag, Avatar, Button, Dropdown, type MenuProps } from 'antd'
+import { RobotOutlined } from '@ant-design/icons'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/auth'
 
 const { Header, Content } = Layout
@@ -14,6 +15,7 @@ function roleTag(role: string): { label: string; color: string } {
 
 export default function MainLayout() {
   const navigate = useNavigate()
+  const isAssistant = useLocation().pathname === '/assistant'
   const displayName = useAuthStore((s) => s.displayName)
   const role = useAuthStore((s) => s.role)
   const logout = useAuthStore((s) => s.logout)
@@ -61,10 +63,11 @@ export default function MainLayout() {
           >
             贷
           </span>
-          境外贷款单据审核平台
+          <span className="platform-name">境外贷款单据审核平台</span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <Button type={isAssistant ? 'primary' : 'text'} icon={<RobotOutlined />} onClick={() => navigate('/assistant')}>慧眼助手</Button>
           <Tag color={tag.color}>{tag.label}</Tag>
           <span style={{ fontSize: 13, color: 'var(--muted)' }}>{displayName}</span>
           <Dropdown menu={{ items: menuItems, onClick: onMenuClick }} placement="bottomRight">
@@ -75,7 +78,7 @@ export default function MainLayout() {
         </div>
       </Header>
 
-      <Content style={{ background: 'var(--bg)', padding: 20, overflow: 'auto' }}>
+      <Content style={{ background: 'var(--bg)', padding: isAssistant ? 0 : 20, overflow: isAssistant ? 'hidden' : 'auto', minHeight: 0 }}>
         <Outlet />
       </Content>
     </Layout>

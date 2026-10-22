@@ -8,6 +8,8 @@
 承接需外部能力的检查（节假日、汇率、提单验真、制裁名单、法规检索等），
 最终给出通过 / 不通过 / 需人工处置的结论。
 
+自有前端已统一为 React；慧眼助手从顶栏或 `/assistant` 进入，直接使用 Ant Design X 聊天组件，通过 OpenCode runtime 调用汇丰模型 API。任务接入、SSE 契约、环境配置及联调结果见 [助手接入文档](../docs/ai-assistant/README.md) 和 [React 前端说明](frontend/README.md)。审核最终结论须由有权限人员确认。
+
 ---
 
 ## 目录结构

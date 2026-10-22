@@ -48,6 +48,39 @@ class User(Base):
 
 
 # ============================================================
+# AI 助手会话（用户级隔离，供流式助手与审计使用）
+# ============================================================
+class AssistantSession(Base):
+    __tablename__ = "assistant_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(128), default="新会话")
+    task_code: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+    messages: Mapped[list["AssistantMessage"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan", order_by="AssistantMessage.id"
+    )
+
+
+class AssistantMessage(Base):
+    __tablename__ = "assistant_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("assistant_sessions.id"), index=True)
+    role: Mapped[str] = mapped_column(String(16))  # user / assistant
+    content: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(16), default="completed")
+    steps: Mapped[list] = mapped_column(JSON, default=list)
+    citations: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)
+
+    session: Mapped["AssistantSession"] = relationship(back_populates="messages")
+
+
+# ============================================================
 # 业务实体（切片子集）
 # ============================================================
 class Customer(Base):
