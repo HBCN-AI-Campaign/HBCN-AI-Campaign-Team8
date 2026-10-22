@@ -90,6 +90,37 @@ flowchart LR
 
 `preflight --require-rag` 还要求 RAG 授权就绪接口通过。网页和每次 AI 调用都会核对 runtime 的版本；显示“协议版本不一致”时应部署同一 release 并重启 runtime。正确 token 和协议也不等于 HSBC 请求一定成功，仍须实际合成任务问答及引用验收。生产网站无需 Vite，沿用主站静态站点与 API 代理。
 
+### 当前本机实例（2026-10-22）
+
+本轮保留其他会话的旧进程，另启当前助手 API；不把本机配置写成团队固定地址。
+
+| 入口 | 当前状态 |
+|---|---|
+| `http://127.0.0.1:5173/assistant` | 正式 React/Vite 助手页，代理到 8003 |
+| `http://127.0.0.1:8003/api/assistant/v1` | 当前源码 API，单 worker，沿用既有本机库和登录账号 |
+| `http://127.0.0.1:8092` | 已存在且协议/鉴权通过的 OpenCode runtime，汇丰 qwen3.8-flash |
+| 8000 / 8002 / 8010 | 旧服务原样保留，OpenAPI 未提供助手 V1 或本轮 RAG ready |
+| 8011 | 未监听，`rag_available=false`；未启动/更改 RAG 同学服务 |
+
+启动采用**进程环境覆盖**，没有重写共享 `.env`。若上述进程退出，在核对端口空闲、runtime 8092 仍已授权就绪后，可分别在两个 PowerShell 终端恢复（先激活后端虚拟环境；前端需可用的 Node/npm）：
+
+```powershell
+# code/backend
+$env:ASSISTANT_RUNTIME_URL='http://127.0.0.1:8092'
+$env:DEBUG='false'
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8003 --workers 1
+```
+
+```powershell
+# code/frontend
+$env:HBCN_API_TARGET='http://127.0.0.1:8003'
+npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
+```
+
+本机本轮 npm 不在 PATH，实际直接用已安装 Node 运行 `node_modules/vite/bin/vite.js`，参数同上；未更改 package.json 或 lockfile。停止时只停止自己启动的这两个实例，不依据端口批量杀其他会话进程。
+
+经 **5173 真实 HTTP 代理 → 8003 → OpenCode → 汇丰** 的能力说明问答约 **14.2 秒**通过，包含正常主站登录、V1 契约、同键同 run、保存游标结果恢复；临时验收会话已删除。真实 RAG 尚未联通，不是云端/负载或双浏览器联合验收。普通本机预检通过；生产 JWT 弱默认值仍须由云站负责人正确配置，不能以本机演示代替生产预检。
+
 ## 5. 只读预检 → 实际问答 → 回滚演练
 
 主后端使用 requirements-assistant.txt；先按业务模块流程升级旧业务表，再运行助手独立迁移。以下在 code/backend 下执行，使用该部署的环境配置：
