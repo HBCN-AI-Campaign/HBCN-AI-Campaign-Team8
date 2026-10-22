@@ -8,7 +8,7 @@ import type {
 } from './types'
 import { useAuthStore } from '@/stores/auth'
 
-const base = '/api/assistant'
+const base = '/api/assistant/v1'
 
 function token(): string {
   return useAuthStore.getState().token

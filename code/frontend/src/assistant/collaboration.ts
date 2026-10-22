@@ -17,7 +17,7 @@ export const STOP_ASSISTANT_RUN = 'stop-assistant-run'
 
 async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const token = useAuthStore.getState().token
-  const response = await fetch(`/api/assistant${path}`, {
+  const response = await fetch(`/api/assistant/v1${path}`, {
     method, headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   })

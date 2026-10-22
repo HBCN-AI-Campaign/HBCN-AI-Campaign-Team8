@@ -17,8 +17,8 @@ describe('durable collaboration event adapter', () => {
     const events = []
     for await (const event of collaborationApi.streamMessage(7, '核对合同', 'TASK-1')) events.push(event)
     expect(fetch.mock.calls.map(([url]) => url)).toEqual([
-      '/api/assistant/sessions/7', '/api/assistant/sessions/7/runs',
-      '/api/assistant/sessions/7/events?after_id=8&run_id=run-fast',
+      '/api/assistant/v1/sessions/7', '/api/assistant/v1/sessions/7/runs',
+      '/api/assistant/v1/sessions/7/events?after_id=8&run_id=run-fast',
     ])
     const payload = JSON.parse(fetch.mock.calls[1][1]!.body as string)
     expect(payload.client_message_id).toBeTruthy()
@@ -54,8 +54,8 @@ describe('durable collaboration event adapter', () => {
     abort.abort(reason)
     expect((await stream.next()).done).toBe(true)
     expect(fetch.mock.calls.map(([url]) => url)).toEqual([
-      '/api/assistant/sessions/7', '/api/assistant/sessions/7/runs',
-      ...(shouldCancel ? ['/api/assistant/sessions/7/runs/run-live/cancel'] : []),
+      '/api/assistant/v1/sessions/7', '/api/assistant/v1/sessions/7/runs',
+      ...(shouldCancel ? ['/api/assistant/v1/sessions/7/runs/run-live/cancel'] : []),
     ])
   })
 })
