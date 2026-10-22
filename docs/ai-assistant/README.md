@@ -6,6 +6,8 @@
 
 ## 1. 当前做到哪里
 
+云端事实（2026-10-22 只读 SSH）：已运行网站不是助手已部署。Ubuntu 24.04 上 80 为 Vite 开发服务器，前端无助手页面/Ant Design X；8000 为无助手路由的 FastAPI 登录会话进程。无 runtime、助手表和 backend `.env`；DB/JWT 环境变量未提供，后端 Python 依赖 Alembic/HTTPX 缺失。详见[环境核对与发布路径](../../code/assistant-runtime/deploy/README.md)。未改远端文件、配置、进程或数据。
+
 | 已实现 | 真实边界 |
 |---|---|
 | React 正式助手，复用 Ant Design X | [HTML 原型](../../mockup/mockup_assistant_collab.html)仅用于产品讨论 |
@@ -140,7 +142,7 @@ RAG 按现有接口检索共享资料；任务概要、字段/规则结果先经
 4. code/frontend：npm ci、npm run dev。端口变化在忽略提交的 .env.local 设置 HBCN_API_TARGET；生产 npm run build，静态服务设 SPA 回退及 /api 代理，SSE 关闭缓冲。
 5. **当前单 API 实例/单 worker**：数据库保存事件/唯一运行槽，执行与取消仍是进程内 asyncio 任务。多实例须先引入持久队列及跨进程取消验证。SQLite 用于本机演示；真实 PostgreSQL/ECS 另做环境验收。
 
-用户指定继续使用已有汇丰云主站。2026-10-22 SSH 只读核对：Ubuntu 24.04，React 前端监听 80、主业务 API 8000；助手路由、助手表与 runtime 尚未部署。现有网站在线不能据此算助手已上线。[助手部署交付](../../code/assistant-runtime/deploy/README.md)记录了实际环境、增量发布范围、两种本机启动方式和 Linux systemd 模板。未改动云端运行文件或业务库。
+用户指定继续使用已有汇丰云主站。2026-10-22 SSH 只读核对：Ubuntu 24.04，80 是直接运行的 Vite 开发进程且当前前端源码不含助手，8000 为没有助手路由的 FastAPI 登录会话进程；没有部署助手 runtime/表。后端无 `.env` 或 DB/JWT 配置变量，数据库只有业务表，现有 Python 环境缺助手新增依赖。云端细项见[部署交付](../../code/assistant-runtime/deploy/README.md)。现有网站在线不能据此算助手已上线。没有改动云端运行文件或业务库。
 
 预检 `python -m app.assistant_preflight --require-rag` 检查现有表/迁移/运行唯一约束及内部服务鉴权，不改库、不消耗模型请求。首次迁移可从只有业务表的环境创建所有助手表，也兼容已有单人助手数据。runtime 带 token 的 `/readyz` 和每轮请求采用 `assistant_protocol: 2`；capabilities 与实际 AI 运行都会检查该协议，旧进程不能冒充当前就绪。升级后端时需同时发布此版 runtime。RAG 仍使用其既有 `/api/v1/ready`，不拿公开存活接口代替授权就绪。
 

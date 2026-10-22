@@ -7,12 +7,14 @@
 | 已核对事实 | 助手发布需要做什么 |
 |---|---|
 | Ubuntu 24.04 / x86_64，网站现已运行 | 继续使用现有云主站；Linux 验收对应这个目标，不另建网站入口 |
-| `/home/frontend` 的 React/Ant Design 前端监听 80 | 前端负责人发布包含 Ant Design X 与 /assistant 路由的固定版本构建 |
+| `/home/frontend` 的 Vite `dev --host 0.0.0.0 --port 80` 直接监听 80；源目录无助手路由/API 调用，也没有 `@ant-design/x` 依赖或 `dist/` | 当前是 React 开发服务器，不是静态生产构建；主站发布必须纳入助手路由及 Ant Design X，然后转为版本化静态构建。不能只增后端 |
 | `/home/backend` 的 FastAPI 监听 8000，OpenAPI 无助手路由 | 主站负责人合入助手路由/配置，在新 release 验证后切换；不原地覆盖正在运行的目录 |
+| 80/8000 进程由 root 登录 shell 启动，处于 transient session scope，未绑定可用 systemd unit | 未来发布须由站点负责人明确交接进程所有权/回滚方式，再分别做版本化服务托管；不直接 kill 或覆盖 PID |
 | 现有 SQLite 只有主业务表，无助手表 | 备份现有库后执行助手迁移；本版首次迁移会创建全部助手表，不依赖启动时 create_all |
+| backend 没有 `.env`；进程没有任何 DB/JWT/assistant 配置变量，SQLite 仅有 users/tasks/documents/check_results；当前 Python 环境未安装 Alembic 与 HTTPX | 现有运行未体现部署所需配置。不能让新 release 默默指向空默认数据库或直接沿用示例 JWT Secret；主站 owner 必须通过批准渠道交接 DB 位置、JWT 配置及 requirements 安装策略。现有后端配置由主站模块所有，助手部署不改它 |
 | 未发现 8090/8010/8011 监听服务 | runtime 和 RAG 在该机的部署尚需完成；RAG 由其模块负责，不把本机服务状态写成云端就绪 |
 
-本次仅 SSH 读取系统/监听/目录/业务表结构与 OpenAPI，连接沿用团队资源与已固定的主机指纹；没有发布文件、运行迁移、重启进程或查询业务单据内容。登录资料仍由团队安全渠道提供，此文不保存密码、IP 或 HSBC key。监听状态会变化，正式切换前需重新核对。
+本次仅 SSH 读取系统/监听/目录/业务表结构、进程环境变量名（不读值）与 OpenAPI，连接沿用团队资源与已固定的主机指纹；没有发布文件、运行迁移、重启进程或查询业务记录内容。登录资料仍由团队安全渠道提供，此文不保存密码、IP 或 HSBC key。监听状态会变化，正式切换前需重新核对。
 
 切换主站 release 时特别核对：`DATABASE_URL` 必须继续指向原业务库的绝对位置，不能因工作目录改变而创建空库；现有 uploads/sample_pdfs 的挂载或受控链接也要保留。当前源码的这些目录随 backend 根目录解析，由主站发布者安排持久化映射。助手发布不执行 seed、不复制真实单据进 release、不改变业务账号/JWT 配置。备份与恢复按主站流程完成后，再对同一个库执行助手迁移。
 
