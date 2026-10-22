@@ -78,6 +78,44 @@ class RAGClientTests(unittest.TestCase):
         self.assertEqual(result["missing"], ["业务日期"])
         self.assertTrue(result["warnings"])
 
+    def test_enhanced_retrieval_binds_bounded_conversation_as_background(self):
+        payloads = []
+
+        def fake_post(path, payload):
+            payloads.append(payload)
+            return {
+                "sources": [], "warnings": [], "evidence_status": "clarification",
+                "missing": ["单据"], "stop_reason": "clarification_needed", "retrieval_rounds": 0,
+            }
+
+        history = [
+            *[{"role": "user", "content": f"old-{index}"} for index in range(13)],
+            {"role": "system", "content": "must be ignored"},
+            {"role": "user", "content": "支付指令"},
+            {"role": "assistant", "content": "请补充币种"},
+            {"role": "user", "content": "USD 5000" * 1_000},
+        ]
+        with patch.object(RAGClient, "_post", side_effect=fake_post):
+            RAGClient().retrieve(query="金额为什么不对？", conversation=history)
+
+        self.assertEqual(
+            payloads[0]["conversation"],
+            [
+                *[{"role": "user", "content": f"old-{index}"} for index in range(4, 13)],
+                {"role": "user", "content": "支付指令"},
+                {"role": "assistant", "content": "请补充币种"},
+                {"role": "user", "content": ("USD 5000" * 1_000)[:4_000]},
+            ],
+        )
+        self.assertEqual(len(payloads[0]["conversation"]), 12)
+        self.assertNotIn("must be ignored", str(payloads[0]["conversation"]))
+        self.assertNotIn("old-3", str(payloads[0]["conversation"]))
+
+        with patch.object(RAGClient, "_post", side_effect=fake_post):
+            RAGClient().retrieve(query="金额", conversation=[{"role": "user", "content": "🧾" * 2_001}])
+        self.assertEqual(len(payloads[1]["conversation"][0]["content"].encode("utf-16-le")) // 2, 4_000)
+        self.assertFalse(payloads[1]["conversation"][0]["content"].endswith("\ud83e"))
+
     def test_enhanced_retrieval_rejects_broken_contract_without_leaking_payload(self):
         baseline = {
             "sources": [], "evidence_status": "insufficient",

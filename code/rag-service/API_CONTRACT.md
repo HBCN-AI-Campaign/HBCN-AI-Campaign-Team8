@@ -33,6 +33,8 @@ v1 保持路径、已有字段含义/类型、scope 和鉴权约定。新增可�
 
 这是调用示例，不是预置答案。`scope` 为 business_rules/project_design/law/all，不能传 task_documents；`top_k` 增强入口 1–8，旧 query 入口 1–20。query 最长 4,000 字符；可选 conversation 最多 12 条 user/assistant 消息，每条同时满足 4,000 字符和 SDK UTF-16 限制。conversation 是提问背景，不是已证实事实或规范依据。
 
+主站助手会把当前会话中最近的 user/assistant 消息作为 conversation 传入，以支持“这是支付指令”“币种是 USD”这类补充信息参与问题规划；system 消息、任务资料和历史答复不会因此取得新的 RAG 权限，也不会被当作证据。调用方仍需在自己的授权边界内构造会话并接受服务端的 12 条/单条 4,000 UTF-16 限制。
+
 增强响应中的 `sources[]` 每项有 citation、content、document_id、document_name、page、score、chunk_id、source_url、reader_url、metadata。content 是所选原文窗口；page/score 可以为空，不能伪造页码或将分数显示为置信概率。相对原文 URL 由主站在重新校验权限后代理；外部链接按来源处理，不让浏览器直接携带服务 Token。
 
 `evidence_status` 为 sufficient/insufficient/clarification，联合查看 missing、stop_reason、clarification_question、warnings、source_status、rerank_status、context_coverage、legal_applicability。HTTP 200 只表示本轮得到业务结果，**不等于可以审批通过**；片段有来源不等于支持全部结论，来源失败不等于无相关法规。调用方保留这些限定，不仅取 content 后丢弃缺口。

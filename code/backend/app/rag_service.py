@@ -63,6 +63,12 @@ class _RetrievalPayload(BaseModel):
     legal_applicability: dict[str, Any] = Field(default_factory=dict)
 
 
+def _truncate_utf16(text: str, limit: int) -> str:
+    """Match the downstream JavaScript SDK's UTF-16 character budget."""
+    encoded = text.encode("utf-16-le")
+    return encoded[: limit * 2].decode("utf-16-le", errors="ignore")
+
+
 # 主项目 scope -> rag-service dataset scope（见 code/rag-service/app/schemas.py）
 _SCOPE_MAP: dict[str, tuple[str, ...]] = {
     "knowledge_base": ("business_rules", "project_design"),
@@ -158,9 +164,21 @@ class RAGClient:
         *,
         query: str,
         top_k: int = 6,
+        conversation: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         """Use the enhanced evidence-only endpoint for Agent and assistant callers."""
         self._require_configured()
+        bounded_conversation = []
+        for item in conversation or []:
+            if not isinstance(item, dict) or item.get("role") not in {"user", "assistant"}:
+                continue
+            content = item.get("content")
+            if isinstance(content, str) and content:
+                bounded_conversation.append({
+                    "role": item["role"],
+                    "content": _truncate_utf16(content, 4_000),
+                })
+        bounded_conversation = bounded_conversation[-12:]
         payload = self._post(
             "/api/v1/retrievals",
             {
@@ -169,6 +187,7 @@ class RAGClient:
                 "top_k": min(max(top_k, 1), 8),
                 "sources": ["knowledge_base"],
                 "purpose": "reference",
+                "conversation": bounded_conversation,
             },
         )
         try:

@@ -154,6 +154,7 @@ def _rag_search(
         result = RAGClient().retrieve(
             query=query,
             top_k=6,
+            conversation=context.get("conversation", []),
         )
     except Exception as exc:
         # 网关或 RAG 服务异常时保留本地证据，不阻断助手。
@@ -282,16 +283,29 @@ async def run_agent_events(
             + json.dumps(retrieval_state, ensure_ascii=False)
         )
     if retrieval_warnings:
+        evidence_status = retrieval_state.get("evidence_status")
+        if evidence_status == "clarification":
+            retrieval_limit = "知识库检索需要澄清；优先询问检索状态中列出的缺失条件。"
+            step_detail = "检索需要补充条件；答复将优先请求澄清。"
+        elif evidence_status == "insufficient":
+            retrieval_limit = "知识库检索未确认依据充分；不得将候选片段表述为已核实结论。"
+            step_detail = "增强检索未确认依据充分；答复将说明依据缺口。"
+        elif evidence_status in {"unavailable", "not_configured"}:
+            retrieval_limit = "共享知识库未能提供本轮依据；不得声称已检索并核实共享知识。"
+            step_detail = "共享知识库不可用或未配置；本轮仅能使用当前已授权的任务证据。"
+        else:
+            retrieval_limit = "检索来源或排序存在未完成环节；引用前需核对可用原文和来源状态。"
+            step_detail = "检索存在未完成环节；请核对原文与来源状态。"
         runtime_instructions += (
-            "\n\n知识库检索状态：本轮增强检索未能确认依据充分。"
-            "不得将候选片段表述为已核实结论；明确说明缺口，必要时向用户澄清。"
+            "\n\n知识库检索状态：" + retrieval_limit
+            + "必要时明确说明缺口或向用户澄清。"
         )
         yield {
             "event": "step",
             "step": {
                 "key": "retrieval-evidence-status",
                 "label": "知识库证据需要谨慎使用",
-                "detail": "增强检索未确认依据充分；答复将说明依据缺口或请求澄清。",
+                "detail": step_detail,
                 "status": "error",
             },
         }

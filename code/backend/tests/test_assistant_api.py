@@ -221,7 +221,8 @@ class AssistantApiTests(unittest.TestCase):
         self.assertEqual(rag_request["url"], "http://rag-service/api/v1/retrievals")
         self.assertEqual(rag_request["payload"]["sources"], ["knowledge_base"])
         self.assertEqual(rag_request["payload"]["purpose"], "reference")
-        self.assertIn("不得将候选片段表述为已核实结论", runtime_payload["instructions"])
+        self.assertEqual(rag_request["payload"]["conversation"], [])
+        self.assertIn("知识库检索需要澄清", runtime_payload["instructions"])
         self.assertIn('"evidence_status": "clarification"', runtime_payload["instructions"])
         self.assertIn("待核对的单据类型", runtime_payload["instructions"])
         self.assertIn("请说明涉及哪份单据及币种？", runtime_payload["instructions"])
@@ -232,12 +233,18 @@ class AssistantApiTests(unittest.TestCase):
             if event.get("event") == "step" and event.get("step", {}).get("key") == "retrieval-evidence-status"
         )
         self.assertEqual(status_step["status"], "error")
-        self.assertIn("说明依据缺口或请求澄清", status_step["detail"])
+        self.assertIn("优先请求澄清", status_step["detail"])
 
     def test_task_chat_queries_shared_knowledge_base(self):
         from app.rag_service import RAGClient
 
-        context = {"task": {"task_code": "TASK-1"}, "documents": [], "results": []}
+        context = {
+            "task": {"task_code": "TASK-1"}, "documents": [], "results": [],
+            "conversation": [
+                {"role": "user", "content": "这是支付指令"},
+                {"role": "assistant", "content": "请补充币种"},
+            ],
+        }
         response = {
             "evidence": [{
                 "document_id": "doc-1",
@@ -254,7 +261,7 @@ class AssistantApiTests(unittest.TestCase):
         ) as retrieve:
             hits = _rag_search(context, "提款币种")
 
-        retrieve.assert_called_once_with(query="提款币种", top_k=6)
+        retrieve.assert_called_once_with(query="提款币种", top_k=6, conversation=context["conversation"])
         self.assertEqual(hits[0]["type"], "knowledge")
         self.assertEqual(hits[0]["source"], "审核规则")
 
@@ -275,6 +282,46 @@ class AssistantApiTests(unittest.TestCase):
         self.assertEqual([hit["type"] for hit in hits], ["document"])
         self.assertEqual(len(warnings), 1)
         self.assertNotIn("private connection detail", warnings[0])
+
+    def test_sufficient_evidence_with_source_warning_is_not_reported_as_insufficient(self):
+        import httpx
+
+        runtime_payload = {}
+
+        async def response_handler(request):
+            runtime_payload.update(json.loads(request.content))
+            body = 'data: {"event":"assistant_result","answer":"参考原文核对。"}\n\n'
+            return httpx.Response(200, content=body.encode())
+
+        def rag_handler(url, **kwargs):
+            return httpx.Response(200, json={
+                "sources": [{
+                    "content": "核对原文", "document_id": "d1", "document_name": "规则.pdf",
+                    "page": None, "score": None, "chunk_id": "c1", "metadata": {},
+                }],
+                "warnings": ["某个候选来源超时"], "evidence_status": "sufficient",
+                "missing": [], "stop_reason": "sufficient", "retrieval_rounds": 1,
+                "source_status": {"knowledge_base": "partial"},
+            })
+
+        async def collect():
+            client = httpx.AsyncClient(transport=httpx.MockTransport(response_handler))
+            with patch("app.assistant_service.httpx.AsyncClient", return_value=client), patch(
+                "app.assistant_service.sdk_configured", return_value=True
+            ), patch("app.assistant_service.settings.ASSISTANT_RUNTIME_URL", "http://runtime"), patch(
+                "app.assistant_service.settings.ASSISTANT_RUNTIME_TOKEN", "test-token"
+            ), patch("app.assistant_service.settings.RAG_BASE_URL", "http://rag-service"), patch(
+                "app.rag_service.httpx.post", side_effect=rag_handler
+            ):
+                return await _collect_events(run_agent_events("核对规则", {}))
+
+        events = asyncio.run(collect())
+        self.assertIn("检索来源或排序存在未完成环节", runtime_payload["instructions"])
+        self.assertNotIn("未确认依据充分", runtime_payload["instructions"])
+        self.assertTrue(any(
+            item.get("step", {}).get("detail", "").startswith("检索存在未完成环节")
+            for item in events if item.get("event") == "step"
+        ))
 
     def test_capabilities_reports_configured_rag_and_model(self):
         import httpx
