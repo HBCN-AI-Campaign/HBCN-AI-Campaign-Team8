@@ -112,9 +112,12 @@ async def verify():
         from hbcn_assistant import AssistantClient
         async with AssistantClient('http://acceptance', owner['Authorization'].removeprefix('Bearer '),
                                    transport=httpx.ASGITransport(app=app)) as sdk:
-            assert (await sdk.contract())['contract_version'] == '1.0.0'
+            assert (await sdk.contract())['contract_version'] == '1.1.0'
             replayed = await sdk.ask(room['id'], payload['content'], client_message_id=payload['client_message_id'])
             assert replayed == final[0]['message'], 'V1 SDK must replay the same canonical answer'
+            snapshot = await sdk.run(room['id'], run['id'])
+            assert snapshot['message'] == replayed, 'Run status must return the persisted final answer'
+            assert await sdk.wait(room['id'], run['id'], after_id=cursor) == replayed
         await call('DELETE', path + f'/members/{expert_id}')
         for suffix in ('', '/events', '/members'):
             assert (await client.get('/api/assistant/v1' + path + suffix, headers=expert)).status_code == 404
@@ -124,6 +127,7 @@ async def verify():
                           'same_history': True, 'same_events': True, 'idempotent_retry': True,
                           'private_run_reopened': True, 'private_to_shared_same_run': True,
                           'versioned_sdk_replay': True,
+                          'saved_cursor_result_recovered': True,
                           'revocation_blocks_access': True, 'real_model': True, 'synthetic_disposable_db': True,
                           'authorized_task_fields_answered': True, 'source_ids_resolved': True}))
     engine.dispose()

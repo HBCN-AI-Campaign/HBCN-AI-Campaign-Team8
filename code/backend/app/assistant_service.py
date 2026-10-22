@@ -19,6 +19,7 @@ from .assistant_models import AssistantExpertProfile, AssistantMessageAuthor, As
 from .assistant_evidence import cited_sources, prepare_evidence
 from .assistant_readiness import ASSISTANT_PROTOCOL, runtime_readiness, runtime_problem
 from .assistant_skills import get_skill
+from .assistant_schemas import AssistantMessageOut
 from .config import settings
 
 ASSISTANT_INSTRUCTIONS = (
@@ -507,14 +508,7 @@ async def stream_assistant(
     db.commit()
     yield {
         "event": "message_end",
-        "message": {
-            "id": persisted.id,
-            "role": persisted.role,
-            "content": persisted.content,
-            "status": persisted.status,
-            "steps": persisted.steps,
-            "citations": persisted.citations,
-            "author_name": "慧眼助手",
-            "run_id": run_id,
-        },
+        "message": AssistantMessageOut.model_validate(persisted).model_copy(update={
+            "author_name": "慧眼助手", "run_id": run_id,
+        }).model_dump(mode="json"),
     }

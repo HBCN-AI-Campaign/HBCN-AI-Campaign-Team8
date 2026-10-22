@@ -21,6 +21,7 @@ from ..assistant_schemas import (
     AssistantSessionDetail,
     AssistantSessionOut,
     AssistantSkillOut,
+    AssistantRunDetail,
 )
 from ..assistant_service import _safe_final_answer, sdk_configured, stream_assistant, task_for_user
 from ..assistant_readiness import rag_readiness, runtime_readiness, runtime_problem
@@ -74,6 +75,27 @@ def _message_out(message: models.AssistantMessage, db: Session) -> AssistantMess
             "content": "这条历史答复包含不可展示的内部过程，已隐藏。请重新发送问题以获取审核辅助答复。"
         })
     return result
+
+
+@router.get("/sessions/{session_id}/runs/{run_id}", response_model=AssistantRunDetail)
+def get_run(session_id: int, run_id: str, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    session_for_user(db, session_id, user)
+    expire_runs(db, session_id)
+    run = db.get(AssistantRun, run_id)
+    if not run or run.session_id != session_id:
+        raise HTTPException(404, "运行不存在或无权访问")
+    message = None
+    if run.status == "completed":
+        stored = db.query(models.AssistantMessage).join(
+            AssistantMessageAuthor, models.AssistantMessage.id == AssistantMessageAuthor.message_id,
+        ).filter(
+            AssistantMessageAuthor.run_id == run.id,
+            models.AssistantMessage.session_id == session_id,
+            models.AssistantMessage.role == "assistant",
+        ).order_by(models.AssistantMessage.id.desc()).first()
+        if stored:
+            message = _message_out(stored, db)
+    return {**run_out(run), "message": message}
 
 
 @router.get("/capabilities", response_model=AssistantCapabilities)

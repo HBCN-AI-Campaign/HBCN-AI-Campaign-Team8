@@ -41,6 +41,14 @@ class AssistantMessageOut(BaseModel):
     author_name: str = ""
     run_id: str | None = None
 
+    @field_validator("created_at")
+    @classmethod
+    def utc_created_at(cls, value: dt.datetime) -> dt.datetime:
+        # SQLite drops offsets from DateTime; all model timestamps are UTC.
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=dt.timezone.utc)
+        return value.astimezone(dt.timezone.utc)
+
 
 class AssistantRunOut(BaseModel):
     """Retry a POST using the original client_message_id to resume this run."""
@@ -49,6 +57,11 @@ class AssistantRunOut(BaseModel):
     session_id: int
     user_id: int
     client_message_id: str
+
+
+class AssistantRunDetail(AssistantRunOut):
+    """Final message is available only for a completed run, never a partial answer."""
+    message: AssistantMessageOut | None = None
 
 
 class AssistantRoomEvent(BaseModel):

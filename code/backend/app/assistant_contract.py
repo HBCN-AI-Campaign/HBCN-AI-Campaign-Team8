@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-CONTRACT_VERSION = "1.0.0"
+CONTRACT_VERSION = "1.1.0"
 API_BASE = "/api/assistant/v1"
 
 
