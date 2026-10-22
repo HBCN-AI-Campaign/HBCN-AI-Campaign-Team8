@@ -138,3 +138,57 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(self.client.get(path + '-missing', headers=self.reviewer_headers).status_code, 404)
         self.client.delete(f"/api/assistant/v1/sessions/{room['id']}/members/{expert_id}", headers=self.reviewer_headers)
         self.assertEqual(self.client.get(path, headers=expert_headers).status_code, 404)
+
+    def test_deployment_verifier_uses_two_identities_and_cleans_its_room(self):
+        from hbcn_assistant.verify import verify_site
+        from app.security import create_access_token
+        with self.session_factory() as db:
+            expert = models.User(username='verify-expert', display_name='验收同事',
+                                 hashed_password='unused', role=models.Role.REVIEWER)
+            db.add(expert); db.commit()
+            expert_id = expert.id
+
+        async def fake_model(*args, **kwargs):
+            yield {'event': 'assistant_result', 'answer': '本任务需审核人员复核 [E1]。', 'citations': [
+                {'id': 'E1', 'reference_id': 'E1', 'source_id': 'REVIEWER-ONLY', 'label': '任务', 'source': '任务概要'},
+            ]}
+
+        async def invoke():
+            return await verify_site(
+                'http://business', self.reviewer_headers['Authorization'].removeprefix('Bearer '),
+                create_access_token('verify-expert', 'reviewer'), 'REVIEWER-ONLY', expert_id,
+                transport=httpx.ASGITransport(app=self.client.app),
+            )
+        with patch('app.routers.assistant.runtime_readiness', return_value={'ready': True, 'model': 'test', 'code': 'ready'}), patch(
+            'app.routers.assistant.rag_readiness', return_value={'ready': False}
+        ), patch('app.routers.assistant.sdk_configured', return_value=True), patch(
+            'app.assistant_service.run_agent_events', fake_model
+        ):
+            report = asyncio.run(invoke())
+        self.assertTrue(report['passed'])
+        self.assertTrue(report['cleanup_complete'])
+        self.assertFalse(report['rag_available'])
+        with self.session_factory() as db:
+            self.assertEqual(db.query(models.AssistantSession).count(), 0)
+
+    def test_deployment_verifier_cleans_after_failure_and_checks_readiness_before_writes(self):
+        from hbcn_assistant.verify import verify_site, VerificationFailure
+        async def invoke(**kwargs):
+            jwt = self.reviewer_headers['Authorization'].removeprefix('Bearer ')
+            return await verify_site('http://business', jwt, jwt, 'REVIEWER-ONLY', self.reviewer_id,
+                                     transport=httpx.ASGITransport(app=self.client.app), **kwargs)
+        with patch('app.routers.assistant.runtime_readiness', return_value={'ready': True, 'model': 'test', 'code': 'ready'}), patch(
+            'app.routers.assistant.rag_readiness', return_value={'ready': False}
+        ), patch('app.routers.assistant.sdk_configured', return_value=True), patch(
+            'app.assistant_service.run_agent_events'
+        ) as model:
+            with self.assertRaises(VerificationFailure) as failed:
+                asyncio.run(invoke(require_rag=True))
+            self.assertEqual(failed.exception.stage, 'rag_readiness')
+            with self.assertRaises(VerificationFailure) as same_identity:
+                asyncio.run(invoke())
+            self.assertEqual(same_identity.exception.stage, 'uninvited_isolation')
+            self.assertTrue(same_identity.exception.cleanup_complete)
+            model.assert_not_called()
+        with self.session_factory() as db:
+            self.assertEqual(db.query(models.AssistantSession).count(), 0)
