@@ -95,10 +95,10 @@ print(res["error"])       # 出错信息（None 表示成功）
 # 方法一：双击 start_api.bat
 # 方法二：命令行
 cd ocr_service
-.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000
+.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 7888
 ```
 
-服务地址 `http://127.0.0.1:8000`，交互式接口文档在 `http://127.0.0.1:8000/docs`。
+服务地址 `http://127.0.0.1:7888`，交互式接口文档在 `http://127.0.0.1:7888/docs`。
 
 ### 接口列表
 
@@ -132,7 +132,7 @@ cd ocr_service
 **HTTP 接口**：
 
 ```bash
-curl -X POST http://127.0.0.1:8000/ocr/cloud -F "file=@某文件.pdf"
+curl -X POST http://127.0.0.1:7888/ocr/cloud -F "file=@某文件.pdf"
 ```
 
 > ⚠️ 合规提示：云 OCR 会把文件内容上传到百度智能云，请确认贷款/合同类敏感数据允许外发后再使用。
@@ -166,10 +166,10 @@ curl -X POST http://127.0.0.1:8000/ocr/cloud -F "file=@某文件.pdf"
 
 ```bash
 # 上传文件
-curl -X POST http://127.0.0.1:8000/ocr/file -F "file=@samples/demo_scan.png"
+curl -X POST http://127.0.0.1:7888/ocr/file -F "file=@samples/demo_scan.png"
 
 # 按路径识别
-curl -X POST http://127.0.0.1:8000/ocr/path \
+curl -X POST http://127.0.0.1:7888/ocr/path \
   -H "Content-Type: application/json" \
   -d '{"path":"C:/Workspace/FinancialCampaign/ocr_service/samples/demo_text.pdf"}'
 ```

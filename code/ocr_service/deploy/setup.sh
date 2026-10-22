@@ -13,7 +13,7 @@ set -euo pipefail
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 VENV_DIR="$APP_DIR/.venv"
 PY="$VENV_DIR/bin/python"
-PORT="${PORT:-8000}"
+PORT="${PORT:-7888}"
 SERVICE_NAME="ocr-service"
 
 echo "======================================================"

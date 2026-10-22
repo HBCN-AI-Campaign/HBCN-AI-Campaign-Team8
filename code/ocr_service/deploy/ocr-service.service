@@ -8,7 +8,7 @@ User=www-data
 WorkingDirectory=/opt/ocr_service
 Environment=PADDLE_PDX_MODEL_SOURCE=BOS
 Environment=PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
-ExecStart=/opt/ocr_service/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
+ExecStart=/opt/ocr_service/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 7888
 Restart=always
 RestartSec=3
 

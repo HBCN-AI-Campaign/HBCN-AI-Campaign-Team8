@@ -2,8 +2,8 @@
 
 基于 FastAPI 的文档 OCR 识别服务。上传文档，返回解析后的 JSON。
 
-- **Base URL**：`http://<服务器地址>:8000`
-- **交互式文档**：浏览器打开 `http://<服务器地址>:8000/docs` 可直接在线测试所有接口
+- **Base URL**：`http://<服务器地址>:7888`
+- **交互式文档**：浏览器打开 `http://<服务器地址>:7888/docs` 可直接在线测试所有接口
 
 ---
 
@@ -32,7 +32,7 @@
 ### 请求示例（curl）
 
 ```bash
-curl -X POST http://127.0.0.1:8000/ocr/analyze \
+curl -X POST http://127.0.0.1:7888/ocr/analyze \
   -F "id=LOAN-2024-0871" \
   -F "file=@商业合同.pdf"
 ```
@@ -42,7 +42,7 @@ curl -X POST http://127.0.0.1:8000/ocr/analyze \
 ```python
 import requests
 
-url = "http://127.0.0.1:8000/ocr/analyze"
+url = "http://127.0.0.1:7888/ocr/analyze"
 files = {"file": open("商业合同.pdf", "rb")}
 data = {"id": "LOAN-2024-0871"}
 
@@ -135,7 +135,7 @@ print(resp.json())
 列出支持的单据类型。
 
 ```bash
-curl http://127.0.0.1:8000/ocr/types
+curl http://127.0.0.1:7888/ocr/types
 ```
 
 ### `POST /ocr/extract`
@@ -161,7 +161,7 @@ curl http://127.0.0.1:8000/ocr/types
 **请求示例**：
 
 ```bash
-curl -X POST http://127.0.0.1:8000/ocr/extract \
+curl -X POST http://127.0.0.1:7888/ocr/extract \
   -F "type_code=DRAWDOWN_CN" \
   -F "file=@授信使用申请书.pdf"
 ```
@@ -192,7 +192,7 @@ curl -X POST http://127.0.0.1:8000/ocr/extract \
 ### `/ocr/path` 请求示例
 
 ```bash
-curl -X POST http://127.0.0.1:8000/ocr/path \
+curl -X POST http://127.0.0.1:7888/ocr/path \
   -H "Content-Type: application/json" \
   -d '{"path":"/opt/ocr-service/samples/demo_text.pdf"}'
 ```
@@ -203,7 +203,7 @@ curl -X POST http://127.0.0.1:8000/ocr/path \
 
 ```bash
 # 本地启动
-.venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8000
+.venv\Scripts\python.exe -m uvicorn main:app --host 0.0.0.0 --port 7888
 
 # 云服务器一键部署
 sudo bash deploy/setup.sh

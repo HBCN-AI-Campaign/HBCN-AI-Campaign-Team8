@@ -2,7 +2,7 @@
 """OCR 识别 HTTP API（FastAPI）。
 
 启动方式（无需手动激活虚拟环境，直接用虚拟环境里的 Python 绝对路径）：
-    .venv\\Scripts\\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000
+    .venv\\Scripts\\python.exe -m uvicorn main:app --host 127.0.0.1 --port 7888
     或双击 start_api.bat
 
 接口：
