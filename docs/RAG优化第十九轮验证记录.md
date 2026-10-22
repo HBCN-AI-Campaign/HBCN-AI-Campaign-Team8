@@ -16,6 +16,7 @@
 | RAGClient 会话夹具 | 通过；验证最近 12 条有效 user/assistant 消息、system 丢弃、UTF-16 截断；状态与 evidence 分离 |
 | 主站 `_rag_search` | 通过；已有会话传给 `retrieve()`，空历史仍发送合法空 conversation |
 | 主站完整后端回归 | `python -m unittest discover -s tests`：32 项通过 |
+| RAG 服务完整回归 | `python -m unittest discover -s tests`：194 项通过，13 项因需显式隔离 PostgreSQL 或外部语料资源而跳过 |
 | 差异格式检查 | `git diff --check` 通过 |
 
 真实 RAG 规划器、正式语料、跨轮召回质量、会话删除/权限撤销后的缓存传播和云端模型遵循仍未验证，不能把会话字段传输成功称为多轮业务质量达标。
