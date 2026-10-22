@@ -1,0 +1,221 @@
+{
+  "service": "pkulaw-law-search",
+  "protocol_observed": "2025-11-25",
+  "tools": {
+    "get_article": {
+      "inputSchema": {
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "number"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "gid": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "article": {
+            "type": "string"
+          },
+          "doc_no": {
+            "type": "string"
+          },
+          "timeliness": {
+            "type": "string"
+          },
+          "effectiveness": {
+            "type": "string"
+          },
+          "issue_department": {
+            "type": "string"
+          },
+          "issue_date": {
+            "type": "string"
+          },
+          "implementation_date": {
+            "type": "string"
+          },
+          "lib": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "gid",
+          "title",
+          "article",
+          "doc_no",
+          "timeliness",
+          "effectiveness",
+          "issue_department",
+          "issue_date",
+          "implementation_date",
+          "lib",
+          "url"
+        ],
+        "type": "object"
+      }
+    },
+    "search_article": {
+      "inputSchema": {
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "lib": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "timeliness": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "issue_department": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "implement_date_start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "implement_date_end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 10
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "$defs": {
+          "Result": {
+            "properties": {
+              "gid": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "article": {
+                "type": "string"
+              },
+              "doc_no": {
+                "type": "string"
+              },
+              "timeliness": {
+                "type": "string"
+              },
+              "effectiveness": {
+                "type": "string"
+              },
+              "issue_department": {
+                "type": "string"
+              },
+              "issue_date": {
+                "type": "string"
+              },
+              "implementation_date": {
+                "type": "string"
+              },
+              "lib": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "gid",
+              "title",
+              "article",
+              "doc_no",
+              "timeliness",
+              "effectiveness",
+              "issue_department",
+              "issue_date",
+              "implementation_date",
+              "lib",
+              "url"
+            ],
+            "type": "object"
+          }
+        },
+        "properties": {
+          "result": {
+            "items": {
+              "$ref": "#/$defs/Result"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "type": "object",
+        "x-fastmcp-wrap-result": true
+      }
+    }
+  }
+}

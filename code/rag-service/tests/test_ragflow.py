@@ -1,11 +1,12 @@
 import json
 import os
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 from app.config import settings
-from app.manifest import manifest_paths
+from app.manifest import SAFE_MANIFEST, manifest_paths
 from app.ragflow import RAGFlowClient
 
 
@@ -134,10 +135,24 @@ class RAGFlowClientTests(unittest.TestCase):
         self.assertEqual(request.call_args.kwargs["json"]["updates"][0]["key"], "knowledge_scope")
 
     def test_manifest_contains_only_existing_safe_files(self):
-        root = Path(os.environ["HBCN_TEST_SOURCE_ROOT"])
-        files = manifest_paths(root)
-        self.assertEqual(len(files), 11)
-        self.assertTrue(all("04设备API等文件" not in path.parts for _, path in files))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for names in SAFE_MANIFEST.values():
+                for name in names:
+                    file = root / name
+                    file.parent.mkdir(parents=True, exist_ok=True)
+                    file.write_text("synthetic manifest fixture", encoding="utf-8")
+            excluded = root / "04设备API等文件" / "not-for-indexing.txt"
+            excluded.parent.mkdir()
+            excluded.write_text("synthetic exclusion marker", encoding="utf-8")
+            files = manifest_paths(root)
+            self.assertEqual(len(files), 11)
+            self.assertTrue(all(path.is_file() and path.is_relative_to(root) for _, path in files))
+            self.assertTrue(all("04设备API等文件" not in path.parts for _, path in files))
+
+    @unittest.skipUnless(os.environ.get("HBCN_TEST_SOURCE_ROOT"), "真实资料验收需显式设置 HBCN_TEST_SOURCE_ROOT")
+    def test_external_manifest_corpus_when_explicitly_configured(self):
+        self.assertEqual(len(manifest_paths(Path(os.environ["HBCN_TEST_SOURCE_ROOT"]))), 11)
 
 
 if __name__ == "__main__":

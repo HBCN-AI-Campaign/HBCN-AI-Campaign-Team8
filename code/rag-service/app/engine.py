@@ -62,6 +62,11 @@ class LocalEngine:
         extracted = self.ocr.extract(filename, content)
         if extracted["error"]:
             raise RAGFlowError(extracted["error"])
+        from .document_quality import assess_pages
+        report = assess_pages([{"page": None, "text": extracted["text"], "extraction": {
+            "method": extracted.get("method", "ocr_unknown" if extracted.get("via_ocr") else "text_decode")}}])
+        if report["status"] != "mechanically_checked":
+            raise RAGFlowError("解析结果需要质量复核；请使用支持受控复核的 PostgreSQL 入库接口")
 
         chunks = [
             {

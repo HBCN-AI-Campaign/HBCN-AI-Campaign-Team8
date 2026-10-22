@@ -50,11 +50,38 @@ class Settings(BaseSettings):
     RAG_MAX_DOCUMENT_PAGES: int = Field(default=500, ge=1, le=2000)
     RAG_MAX_TEXT_CHARS: int = Field(default=2_000_000, ge=1000)
     RAG_RETRIEVAL_MIN_SCORE: float = Field(default=0.35, ge=0, le=1)
+    RAG_SEARCH_MODE: Literal["vector", "hybrid"] = "vector"
     RAG_MAX_CONCURRENT_JOBS: int = Field(default=2, ge=1, le=8)
     ASSISTANT_RUNTIME_URL: str = ""
     ASSISTANT_RUNTIME_TOKEN: SecretStr = SecretStr("")
     ASSISTANT_RUNTIME_RESOURCE_FILE: str = ""
     RAG_ANSWER_TIMEOUT_SECONDS: float = Field(default=90, ge=5, le=240)
+    RAG_TOTAL_TIMEOUT_SECONDS: float = Field(default=240, ge=10, le=900)
+    RAG_MAX_QUERY_VARIANTS: int = Field(default=4, ge=1, le=6)
+    RAG_MAX_RETRIEVAL_QUERIES: int = Field(default=6, ge=1, le=12)
+    RAG_MAX_RETRIEVAL_ROUNDS: int = Field(default=2, ge=1, le=3)
+    RAG_MAX_CONTEXT_WINDOWS: int = Field(default=80, ge=20, le=200)
+    RAG_MAX_CONTEXT_BATCHES: int = Field(default=6, ge=1, le=10)
+    RAG_LEGAL_REVIEW_FILE: str = ""
+    RAG_REFERENCES_ENABLED: bool = False
+    RAG_REFERENCE_PRINCIPALS_FILE: str = ""
+    RAG_DOCUMENT_REVIEW_PRINCIPALS_FILE: str = ""
+    RAG_WEB_CONTEXT_ENABLED: bool = False
+    RAG_WEB_CONTEXT_PRINCIPALS_FILE: str = ""
+    RAG_WEB_CONTEXT_ALLOWED_HOSTS: str = ""
+    RAG_WEB_CONTEXT_MAX_AGE_SECONDS: int = Field(default=900, ge=60, le=3600)
+    PKULAW_MCP_ENABLED: bool = False
+    PKULAW_MCP_TOKEN: SecretStr = SecretStr("")
+    PKULAW_MCP_LAW_SEARCH_URL: str = "https://apim-gateway.pkulaw.com/mcp-law-search-service"
+    PKULAW_MCP_TIMEOUT_SECONDS: float = Field(default=30, ge=2, le=90)
+    PKULAW_MCP_MAX_QUERIES: int = Field(default=2, ge=1, le=3)
+    RAG_RERANK_PROVIDER: Literal["disabled", "cohere_compatible"] = "disabled"
+    RAG_RERANK_URL: str = ""
+    RAG_RERANK_TOKEN: SecretStr = SecretStr("")
+    RAG_RERANK_MODEL: str = ""
+    RAG_RERANK_REVISION: str = ""
+    RAG_RERANK_ALLOW_EXTERNAL: bool = False
+    RAG_RERANK_TIMEOUT_SECONDS: float = Field(default=20, ge=1, le=90)
 
 
 settings = Settings()

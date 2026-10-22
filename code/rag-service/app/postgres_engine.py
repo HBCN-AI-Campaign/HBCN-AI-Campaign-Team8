@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import hashlib
 import re
 import threading
 import uuid
@@ -12,15 +13,18 @@ from langchain_core.embeddings import Embeddings
 from langchain_postgres import Column, PGEngine, PGVectorStore
 from langchain_postgres.v2.indexes import HNSWIndex
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from sqlalchemy import MetaData, Table, inspect, select, text, update
+from sqlalchemy import MetaData, Table, and_, or_, inspect, select, text, update, func
 from sqlalchemy.dialects.postgresql.base import ischema_names
 from pgvector.sqlalchemy import Vector
 
 from .config import settings
 from .database import ResourceError, database_url
-from .document_store import DocumentStore, utc_now
+from .document_store import DocumentConflict, DocumentStore, DocumentWithdrawn, utc_now
 from .embedding import EmbeddingClient, EmbeddingError
 from .parsing import ParseError, extract_pages
+from .lexical_index import TOKENIZER_VERSION, index_chunk, lexical_table, pending_chunks, query_expression
+from .document_quality import POLICY_VERSION, approval_matches, assess_pages
+from .retrieval_fusion import fuse_channels
 
 
 SUPPORTED_EXTENSIONS = {
@@ -38,6 +42,17 @@ class BailianEmbeddings(Embeddings):
 
     def embed_query(self, text):
         return self.embed_documents([text])[0]
+
+
+def quality_predicate(documents):
+    report, approval = documents.c.provenance["quality_report"], documents.c.provenance["quality_approval"]
+    return and_(report["policy_version"].astext == POLICY_VERSION,
+        or_(report["status"].astext == "mechanically_checked", and_(
+            report["status"].astext == "quality_review", approval["decision"].astext == "approve",
+            approval["policy_version"].astext == POLICY_VERSION,
+            approval["source_sha256"].astext == documents.c.sha256,
+            approval["parsed_sha256"].astext == report["parsed_sha256"].astext,
+            approval["report_sha256"].astext == report["report_sha256"].astext)))
 
 
 class PostgresEngine:
@@ -79,6 +94,9 @@ class PostgresEngine:
             self.vectors.apply_vector_index(HNSWIndex(name=index_name))
         ischema_names.setdefault("vector", Vector)
         self.chunks = Table(settings.RAG_VECTOR_TABLE, MetaData(), schema=settings.RAG_DATABASE_SCHEMA, autoload_with=self.documents.engine)
+        self.lexical = lexical_table(self.chunks)
+        if settings.RAG_SEARCH_MODE == "hybrid":
+            self._require_lexical_ready()
         self.executor = ThreadPoolExecutor(max_workers=settings.RAG_MAX_CONCURRENT_JOBS, thread_name_prefix="rag-ingest")
         self.slots = threading.BoundedSemaphore(settings.RAG_MAX_CONCURRENT_JOBS * 4)
 
@@ -124,16 +142,30 @@ class PostgresEngine:
             row = self.documents.get(document_id)
             self.vectors.delete(filter={"document_id": document_id})
             self.documents.set_stage(document_id, "parsing", "正在提取原文", state="processing", error=None)
-            pages = extract_pages(row["name"], self.documents.original_path(document_id).read_bytes())
-            self.documents.set_stage(document_id, "splitting", "正在切分可引用片段", pages=pages)
+            original = self.documents.original_path(document_id).read_bytes()
+            if hashlib.sha256(original).hexdigest() != row["sha256"]:
+                raise ParseError("原件内容与登记摘要不一致，请核对文件存储")
+            pages = row["pages"] if row["provenance"].get("quality_approval") else extract_pages(row["name"], original)
+            report = assess_pages(pages)
+            provenance = {**row["provenance"], "quality_report": report}
+            if report["status"] == "quarantined":
+                self.documents.set_stage(document_id, "quarantined", "解析结果含无效字符，禁止进入检索", state="quarantined",
+                    pages=[], provenance=provenance)
+                return
+            if report["status"] == "quality_review" and not approval_matches(row, report):
+                self.documents.set_stage(document_id, "quality_review", "OCR 或解析结果待逐单元原文复核", state="quality_review",
+                    pages=pages, provenance={key: value for key, value in provenance.items() if key != "quality_approval"})
+                return
+            self.documents.set_stage(document_id, "splitting", "正在切分可引用片段", pages=pages, provenance=provenance)
             splitter = RecursiveCharacterTextSplitter(
                 chunk_size=settings.CHUNK_SIZE, chunk_overlap=settings.CHUNK_OVERLAP,
                 add_start_index=True, separators=["\n\n", "\n", "。", "；", " ", ""],
             )
             inputs = [Document(page_content=page["text"], metadata={
+                **{key: value for key, value in row["provenance"].items() if key not in {"quality_report", "quality_approval", "quality_review"}},
                 "document_id": document_id, "scope": row["scope"], "filename": row["name"],
                 "embedding_model": settings.EMBEDDING_MODEL, "searchable": False,
-                "page": page["page"], "section": page.get("section"), **row["provenance"],
+                "page": page["page"], "section": page.get("section"),
             }) for page in pages if page["text"].strip()]
             chunks = splitter.split_documents(inputs)
             if not chunks:
@@ -141,18 +173,98 @@ class PostgresEngine:
             for index, chunk in enumerate(chunks):
                 chunk.metadata["chunk_index"] = index
             self.documents.set_stage(document_id, "embedding", "正在调用百炼生成向量")
-            self.vectors.add_documents(chunks, ids=[str(uuid.uuid4()) for _ in chunks])
+            chunk_ids = [str(uuid.uuid4()) for _ in chunks]
+            self.vectors.add_documents(chunks, ids=chunk_ids)
             self.documents.set_stage(document_id, "indexing", "正在提交检索索引")
             with self.documents.engine.begin() as connection:
-                events = connection.execute(select(self.documents.table.c.events).where(self.documents.table.c.id == document_id).with_for_update()).scalar_one()
+                source = connection.execute(select(self.documents.table.c.events, self.documents.table.c.state).where(
+                    self.documents.table.c.id == document_id).with_for_update()).one()
+                if source.state == "withdrawn":
+                    raise DocumentWithdrawn("文档已撤回，不能发布索引")
+                events = source.events
+                if settings.RAG_SEARCH_MODE == "hybrid":
+                    for chunk_id, chunk in zip(chunk_ids, chunks):
+                        index_chunk(connection, self.lexical, uuid.UUID(chunk_id), chunk.page_content)
                 connection.execute(update(self.chunks).where(self.chunks.c.document_id == document_id).values(searchable=True))
                 connection.execute(update(self.documents.table).where(self.documents.table.c.id == document_id).values(
                     state="ready", stage="ready", chunk_count=len(chunks), updated_at=utc_now(),
                     events=[*events, {"stage": "ready", "label": "已完成，可开始问答", "at": utc_now().isoformat()}],
                 ))
+        except DocumentWithdrawn:
+            return
         except Exception as exc:
             message = str(exc) if isinstance(exc, ParseError) else "处理失败，请检查解析、向量服务或数据库连接后重试"
-            self.documents.set_stage(document_id, "failed", "处理失败", state="failed", error=message)
+            try:
+                self.documents.set_stage(document_id, "failed", "处理失败", state="failed", error=message)
+            except DocumentWithdrawn:
+                pass
+
+    def withdraw(self, document_id, *, expected_sha256, reason):
+        row = self.documents.withdraw(document_id, self.chunks, expected_sha256=expected_sha256, reason=reason)
+        return self.documents.public(row)
+
+    def review_quality(self, document_id, review, actor):
+        if not self.slots.acquire(blocking=False):
+            raise ResourceError("处理队列已满，请稍后重试")
+        try:
+            self.documents.review_quality(document_id, review, actor)
+            if review.decision == "approve":
+                self.executor.submit(self._job, document_id)
+            else:
+                self.slots.release()
+        except Exception:
+            self.slots.release()
+            raise
+        return self.documents.public(self.documents.get(document_id))
+
+    def current_evidence(self, items):
+        """Recheck cached multi-round evidence before publication.
+
+        This guards locally held candidates, not already delivered responses or
+        provider requests already in flight. External sources own their lifecycle.
+        """
+        external, keys = set(), set()
+        for index, item in enumerate(items):
+            if item.get("document_id", "").startswith("pkulaw:") and item.get("metadata", {}).get("source_type") == "pkulaw":
+                external.add(index)
+                continue
+            try:
+                keys.add(uuid.UUID(item["chunk_id"]))
+            except (KeyError, ValueError, TypeError, AttributeError):
+                continue
+        valid = set()
+        if keys:
+            d = self.documents.table
+            with self.documents.engine.begin() as connection:
+                connection.execute(text("SELECT set_config('statement_timeout', '10000', true)"))
+                valid = {(row.document_id, str(row.langchain_id)) for row in connection.execute(
+                    select(self.chunks.c.document_id, self.chunks.c.langchain_id).join(d, d.c.id == self.chunks.c.document_id).where(
+                        self.chunks.c.langchain_id.in_(keys), self.chunks.c.searchable.is_(True),
+                        self.chunks.c.embedding_model == settings.EMBEDDING_MODEL, d.c.state == "ready", quality_predicate(d)))}
+        return [item for index, item in enumerate(items) if index in external or (item.get("document_id"), item.get("chunk_id")) in valid]
+
+    def recheck_quality(self, document_id, expected_sha256, actor):
+        if not self.slots.acquire(blocking=False):
+            raise ResourceError("处理队列已满，请稍后重试")
+        try:
+            with self.documents.engine.begin() as connection:
+                row = connection.execute(select(self.documents.table).where(self.documents.table.c.id == document_id).with_for_update()).mappings().first()
+                if not row:
+                    raise LookupError("文档不存在")
+                actor.require(row["scope"], "reviewer")
+                if row["sha256"] != expected_sha256 or row["state"] not in {"ready", "failed", "quarantined", "quality_review"}:
+                    raise DocumentConflict("文档版本或重检状态不匹配")
+                connection.execute(update(self.chunks).where(self.chunks.c.document_id == document_id).values(searchable=False))
+                connection.execute(update(self.documents.table).where(self.documents.table.c.id == document_id).values(
+                    state="queued", stage="quality_recheck", error=None, updated_at=utc_now(),
+                    provenance={key: value for key, value in row["provenance"].items() if key != "quality_approval"},
+                    events=[*row["events"], {"stage": "quality_recheck", "label": "授权审核人要求重新解析与检查",
+                        "actor": actor.subject, "at": utc_now().isoformat()}]))
+            self.executor.submit(self._job, document_id)
+        except Exception:
+            self.slots.release()
+            raise
+        return self.documents.public(self.documents.get(document_id))
 
     def upload(self, *, scope, filename, content, content_type="application/octet-stream"):
         row, created = self.documents.create(filename, scope, content, content_type)
@@ -163,6 +275,8 @@ class PostgresEngine:
         return [row["id"]]
 
     def retrieve(self, *, query, scope, top_k):
+        if settings.RAG_SEARCH_MODE == "hybrid":
+            self._require_lexical_ready()
         filters = {"embedding_model": settings.EMBEDDING_MODEL, "searchable": True}
         if scope != "all":
             filters["scope"] = scope
@@ -181,11 +295,52 @@ class PostgresEngine:
                 "source_url": f"/api/v1/documents/{document_id}/source",
                 "reader_url": f"/api/v1/documents/{document_id}/content?chunk_id={document.id}",
             })
+        if settings.RAG_SEARCH_MODE == "hybrid":
+            results = fuse_channels(results, self._lexical_retrieve(query=query, scope=scope, top_k=top_k), top_k=top_k)
+        return self.current_evidence(results)
+
+    def _require_lexical_ready(self):
+        inspector = inspect(self.documents.engine)
+        if not inspector.has_table(self.lexical.name, schema=self.chunks.schema):
+            raise ResourceError("混合检索词法索引尚未创建，请先运行 python -m app.lexical_index --apply")
+        if self.chunks.name + "_lex_gin" not in {item["name"] for item in inspector.get_indexes(self.lexical.name, schema=self.chunks.schema)}:
+            raise ResourceError("词法 GIN 索引缺失，请修复索引后再启用混合检索")
+        with self.documents.engine.connect() as connection:
+            missing = connection.execute(pending_chunks(self.chunks, self.lexical).where(
+                self.chunks.c.searchable.is_(True), self.chunks.c.embedding_model == settings.EMBEDDING_MODEL,
+            ).limit(1)).first()
+        if missing:
+            raise ResourceError("词法索引存在未回填或分词器版本不一致的片段，请运行词法回填命令")
+
+    def _lexical_retrieve(self, *, query, scope, top_k):
+        expression = query_expression(query)
+        if expression is None:
+            return []
+        rank = func.ts_rank_cd(self.lexical.c.terms, expression, 32).label("lexical_rank")
+        statement = select(self.chunks, rank).join(self.lexical, self.chunks.c.langchain_id == self.lexical.c.chunk_id).where(
+            self.chunks.c.searchable.is_(True), self.chunks.c.embedding_model == settings.EMBEDDING_MODEL,
+            self.lexical.c.tokenizer_version == TOKENIZER_VERSION, self.lexical.c.terms.op("@@")(expression),
+        )
+        if scope != "all":
+            statement = statement.where(self.chunks.c.scope == scope)
+        statement = statement.order_by(rank.desc(), self.chunks.c.langchain_id).limit(top_k)
+        with self.documents.engine.begin() as connection:
+            connection.execute(text("SELECT set_config('statement_timeout', '10000', true)"))
+            matches = connection.execute(statement).mappings().all()
+        results = []
+        for row in matches:
+            metadata = dict(row["langchain_metadata"] or {})
+            document_id, chunk_id = row["document_id"], str(row["langchain_id"])
+            results.append({"content": row["content"], "document_id": document_id,
+                            "document_keyword": metadata.get("filename", document_id), "page_num": metadata.get("page"),
+                            "similarity": float(row["lexical_rank"]), "chunk_id": chunk_id, "metadata": metadata,
+                            "source_url": f"/api/v1/documents/{document_id}/source",
+                            "reader_url": f"/api/v1/documents/{document_id}/content?chunk_id={chunk_id}"})
         return results
 
     def content(self, document_id, chunk_id=None):
         row = self.documents.get(document_id)
-        if not row:
+        if not row or row["state"] == "withdrawn":
             return None
         focus = None
         if chunk_id:
@@ -203,9 +358,17 @@ class PostgresEngine:
             connection.execute(text("SELECT 1"))
             version = connection.execute(text("SELECT extversion FROM pg_extension WHERE extname='vector'")).scalar_one()
             dimension = connection.execute(text("SELECT format_type(atttypid, atttypmod) FROM pg_attribute WHERE attrelid = CAST(:table_name AS regclass) AND attname='embedding'"), {"table_name": f"{settings.RAG_DATABASE_SCHEMA}.{settings.RAG_VECTOR_TABLE}"}).scalar_one()
+            d = self.documents.table
+            unverified = connection.execute(select(func.count()).select_from(d).where(d.c.state == "ready",
+                d.c.embedding_model == settings.EMBEDDING_MODEL, func.coalesce(quality_predicate(d), False).is_(False))).scalar_one()
         if dimension != f"vector({settings.EMBEDDING_DIMENSIONS})":
             raise ResourceError("现有向量表与模型维度不同，请配置独立的新向量表并重新索引")
-        return {"database": "ok", "pgvector": version, "embedding_column": dimension}
+        if settings.RAG_SEARCH_MODE == "hybrid":
+            self._require_lexical_ready()
+        return {"database": "ok", "pgvector": version, "embedding_column": dimension,
+                "search_mode": settings.RAG_SEARCH_MODE,
+                "quality_policy_version": POLICY_VERSION, "unverified_ready_documents": unverified,
+                "lexical_tokenizer": TOKENIZER_VERSION if settings.RAG_SEARCH_MODE == "hybrid" else None}
 
 
 @lru_cache(maxsize=1)

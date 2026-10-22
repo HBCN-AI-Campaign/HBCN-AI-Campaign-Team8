@@ -122,4 +122,4 @@ $env:HBCN_TEST_SOURCE_ROOT = 'E:\2026_AgentStudy\Python_code\HBCN_AI_Campaign_Te
 
 已有实例时start会拒绝重复启动；stop核对保存的PID、监听端口和uvicorn进程，不随意停止其他服务。日志在 `data/backend-8011.out.log` / `backend-8011.err.log`。重启会把未结束任务标为failed/interrupted，原件保留，可以显式retry。
 
-不要重新申请已实测可用的PostgreSQL/pgvector。剩余需要补充的不是Embedding密钥，而是：OSS完整授权（若迁移原件存储）、北大法宝商用API/MCP正式授权、跨电脑安全网络入口/部署方式，以及生产TLS、备份、任务权限与运行稳定性方案。UI接线是下一步独立工作，不妨碍现在直接调用后端API验收。
+不要重新申请已实测可用的PostgreSQL/pgvector。北大法宝 MCP 的 9 个地址已从本机完成 initialize 连通性检查，法规语义检索工具也已实际查询并返回法规证据；RAG 后端尚未接入该 MCP 客户端，授权范围与可存储/缓存/展示边界仍须按团队协议确认。接入流程见[北大法宝 MCP 接入说明](PKULaw-MCP接入说明.md)。其他待完善项包括 OSS 完整授权（若迁移原件存储）、跨电脑安全网络入口/部署方式，以及生产 TLS、备份、任务权限与运行稳定性方案。UI接线是下一步独立工作，不妨碍现在直接调用后端API验收。

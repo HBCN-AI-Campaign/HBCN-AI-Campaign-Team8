@@ -146,14 +146,7 @@ def _rag_search(
 
         # The current RAG service indexes shared business/project knowledge only.
         # Task documents are already permission-filtered and supplied as local evidence.
-        result = RAGClient().query(
-            query=query,
-            scope="knowledge_base",
-            task_code=(context.get("task") or {}).get("task_code"),
-            top_k=6,
-            agentic=True,
-            include_external_law=False,
-        )
+        result = RAGClient().retrieve(query=query, top_k=6)
     except Exception as exc:
         # 网关或 RAG 服务异常时保留本地证据，不阻断助手。
         logger.warning("Assistant RAG query failed (%s)", type(exc).__name__)

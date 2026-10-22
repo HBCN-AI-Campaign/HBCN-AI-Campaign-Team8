@@ -5,10 +5,12 @@
 from __future__ import annotations
 
 from typing import Any
+import asyncio
 
 import httpx
 
 from .config import settings
+from .request_control import check_cancelled, run_async
 
 EMBEDDING_BATCH_SIZE = 20
 
@@ -43,15 +45,11 @@ class EmbeddingClient:
             return []
         vectors: list[list[float]] = []
         for offset in range(0, len(texts), EMBEDDING_BATCH_SIZE):
+            check_cancelled()
             batch = texts[offset:offset + EMBEDDING_BATCH_SIZE]
             try:
-                response = httpx.post(
-                    f"{self.base_url}/embeddings",
-                    json={"model": self.model, "input": batch},
-                    headers={"Authorization": f"Bearer {self.api_key}"},
-                    timeout=self.timeout,
-                )
-            except httpx.HTTPError:
+                response = run_async(lambda: self._post(batch))
+            except (httpx.HTTPError, TimeoutError):
                 raise EmbeddingError("Embedding 连接失败或超时") from None
             if response.status_code >= 400:
                 raise EmbeddingError(f"Embedding 返回 HTTP {response.status_code}")
@@ -73,6 +71,14 @@ class EmbeddingClient:
                 )
             vectors.extend(batch_vectors)
         return vectors
+
+    async def _post(self, batch):
+        async with asyncio.timeout(self.timeout):
+            async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=False) as client:
+                return await client.post(
+                    f"{self.base_url}/embeddings", json={"model": self.model, "input": batch},
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                )
 
     def embed_one(self, text: str) -> list[float]:
         vectors = self.embed([text])

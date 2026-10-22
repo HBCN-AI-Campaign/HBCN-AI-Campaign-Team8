@@ -1,0 +1,29 @@
+sequenceDiagram
+  autonumber
+  participant P as 查询计划器
+  participant A as 北大法宝来源适配
+  participant C as 官方 MCP SDK 客户端
+  participant S as 用户已取得的 MCP 服务
+  participant E as 统一候选与证据池
+  Note over A,S: 接入阶段先核对配置、协议、鉴权、工具 schema 与授权边界
+  C->>S: 建立会话与能力协商
+  C->>S: tools/list（工具目录按协议分页）
+  S-->>C: 工具与输入/输出 schema
+  A->>A: 固定只读白名单与字段映射，保存契约版本
+  P->>A: 已授权法律问题、时点、辖区与预算
+  A->>C: 按实际 schema 校验 search_article 参数
+  C->>S: tools/call search_article
+  S-->>C: 检索结果 / 错误 / 来源分页字段
+  C-->>A: 校验后的响应
+  A->>E: 标准候选：ID、摘要、URL、版本、状态
+  E->>A: 请求补齐必要法条正文
+  alt 命中正文为空且问题明确给出条号
+    A->>C: 标题 + 已知条号调用 get_article
+    C->>S: tools/call get_article
+    S-->>C: 法条内容/元数据，或明确不可获取
+    C-->>A: 校验法规 ID、标题及版本一致性
+  else 无条号或工具不支持获取全文
+    A->>A: 不猜条号；保留正文缺口，不从标题生成规则
+  end
+  A->>E: 原文证据或线索标记 + 截断/失败状态
+  Note over P,E: 达到分页/调用/总时限即停止；没有全文不得声称已读全文

@@ -24,6 +24,7 @@ from .ragflow import (
 from .schemas import Capabilities, Evidence, IndexResponse, QueryRequest, QueryResponse
 from .database import ResourceError
 from .runtime_client import RuntimeErrorResponse
+from .version import API_CONTRACT_VERSION, SERVICE_VERSION
 from sqlalchemy.exc import SQLAlchemyError
 from fastapi.responses import JSONResponse
 
@@ -38,7 +39,7 @@ async def lifespan(application):
             application.state.startup_error = "数据库初始化失败，请检查 /api/v1/ready"
     yield
 
-app = FastAPI(title="HBCN Business Knowledge Service", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="HBCN Business Knowledge Service", version=SERVICE_VERSION, lifespan=lifespan)
 UI_SESSION_COOKIE = "rag_ui_session"
 UI_SESSION_MAX_AGE = 8 * 60 * 60
 ALLOWED_EXTENSIONS = {
@@ -106,7 +107,30 @@ def require_service_token(
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "hbcn-rag-service"}
+    return {"status": "ok", "service": "hbcn-rag-service", "service_version": SERVICE_VERSION,
+            "api_contract_version": API_CONTRACT_VERSION}
+
+
+class ContractIdentityMiddleware:
+    """Pure ASGI wrapper: preserve receive/disconnect and streaming semantics."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        async def versioned_send(message):
+            if message["type"] == "http.response.start":
+                message = {**message, "headers": [*message.get("headers", []),
+                    (b"x-rag-service-version", SERVICE_VERSION.encode()),
+                    (b"x-rag-contract-version", API_CONTRACT_VERSION.encode())]}
+                if scope.get("path", "").startswith("/api/v1/"):
+                    message["headers"] = [(key, value) for key, value in message["headers"] if key.lower() != b"cache-control"]
+                    message["headers"].append((b"cache-control", b"no-store"))
+            await send(message)
+        await self.app(scope, receive, versioned_send)
+
+
+app.add_middleware(ContractIdentityMiddleware)
 
 
 @app.get("/api/v1/capabilities", response_model=Capabilities, dependencies=[Depends(require_service_token)])
@@ -134,12 +158,17 @@ def capabilities():
         configured = False
         configured_scopes = []
     return Capabilities(
+        workbench_contract_version=1 if kind == "postgres" else 0,
         engine=kind,
         retrieval=configured,
         document_ingestion=configured,
         agentic_orchestration=kind == "postgres",
         answer_generation=kind == "postgres",
         document_source=kind == "postgres",
+        enhanced_retrieval=kind == "postgres",
+        external_law_mcp=kind == "postgres" and settings.PKULAW_MCP_ENABLED and bool(settings.PKULAW_MCP_TOKEN.get_secret_value()),
+        dedicated_reranking=kind == "postgres" and settings.RAG_RERANK_PROVIDER != "disabled" and bool(settings.RAG_RERANK_URL and settings.RAG_RERANK_MODEL),
+        web_context=kind == "postgres" and settings.RAG_WEB_CONTEXT_ENABLED and bool(settings.RAG_WEB_CONTEXT_PRINCIPALS_FILE and settings.RAG_WEB_CONTEXT_ALLOWED_HOSTS),
         supported_scopes=configured_scopes,
         max_upload_bytes=settings.MAX_UPLOAD_BYTES,
         upload_timeout_seconds=settings.UPLOAD_TIMEOUT_SECONDS,
@@ -179,9 +208,9 @@ def query(payload: QueryRequest):
     try:
         chunks = _retrieve_evidence(payload.query, payload.scope, payload.top_k)
     except RAGFlowNotConfiguredError as exc:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "检索引擎尚未配置，请检查服务就绪状态") from None
     except (RAGFlowError, EmbeddingError) as exc:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "检索依赖调用失败，请稍后重试") from None
 
     evidence = [
         Evidence(
@@ -222,9 +251,9 @@ async def index_document(
             content_type=file.content_type or "application/octet-stream",
         )
     except RAGFlowNotConfiguredError as exc:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "检索引擎尚未配置，请检查服务就绪状态") from None
     except (RAGFlowError, EmbeddingError) as exc:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "文档处理依赖调用失败，请稍后重试") from None
     return IndexResponse(
         status="ready" if getattr(engine, "synchronous_upload_ready", False) else "processing",
         scope=scope,
@@ -278,6 +307,10 @@ from .backend_api import router as backend_router
 
 app.include_router(backend_router, dependencies=[Depends(require_service_token)])
 
+from .reference_api import router as reference_router
+
+app.include_router(reference_router, dependencies=[Depends(require_service_token)])
+
 
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
 _UI_BUILD_DIR = _STATIC_DIR / "ui-build"
@@ -297,9 +330,9 @@ def trial_ui(request: Request):
         raise HTTPException(status.HTTP_404_NOT_FOUND)
 
     built_index = _UI_BUILD_DIR / "index.html"
-    index_path = built_index if built_index.exists() else _STATIC_DIR / "workbench.html"
-    response = FileResponse(index_path) if index_path == built_index else HTMLResponse(
-        index_path.read_text(encoding="utf-8")
+    response = FileResponse(built_index) if built_index.exists() else HTMLResponse(
+        "<!doctype html><html lang='zh-CN'><meta charset='utf-8'><title>知识库工作台未就绪</title>"
+        "<p>React 工作台尚未构建，请由部署人员构建 UI 资源后重试。</p></html>", status_code=503,
     )
     if settings.SERVICE_TOKEN:
         payload = f"{int(time.time())}.{secrets.token_urlsafe(18)}"
