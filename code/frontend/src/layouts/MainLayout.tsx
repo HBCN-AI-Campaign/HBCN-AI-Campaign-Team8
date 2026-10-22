@@ -67,7 +67,7 @@ export default function MainLayout() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Button type={isAssistant ? 'primary' : 'text'} icon={<RobotOutlined />} onClick={() => navigate('/assistant')}>慧眼助手</Button>
+          {role === 'reviewer' && <Button type={isAssistant ? 'primary' : 'text'} icon={<RobotOutlined />} onClick={() => navigate('/assistant')}>慧眼助手</Button>}
           <Tag color={tag.color}>{tag.label}</Tag>
           <span style={{ fontSize: 13, color: 'var(--muted)' }}>{displayName}</span>
           <Dropdown menu={{ items: menuItems, onClick: onMenuClick }} placement="bottomRight">

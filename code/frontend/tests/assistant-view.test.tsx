@@ -23,7 +23,7 @@ const final: AssistantMessage = {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  useAuthStore.getState().setAuth('test-jwt', 'operator', '测试经办人')
+  useAuthStore.getState().setAuth('test-jwt', 'reviewer', '测试审核人员')
   vi.mocked(assistantApi.sessions).mockResolvedValue([])
   vi.mocked(assistantApi.capabilities).mockResolvedValue({ sdk: 'opencode-sdk', configured: true, model: 'test-model', rag_available: true, supports_stream: true, message: '就绪' })
   vi.mocked(assistantApi.tasks).mockResolvedValue([{ id: 1, task_code: 'TASK-1', borrower: '测试企业', status: 'created' }])
@@ -38,7 +38,8 @@ beforeEach(() => {
 
 function mount(url = '/assistant') {
   return render(<StrictMode><ConfigProvider theme={{ token: { motion: false } }}><App><MemoryRouter initialEntries={[url]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><Routes>
-    <Route path="/assistant" element={<ProtectedRoute><AssistantView /></ProtectedRoute>} />
+    <Route path="/assistant" element={<ProtectedRoute reviewerOnly><AssistantView /></ProtectedRoute>} />
+    <Route path="/dashboard" element={<div>审核工作台</div>} />
     <Route path="/login" element={<div>请重新登录</div>} />
   </Routes></MemoryRouter></App></ConfigProvider></StrictMode>)
 }
@@ -51,6 +52,14 @@ async function send(text = '你好') {
 }
 
 describe('React assistant user flows with real Ant Design X components', () => {
+  it('routes operators away from the reviewer assistant', async () => {
+    useAuthStore.getState().setAuth('operator-jwt', 'operator', '业务经办人')
+    mount()
+    expect(await screen.findByText('审核工作台')).toBeTruthy()
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(assistantApi.sessions).not.toHaveBeenCalled()
+  })
+
   it('sends a first message, streams visible progress, then collapses progress and retains sources', async () => {
     let finish!: () => void
     const gate = new Promise<void>((resolve) => { finish = resolve })
@@ -68,7 +77,7 @@ describe('React assistant user flows with real Ant Design X components', () => {
     expect(screen.getByText('正在检索')).toBeTruthy()
     expect(screen.queryByText('内部推理不得出现')).toBeNull()
     expect(assistantApi.createSession).toHaveBeenCalledTimes(1)
-    expect(assistantApi.tasks).toHaveBeenCalledWith(true)
+    expect(assistantApi.tasks).toHaveBeenCalledWith(false)
     await act(async () => { finish() })
     await screen.findByText('执行完成 · 1 项操作')
     const toggle = screen.getByRole('button', { name: /执行完成/ })

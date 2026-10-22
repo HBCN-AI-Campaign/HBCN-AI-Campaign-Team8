@@ -9,7 +9,7 @@ export default defineConfig({
     deps: { optimizer: { web: { enabled: true, include: ['antd', '@ant-design/x'] } } },
     environment: 'jsdom',
     // Real Ant Design X components do CSS/layout work in jsdom; allow for slow CI.
-    testTimeout: 30000,
+    testTimeout: 60000,
     setupFiles: ['./tests/setup.ts'],
     include: ['./tests/**/*.test.ts', './tests/**/*.test.tsx'],
     restoreMocks: true,

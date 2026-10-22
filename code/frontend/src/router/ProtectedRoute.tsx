@@ -6,6 +6,7 @@ interface Props {
   children: ReactNode
   /** 仅经办人可进（对应 Vue meta.operatorOnly） */
   operatorOnly?: boolean
+  reviewerOnly?: boolean
 }
 
 /**
@@ -13,7 +14,7 @@ interface Props {
  *  - 未登录 → 重定向到 /login，并带上 redirect 回跳地址
  *  - 已登录但无权限（operatorOnly）→ 回 /dashboard
  */
-export default function ProtectedRoute({ children, operatorOnly }: Props) {
+export default function ProtectedRoute({ children, operatorOnly, reviewerOnly }: Props) {
   const location = useLocation()
   const token = useAuthStore((s) => s.token)
   const role = useAuthStore((s) => s.role)
@@ -22,6 +23,9 @@ export default function ProtectedRoute({ children, operatorOnly }: Props) {
     return <Navigate to="/login" replace state={{ redirect: location.pathname + location.search }} />
   }
   if (operatorOnly && role !== 'operator') {
+    return <Navigate to="/dashboard" replace />
+  }
+  if (reviewerOnly && role !== 'reviewer') {
     return <Navigate to="/dashboard" replace />
   }
   return <>{children}</>

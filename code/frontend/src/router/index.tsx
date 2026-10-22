@@ -48,7 +48,7 @@ export const router = createBrowserRouter([
         ),
       },
       { path: 'tasks/:code', element: <TaskObjectView /> },
-      { path: 'assistant', element: <Suspense fallback={<Spin tip="加载慧眼助手"><div style={{ minHeight: 200 }} /></Spin>}><AssistantView /></Suspense> },
+      { path: 'assistant', element: <ProtectedRoute reviewerOnly><Suspense fallback={<Spin tip="加载慧眼助手"><div style={{ minHeight: 200 }} /></Spin>}><AssistantView /></Suspense></ProtectedRoute> },
     ],
   },
   { path: '*', element: <Navigate to="/dashboard" replace /> },
