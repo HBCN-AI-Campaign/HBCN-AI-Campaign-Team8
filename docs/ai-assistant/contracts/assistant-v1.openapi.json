@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Huiyan Assistant API",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "paths": {
     "/api/assistant/v1/skill-library": {
@@ -1269,6 +1269,102 @@
         ]
       }
     },
+    "/api/assistant/v1/sessions/{session_id}/runs/{run_id}": {
+      "get": {
+        "tags": [
+          "assistant"
+        ],
+        "summary": "Get Run",
+        "operationId": "get_run_api_assistant_v1_sessions__session_id__runs__run_id__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          },
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantRunDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantHTTPError"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantHTTPError"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantHTTPError"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantHTTPError"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/assistant/v1/capabilities": {
       "get": {
         "tags": [
@@ -2304,6 +2400,56 @@
         ],
         "title": "AssistantRoomEvent",
         "description": "Durable public envelope; additional fields follow the event name.\n\nstep/tool/delta/citations/message_end use the existing SSE bodies;\ndiscussion carries a message, run_end carries status. Never reasoning."
+      },
+      "AssistantRunDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "completed",
+              "error",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "session_id": {
+            "type": "integer",
+            "title": "Session Id"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "client_message_id": {
+            "type": "string",
+            "title": "Client Message Id"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssistantMessageOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "session_id",
+          "user_id",
+          "client_message_id"
+        ],
+        "title": "AssistantRunDetail",
+        "description": "Final message is available only for a completed run, never a partial answer."
       },
       "AssistantRunOut": {
         "properties": {

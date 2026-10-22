@@ -130,6 +130,7 @@ RAG 按现有接口检索共享资料；任务概要、字段/规则结果先经
 | GET/POST /sessions/{id}/members；DELETE /sessions/{id}/members/{user_id} | 查成员、邀请、撤权 |
 | POST /sessions/{id}/messages | {content}：具名讨论，不调用模型 |
 | POST /sessions/{id}/runs | {content,client_message_id,skill_id?} → 202 和运行 ID |
+| GET /sessions/{id}/runs/{run_id} | 运行状态与完成后的最终消息；跨页面/进程取结果，不触发 AI |
 | GET /sessions/{id}/events?after_id=&run_id= | events,cursor,has_more,active_run；每页最多 100 条 |
 | POST /sessions/{id}/runs/{run_id}/cancel | 创建者/发起者停止运行 |
 | GET /sessions/{id}/audit | 创建者查看邀请/撤权/取消记录 |
@@ -166,6 +167,6 @@ code/backend:           python -m alembic -c assistant-alembic.ini upgrade head
 
 测试覆盖权限、撤权、幂等、并发拒绝、取消/超时、作者、旧消息、技能和 React 邀请/轨迹/异常；mock 不代替真实链路。本机另用汇丰 qwen3.8-flash 完成真实问答（约 11.6 / 16 秒），以及隔离双 JWT 账号的真实模型协作验收（约 12.9 秒）。后端显式执行 python -m tests.live_assistant_acceptance --live 可重做后一项：仅用临时库与合成数据，直接调用真实 ASGI 路由，模型走真实 HTTP；不等于双浏览器/反向代理验收。结果与待办见[当前修改规划](持续优化实施规划.md)。
 
-最新一轮：后端 **73 项**、独立 SDK **4 项**、前端 **26 项**及生产构建通过；SDK wheel 在干净虚拟环境安装/导入成功，不依赖后端。汇丰 **qwen3.8-flash** 经 V1 及独立 SDK 回放的隔离验收约 **25.2 秒**，同历史/事件、幂等、字段/引用与撤权通过。模型走真实 HTTP，业务 API 使用 ASGITransport；不代替浏览器刷新或云端反向代理验收。此前 Windows/Linux runtime 各 **3 项 / 52 断言**通过；本轮未改 runtime。Linux systemd 模板已离线校验，未安装服务。本机双登录页面此前通过邀请、共享历史、具名讨论、共同问答与撤权清屏；仍不等于 Docker、云端助手、真实 PostgreSQL 或两台团队电脑验收。
+最新一轮：后端 **75 项**、独立 SDK **7 项**通过；契约/SDK **1.1.0** 增加只读运行结果与保存游标后的结果恢复，最终事件/历史/查询消息统一 DTO 和 UTC。汇丰 **qwen3.8-flash** 经 V1 与 SDK 的隔离验收约 **18.6 秒**，按运行取回同一答案、游标恢复、幂等、字段/引用及撤权通过。模型走真实 HTTP，业务 API 使用 ASGITransport，不代替浏览器/云端验收。前一轮前端 **26 项 + 构建**和干净环境 SDK wheel 安装已通过，本轮未改前端；此前 Windows/Linux runtime 各 **3 项 / 52 断言**通过，本轮未改 runtime。Linux systemd 模板已离线校验，未安装服务。云端助手、真实 PostgreSQL、多台团队电脑验收仍待完成。
 
 维护三层：[本文](README.md)说当前是什么；[修改规划](持续优化实施规划.md)记录本轮实现和验证；[决策记录](决策记录.md)解释长期取舍。接口/行为落地时同步，不按日期复制。[早期调研](多人协作AI对话调研与优化方案.md)与[旧交接](开发记录与交接.md)是历史，遇冲突以当前代码和本文为准。
