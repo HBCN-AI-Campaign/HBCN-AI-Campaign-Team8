@@ -114,6 +114,52 @@ class QueryPlanTests(unittest.TestCase):
         self.assertEqual(plan.query_context.extraction_status, "unavailable")
         self.assertTrue(any("未返回结构化事实槽位" in item for item in warnings))
 
+    def test_fact_slot_numeric_boundaries_and_multi_value_claims_are_rejected(self):
+        runtime = Mock()
+        runtime.complete.return_value = encoded_plan(
+            user_statements=[
+                {"slot": "amount", "value": "5", "source": "current_query", "source_index": None, "quote": "金额是 5000"},
+                {"slot": "amount", "value": "5000/6000", "source": "current_query", "source_index": None, "quote": "金额是 5000/6000"},
+                {"slot": "amount", "value": "5,000", "source": "current_query", "source_index": None, "quote": "金额是 5,000 元"},
+                {"slot": "currency", "value": "USD/HKD", "source": "current_query", "source_index": None, "quote": "币种 USD/HKD"},
+                {"slot": "currency", "value": "USD", "source": "current_query", "source_index": None, "quote": "币种 USD"},
+            ],
+        )
+
+        plan, warnings = plan_question("金额是 5,000 元，币种 USD", [], runtime)
+
+        self.assertEqual([(item.slot, item.value) for item in plan.user_statements], [("amount", "5,000"), ("currency", "USD")])
+        self.assertEqual(plan.query_context.extraction_status, "partial")
+        self.assertIn("amount", plan.query_context.unknown_slots)
+        self.assertIn("currency", plan.query_context.unknown_slots)
+        self.assertTrue(any("事实槽位无法与用户原文对应" in item for item in warnings))
+
+    def test_amount_thousands_separator_is_normalized_for_provenance(self):
+        runtime = Mock()
+        runtime.complete.return_value = encoded_plan(
+            user_statements=[{"slot": "amount", "value": "5000", "source": "current_query", "source_index": None, "quote": "金额是 5,000 元"}],
+        )
+
+        plan, warnings = plan_question("金额是 5,000 元", [], runtime)
+
+        self.assertEqual([(item.slot, item.value) for item in plan.user_statements], [("amount", "5000")])
+        self.assertEqual(plan.query_context.extraction_status, "provenance_checked")
+        self.assertNotIn("金额", " ".join(warnings))
+
+    def test_missing_slots_are_added_even_when_model_reports_none(self):
+        runtime = Mock()
+        runtime.complete.return_value = encoded_plan(
+            user_statements=[{"slot": "amount", "value": "5000", "source": "current_query", "source_index": None, "quote": "金额 5000"}],
+            unknown_slots=[],
+        )
+
+        plan, _ = plan_question("金额 5000", [], runtime)
+
+        self.assertEqual(plan.query_context.extraction_status, "provenance_checked")
+        self.assertEqual(plan.query_context.unknown_slots, [
+            "document_type", "field", "discrepancy_type", "currency", "subject", "business_date", "jurisdiction",
+        ])
+
     def test_plan_is_strict_bounded_and_original_question_is_not_truncated(self):
         runtime = Mock()
         query = "金额" * 1900

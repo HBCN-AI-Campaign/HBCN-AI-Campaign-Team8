@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from decimal import Decimal, InvalidOperation
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -32,6 +33,10 @@ FactSlot = Literal[
     "document_type", "field", "discrepancy_type", "amount", "currency",
     "subject", "business_date", "jurisdiction",
 ]
+FACT_SLOTS = (
+    "document_type", "field", "discrepancy_type", "amount", "currency",
+    "subject", "business_date", "jurisdiction",
+)
 
 
 class UserFactAssertion(BaseModel):
@@ -130,6 +135,29 @@ def _normalized_contains(text, phrase):
     return normalize(phrase) in normalize(text)
 
 
+def _normalized_numbers(text):
+    normalized = set()
+    for number in numeric_facts(text):
+        try:
+            value = Decimal(number).normalize()
+            normalized.add("0" if value == 0 else format(value, "f"))
+        except InvalidOperation:
+            continue
+    return normalized
+
+
+def _assertion_value_matches_quote(assertion):
+    quote = assertion.quote
+    value = assertion.value
+    if assertion.slot == "amount":
+        value_numbers = _normalized_numbers(value)
+        return len(value_numbers) == 1 and next(iter(value_numbers)) in _normalized_numbers(quote)
+    if assertion.slot == "currency":
+        value_currencies = currency_facts(value)
+        return len(value_currencies) == 1 and value_currencies.issubset(currency_facts(quote))
+    return _normalized_contains(quote, value)
+
+
 def _validated_user_statements(assertions, query, conversation):
     user_history = [item["content"] for item in conversation if item.get("role") == "user"]
     valid, rejected = [], False
@@ -143,7 +171,7 @@ def _validated_user_statements(assertions, query, conversation):
         if not candidates or not _normalized_contains(candidates[0], assertion.quote):
             rejected = True
             continue
-        if not _normalized_contains(assertion.quote, assertion.value):
+        if not _assertion_value_matches_quote(assertion):
             rejected = True
             continue
         valid.append(assertion)
@@ -157,12 +185,14 @@ def _query_context(plan, *, extraction_present, rejected_assertions):
         if item.slot == "currency" and currency_facts(value):
             normalized_value = ",".join(sorted(currency_facts(value)))
         elif item.slot == "amount" and numeric_facts(value):
-            normalized_value = ",".join(sorted(numeric_facts(value)))
+            normalized_amounts = _normalized_numbers(value)
+            normalized_value = ",".join(sorted(normalized_amounts)) or query_key(value)
         else:
             normalized_value = query_key(value)
         values_by_slot.setdefault(item.slot, set()).add(normalized_value)
     ambiguous = sorted(slot for slot, values in values_by_slot.items() if len(values) > 1)
-    unknown = list(dict.fromkeys([*plan.unknown_slots, *ambiguous]))
+    missing = [slot for slot in FACT_SLOTS if slot not in values_by_slot]
+    unknown = list(dict.fromkeys([*plan.unknown_slots, *missing, *ambiguous]))
     status = "unavailable" if not extraction_present else ("partial" if rejected_assertions else "provenance_checked")
     return QueryContext(
         extraction_status=status,
@@ -186,6 +216,7 @@ def plan_question(query, conversation, runtime, *, max_queries=4):
         "同时抽取显式用户陈述槽位：document_type、field、discrepancy_type、amount、currency、subject、business_date、jurisdiction。"
         "user_statements 每项必须给出 value、source、source_index 和逐字 quote；current_query 的 source_index=null，user_history 的 source_index 是 conversation 中仅计算 user 消息后的从零序号。"
         "quote 必须来自所标记的那条用户原文，value 必须出现在 quote 中。"
+        "amount 的 value 只能含一个数值，currency 的 value 只能含一个币种；多个值分别输出多条陈述，不要用斜杠或并列表达塞进一条。"
         "只记录用户明确说过的内容，不把推断、助手答复、检索片段或常识写成用户陈述；无法确认或缺失的槽位放入 unknown_slots。"
         "若槽位出现多个值，保留逐条来源并标记可能歧义，不自动裁决或自动要求用户二选一；只有缺失信息导致问题不可检索时才澄清。"
         "如只有‘这5000为什么不对’且无法确定单据/字段，要求澄清，不擅自猜成支付指令。"
