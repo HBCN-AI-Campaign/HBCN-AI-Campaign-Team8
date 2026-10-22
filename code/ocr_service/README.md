@@ -107,12 +107,12 @@ cd ocr_service
 | 方法   | 路径          | 说明                                     |
 | ---- | ----------- | -------------------------------------- |
 | GET  | `/health`   | 健康检查                                   |
-| POST | `/ocr/analyze` | ★ 上传文档 + 业务 id，返回 JSON（文本 + 坐标） |
-| POST | `/ocr/file` | 上传文件识别（multipart/form-data，字段名 `file`），返回纯文本 |
-| POST | `/ocr/path` | 按服务器本地路径识别（JSON，字段 `path`），返回纯文本 |
-| POST | `/ocr/file/detailed` | 上传文件识别，返回带坐标的明细 |
-| POST | `/ocr/path/detailed` | 按路径识别，返回带坐标的明细 |
-| POST | `/ocr/cloud` | 上传文件，走百度智能云 OCR（需配置 `.env` 密钥） |
+| POST | `/analyze` | ★ 上传文档 + 业务 id，返回 JSON（文本 + 坐标） |
+| POST | `/file` | 上传文件识别（multipart/form-data，字段名 `file`），返回纯文本 |
+| POST | `/path` | 按服务器本地路径识别（JSON，字段 `path`），返回纯文本 |
+| POST | `/file/detailed` | 上传文件识别，返回带坐标的明细 |
+| POST | `/path/detailed` | 按路径识别，返回带坐标的明细 |
+| POST | `/cloud` | 上传文件，走百度智能云 OCR（需配置 `.env` 密钥） |
 
 ### 云端 OCR（百度智能云）
 
@@ -132,14 +132,14 @@ cd ocr_service
 **HTTP 接口**：
 
 ```bash
-curl -X POST http://127.0.0.1:7888/ocr/cloud -F "file=@某文件.pdf"
+curl -X POST http://127.0.0.1:7888/cloud -F "file=@某文件.pdf"
 ```
 
 > ⚠️ 合规提示：云 OCR 会把文件内容上传到百度智能云，请确认贷款/合同类敏感数据允许外发后再使用。
 
 ### 带坐标的接口（detailed）
 
-`/ocr/file/detailed` 和 `/ocr/path/detailed` 额外返回 `blocks` 数组，每条记录包含文字及其位置坐标：
+`/file/detailed` 和 `/path/detailed` 额外返回 `blocks` 数组，每条记录包含文字及其位置坐标：
 
 ```json
 {
@@ -166,10 +166,10 @@ curl -X POST http://127.0.0.1:7888/ocr/cloud -F "file=@某文件.pdf"
 
 ```bash
 # 上传文件
-curl -X POST http://127.0.0.1:7888/ocr/file -F "file=@samples/demo_scan.png"
+curl -X POST http://127.0.0.1:7888/file -F "file=@samples/demo_scan.png"
 
 # 按路径识别
-curl -X POST http://127.0.0.1:7888/ocr/path \
+curl -X POST http://127.0.0.1:7888/path \
   -H "Content-Type: application/json" \
   -d '{"path":"C:/Workspace/FinancialCampaign/ocr_service/samples/demo_text.pdf"}'
 ```

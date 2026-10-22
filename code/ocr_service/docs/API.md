@@ -2,14 +2,22 @@
 
 基于 FastAPI 的文档 OCR 识别服务。上传文档，返回解析后的 JSON。
 
-- **Base URL**：`http://<服务器地址>:7888`
+- **Base URL**：`http://<服务器地址>:7888`（本地直连）
 - **交互式文档**：浏览器打开 `http://<服务器地址>:7888/docs` 可直接在线测试所有接口
+
+> **关于路径前缀**：本服务路由**不带 `/ocr` 前缀**（如 `/analyze`、`/extract`、`/types`）。
+> 若经 nginx 反向代理挂在 `/ocr/` 下（配置 `proxy_pass http://127.0.0.1:7888/;` 剥前缀），
+> 对外访问路径统一加 `/ocr` 前缀，例如：
+> - 本地直连：`http://127.0.0.1:7888/analyze`
+> - 反代访问：`http://<域名或IP>/ocr/analyze`
+>
+> 本文档下文示例默认使用本地直连地址，部署后请自行替换为对应的 `/ocr/xxx` 路径。
 
 ---
 
 ## 一、主接口：上传文档并识别（带业务 id）
 
-### `POST /ocr/analyze`
+### `POST /analyze`
 
 上传一个文档文件 + 一个业务 id，返回解析后的完整 JSON。
 
@@ -32,7 +40,7 @@
 ### 请求示例（curl）
 
 ```bash
-curl -X POST http://127.0.0.1:7888/ocr/analyze \
+curl -X POST http://127.0.0.1:7888/analyze \
   -F "id=LOAN-2024-0871" \
   -F "file=@商业合同.pdf"
 ```
@@ -42,7 +50,7 @@ curl -X POST http://127.0.0.1:7888/ocr/analyze \
 ```python
 import requests
 
-url = "http://127.0.0.1:7888/ocr/analyze"
+url = "http://127.0.0.1:7888/analyze"
 files = {"file": open("商业合同.pdf", "rb")}
 data = {"id": "LOAN-2024-0871"}
 
@@ -116,11 +124,11 @@ print(resp.json())
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/ocr/file` | 上传文件识别，返回纯文本（不带 id） |
-| POST | `/ocr/path` | 按服务器本地路径识别（JSON，字段 `path`） |
-| POST | `/ocr/file/detailed` | 上传文件，返回带坐标明细 |
-| POST | `/ocr/path/detailed` | 按路径识别，返回带坐标明细 |
-| POST | `/ocr/cloud` | 走百度智能云 OCR（需配置 `.env` 密钥） |
+| POST | `/file` | 上传文件识别，返回纯文本（不带 id） |
+| POST | `/path` | 按服务器本地路径识别（JSON，字段 `path`） |
+| POST | `/file/detailed` | 上传文件，返回带坐标明细 |
+| POST | `/path/detailed` | 按路径识别，返回带坐标明细 |
+| POST | `/cloud` | 走百度智能云 OCR（需配置 `.env` 密钥） |
 | GET | `/health` | 健康检查 |
 | GET | `/docs` | Swagger 交互文档 |
 
@@ -130,15 +138,15 @@ print(resp.json())
 
 从 OCR 文本中按关键词规则提取授信相关单据的结构化字段，供审核使用。
 
-### `GET /ocr/types`
+### `GET /types`
 
 列出支持的单据类型。
 
 ```bash
-curl http://127.0.0.1:7888/ocr/types
+curl http://127.0.0.1:7888/types
 ```
 
-### `POST /ocr/extract`
+### `POST /extract`
 
 上传文档 + 单据类型，返回提取出的字段值。
 
@@ -146,7 +154,7 @@ curl http://127.0.0.1:7888/ocr/types
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `type_code` | string | 是 | 单据类型，见 `/ocr/types` |
+| `type_code` | string | 是 | 单据类型，见 `/types` |
 | `file` | file | 是 | 待识别的文档 |
 
 **支持的单据类型**：
@@ -161,7 +169,7 @@ curl http://127.0.0.1:7888/ocr/types
 **请求示例**：
 
 ```bash
-curl -X POST http://127.0.0.1:7888/ocr/extract \
+curl -X POST http://127.0.0.1:7888/extract \
   -F "type_code=DRAWDOWN_CN" \
   -F "file=@授信使用申请书.pdf"
 ```
@@ -189,10 +197,10 @@ curl -X POST http://127.0.0.1:7888/ocr/extract \
 > 承诺内容**等版式复杂/含大量勾选项的字段，纯规则提取有局限，`confidence` 较低或
 > `found=false` 时建议经办人复核。需要更高准确率可考虑接入 LLM 兜底。
 
-### `/ocr/path` 请求示例
+### `/path` 请求示例
 
 ```bash
-curl -X POST http://127.0.0.1:7888/ocr/path \
+curl -X POST http://127.0.0.1:7888/path \
   -H "Content-Type: application/json" \
   -d '{"path":"/opt/ocr-service/samples/demo_text.pdf"}'
 ```

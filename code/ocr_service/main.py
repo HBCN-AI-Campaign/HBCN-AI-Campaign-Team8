@@ -5,15 +5,15 @@
     .venv\\Scripts\\python.exe -m uvicorn main:app --host 127.0.0.1 --port 7888
     或双击 start_api.bat
 
-接口：
-    POST /ocr/analyze   上传文档 + 业务 id，返回 JSON（文本 + 坐标）★ 主接口
-    POST /ocr/extract   上传文档 + 单据类型，提取字段值返回 JSON ★ 字段提取
-    GET  /ocr/types     列出支持的单据类型与字段
-    POST /ocr/file   上传文件（multipart/form-data），返回识别文本（本地）
-    POST /ocr/path   按服务器本地路径识别（JSON）（本地）
-    POST /ocr/file/detailed   上传文件，返回带坐标的明细（本地）
-    POST /ocr/path/detailed   按路径识别，返回带坐标的明细（本地）
-    POST /ocr/cloud  上传文件，走百度智能云 OCR（需配置 .env 密钥）
+接口（路由不带 /ocr 前缀，由 nginx 反代剥前缀后对外暴露为 /ocr/xxx）：
+    POST /analyze   上传文档 + 业务 id，返回 JSON（文本 + 坐标）★ 主接口
+    POST /extract   上传文档 + 单据类型，提取字段值返回 JSON ★ 字段提取
+    GET  /types     列出支持的单据类型与字段
+    POST /file   上传文件（multipart/form-data），返回识别文本（本地）
+    POST /path   按服务器本地路径识别（JSON）（本地）
+    POST /file/detailed   上传文件，返回带坐标的明细（本地）
+    POST /path/detailed   按路径识别，返回带坐标的明细（本地）
+    POST /cloud  上传文件，走百度智能云 OCR（需配置 .env 密钥）
     GET  /health     健康检查
     GET  /docs       Swagger 交互文档
 
@@ -41,7 +41,7 @@ from ocr_service.parser import parse_file
 app = FastAPI(
     title="轻量 OCR 文档识别 API",
     description="基于 PaddleOCR + 轻量文档解析，支持 PDF / Word / Excel / 图片。",
-    version="0.3.0",
+    version="0.4.0",
 )
 
 
@@ -59,7 +59,7 @@ def root():
     return {"message": "轻量 OCR 识别服务已启动，访问 /docs 查看接口文档"}
 
 
-@app.post("/ocr/analyze")
+@app.post("/analyze")
 async def ocr_analyze(
     id: str = Form(..., description="业务标识号（如贷款申请编号，会原样返回）"),
     file: UploadFile = File(..., description="待识别的文档文件"),
@@ -98,15 +98,15 @@ async def ocr_analyze(
     }
 
 
-@app.get("/ocr/types")
+@app.get("/types")
 def ocr_types():
     """列出支持的单据类型及其字段定义。"""
     return {"doc_types": fields_config.list_doc_types(), "detail": fields_config.DOC_TYPES}
 
 
-@app.post("/ocr/extract")
+@app.post("/extract")
 async def ocr_extract(
-    type_code: str = Form(..., description="单据类型，见 /ocr/types"),
+    type_code: str = Form(..., description="单据类型，见 /types"),
     file: UploadFile = File(..., description="待识别的文档文件"),
 ):
     """上传文档 + 单据类型，OCR 识别后提取字段值返回 JSON。"""
@@ -150,7 +150,7 @@ async def ocr_extract(
     }
 
 
-@app.post("/ocr/file")
+@app.post("/file")
 async def ocr_file(file: UploadFile = File(...)):
     """上传文件并识别。"""
     suffix = Path(file.filename or "").suffix.lower()
@@ -182,7 +182,7 @@ async def ocr_file(file: UploadFile = File(...)):
     }
 
 
-@app.post("/ocr/file/detailed")
+@app.post("/file/detailed")
 async def ocr_file_detailed(file: UploadFile = File(...)):
     """上传文件并识别，返回带坐标的明细。"""
     suffix = Path(file.filename or "").suffix.lower()
@@ -214,7 +214,7 @@ async def ocr_file_detailed(file: UploadFile = File(...)):
     }
 
 
-@app.post("/ocr/path")
+@app.post("/path")
 def ocr_path(req: PathRequest):
     """按服务器本地文件路径识别。"""
     p = Path(req.path)
@@ -236,7 +236,7 @@ def ocr_path(req: PathRequest):
     }
 
 
-@app.post("/ocr/path/detailed")
+@app.post("/path/detailed")
 def ocr_path_detailed(req: PathRequest):
     """按服务器本地文件路径识别，返回带坐标的明细。"""
     p = Path(req.path)
@@ -259,7 +259,7 @@ def ocr_path_detailed(req: PathRequest):
     }
 
 
-@app.post("/ocr/cloud")
+@app.post("/cloud")
 async def ocr_cloud(file: UploadFile = File(...)):
     """上传文件，走百度智能云 OCR（需在 .env 配置密钥，文件将外发至百度云）。"""
     from ocr_service.baidu_ocr import recognize as cloud_recognize

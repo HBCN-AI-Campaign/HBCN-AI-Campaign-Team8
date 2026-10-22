@@ -82,6 +82,24 @@ systemctl daemon-reload && systemctl restart ocr-service
 ## 生产建议
 
 1. **用 nginx 反代**：uvicorn 监听 `127.0.0.1:7888`，nginx 对外 `80/443` 转发，顺便加 HTTPS、限流、负载均衡。`deploy/ocr-service.service` 已默认 `127.0.0.1` 便于反代。
+
+   > **挂 `/ocr` 前缀的正确写法（关键）**：本服务路由不带 `/ocr` 前缀，若想让对外路径变成
+   > `http://<域名>/ocr/analyze`，nginx 的 `proxy_pass` **末尾必须加斜杠**来剥掉 `/ocr` 前缀：
+   >
+   > ```nginx
+   > location /ocr/ {
+   >     proxy_pass http://127.0.0.1:7888/;   # ← 末尾的 "/" 会把 /ocr 前缀剥掉
+   >     proxy_set_header Host $host;
+   >     proxy_set_header X-Real-IP $remote_addr;
+   >     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+   >     proxy_read_timeout 300s;
+   >     client_max_body_size 50M;
+   > }
+   > ```
+   >
+   > 若末尾不加斜杠（`proxy_pass http://127.0.0.1:7888;`），nginx 会把 `/ocr` 前缀原样转发给
+   > FastAPI，导致请求变成 `/ocr/analyze` 而路由里只有 `/analyze`，全部返回 404。
+
 2. **单进程即可**：PaddleOCR 模型是内存单例，多 worker 会重复占用内存，不建议开多进程。
 3. **内存**：模型约 140MB + 运行开销，建议 ≥ 4G 内存；大文件 PDF 转图会占额外内存。
-4. **数据合规优势**：本地 OCR 数据不出服务器，对贷款类敏感文件友好；云 OCR 接口（`/ocr/cloud`）默认需要你主动配置 `.env` 才会启用。
+4. **数据合规优势**：本地 OCR 数据不出服务器，对贷款类敏感文件友好；云 OCR 接口（`/cloud`）默认需要你主动配置 `.env` 才会启用。
