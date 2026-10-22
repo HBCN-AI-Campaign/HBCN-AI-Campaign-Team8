@@ -26,13 +26,13 @@ class AssistantKnowledgeTests(unittest.TestCase):
             'metadata': {'scope': 'business_rules'},
         }], 'warnings': [], 'missing': [], 'source_status': {'knowledge_base': 'ready'}, **updates}
 
-    def invoke(self, payload, *, status=200, top_k=6):
+    def invoke(self, payload, *, status=200, top_k=6, query='currency question'):
         def handler(request):
             self.request = request
             return httpx.Response(status, json=payload)
         with httpx.Client(transport=httpx.MockTransport(handler)) as http:
             with patch('app.assistant_knowledge.httpx.post', side_effect=http.post):
-                return query_business_knowledge('currency question', top_k=top_k)
+                return query_business_knowledge(query, top_k=top_k)
 
     def test_uses_enhanced_retrieval_for_business_rules_without_task_or_user_identity(self):
         result = self.invoke(self.payload())
@@ -61,6 +61,25 @@ class AssistantKnowledgeTests(unittest.TestCase):
         self.assertEqual(json.loads(self.request.content)['top_k'], 8)
         self.assertEqual(len(result['evidence']), 8)
         self.assertTrue(any('限制数量' in item for item in result['warnings']))
+
+    def test_does_not_truncate_queries_over_the_rag_contract_limit(self):
+        context = {'task': {'task_code': 'TASK-1'}, 'documents': [], 'results': []}
+        notices = []
+        with patch('app.assistant_knowledge.httpx.post') as network:
+            hits = _rag_search(context, '授信材料' * 1001, notices)
+        network.assert_not_called()
+        self.assertEqual([item['type'] for item in hits], ['task'])
+        self.assertTrue(any('4,000 字符上限' in item for item in notices))
+
+    def test_query_at_the_rag_contract_limit_is_sent_in_full(self):
+        query = '授' * 4000
+        self.invoke(self.payload(), query=query)
+        self.assertEqual(json.loads(self.request.content)['query'], query)
+
+    def test_trims_surrounding_whitespace_before_retrieval(self):
+        result = self.invoke(self.payload(), query='  汇款币种核对  ')
+        self.assertEqual(json.loads(self.request.content)['query'], '汇款币种核对')
+        self.assertTrue(result['evidence'])
 
     def test_preserves_source_coverage_and_reranker_limitations(self):
         result = self.invoke(self.payload(

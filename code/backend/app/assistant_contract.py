@@ -8,6 +8,7 @@ API_BASE = "/api/assistant/v1"
 ASSISTANT_RUN_TIMEOUT_SECONDS = 360
 ASSISTANT_RUN_EXPIRY_SECONDS = 390
 ASSISTANT_CLIENT_WAIT_SECONDS = 400
+ASSISTANT_RAG_QUERY_MAX_CHARS = 4000
 
 
 class AssistantContractOut(BaseModel):
@@ -34,7 +35,8 @@ def contract_info() -> dict:
         "run_states": ["running", "completed", "error", "cancelled"],
         "public_events": ["message_start", "step", "tool", "delta", "citations",
                           "message_end", "error", "run_end", "discussion", "members_changed"],
-        "limits": {"content_chars": 8000, "event_page_size": 100,
+        "limits": {"content_chars": 8000, "knowledge_query_chars": ASSISTANT_RAG_QUERY_MAX_CHARS,
+                   "event_page_size": 100,
                    "active_runs_per_session": 1,
                    "run_timeout_seconds": ASSISTANT_RUN_TIMEOUT_SECONDS,
                    "client_wait_seconds": ASSISTANT_CLIENT_WAIT_SECONDS},

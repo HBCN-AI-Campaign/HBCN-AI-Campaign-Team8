@@ -130,7 +130,7 @@ RAG 按现有接口检索共享资料；任务概要、字段/规则结果先经
 
 ## 5. 同学如何调用
 
-审核知识检索策略：助手侧 `assistant_knowledge.py` 按 RAG v1.2 调用 `POST /api/v1/retrievals`，仅启用 `business_rules` + `knowledge_base` + `reference`，消费原始来源片段及 sufficient/insufficient/clarification 结果；项目设计、外部法律、任务文档均不混入。检索缺口保留为用户可见限制，主站授权任务材料独立进入回答。只改助手专属适配器，不覆盖 RAG 实现或共享 `rag_service.py`。当前隔离云端尚未配置 RAG，真实响应/引用联合链路仍待两模块部署后验收。
+审核知识检索策略：助手侧 `assistant_knowledge.py` 按 RAG v1.2 调用 `POST /api/v1/retrievals`，仅启用 `business_rules` + `knowledge_base` + `reference`，消费原始来源片段及 sufficient/insufficient/clarification 结果；项目设计、外部法律、任务文档均不混入。检索缺口保留为用户可见限制，主站授权任务材料独立进入回答。助手消息上限为 8,000 字符，RAG 查询上限为 4,000；超过检索上限时不截断或错误重试，而是明确提示并保留已加载的授权任务证据。只改助手专属适配器，不覆盖 RAG 实现或共享 `rag_service.py`。当前隔离云端尚未配置 RAG，真实响应/引用联合链路仍待两模块部署后验收。
 
 页面入口：/assistant?task_code=任务编号，或 /assistant?session_id=会话ID。ID 不授予访问权。所有 API 均要求 Authorization: Bearer 业务JWT。
 
@@ -158,7 +158,7 @@ RAG 按现有接口检索共享资料；任务概要、字段/规则结果先经
 
 ### 提交与部署的最小检查
 
-助手相关代码变化会触发 [Assistant checks](../../.github/workflows/assistant-ci.yml)：安装锁定的后端依赖，运行助手后端回归、独立 SDK 测试、React 测试与生产构建。2026-10-22 本机验证结果为后端 84 项、SDK 8 项、前端 30 项全部通过，构建通过。GitHub Actions 工作流本身不会自动启用分支保护；仓库管理员需把 `assistant` job 设为合并必需检查，红灯提交才会被真正挡住。
+助手相关代码变化会触发 [Assistant checks](../../.github/workflows/assistant-ci.yml)：安装锁定的后端依赖，运行助手后端回归、独立 SDK 测试、React 测试与生产构建。2026-10-22 本机验证结果为后端 87 项、SDK 8 项、前端 30 项全部通过，构建通过。GitHub Actions 工作流本身不会自动启用分支保护；仓库管理员需把 `assistant` job 设为合并必需检查，红灯提交才会被真正挡住。
 
 检查通过后，同学不必重复跑完整开发测试。统一部署者仍需在目标环境做一次短冒烟，确认迁移、登录/权限与真实汇丰模型；若本次演示依赖 RAG，还需检查授权 ready、真实检索及引用。本机通过和 CI 通过都不能替代尚未配置的真实 RAG 联测。
 

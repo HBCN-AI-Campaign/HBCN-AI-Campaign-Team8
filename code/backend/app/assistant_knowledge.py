@@ -8,7 +8,12 @@ from typing import Any, Literal
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
+from .assistant_contract import ASSISTANT_RAG_QUERY_MAX_CHARS
 from .config import settings
+
+RAG_QUERY_LIMIT_WARNING = (
+    '问题超过知识库检索的 4,000 字符上限，本轮未截断检索；回答仅可基于已加载的授权任务材料，并需人工复核。'
+)
 
 
 class _KnowledgeEvidence(BaseModel):
@@ -45,12 +50,25 @@ def query_business_knowledge(query: str, *, top_k: int = 6) -> dict:
     Insufficiency/clarification is carried back as an explicit user-visible
     warning; retrieval candidates never become a final approval conclusion.
     """
+    normalized_query = query.strip()
+    if not normalized_query:
+        return {
+            'scope': 'business_rules',
+            'evidence': [],
+            'warnings': ['问题内容为空，未执行知识库检索。'],
+        }
+    if len(normalized_query) > ASSISTANT_RAG_QUERY_MAX_CHARS:
+        return {
+            'scope': 'business_rules',
+            'evidence': [],
+            'warnings': [RAG_QUERY_LIMIT_WARNING],
+        }
     if not settings.RAG_BASE_URL or not settings.RAG_SERVICE_TOKEN:
         raise RuntimeError('Assistant knowledge service is not configured')
     response = httpx.post(
         settings.RAG_BASE_URL.rstrip('/') + '/api/v1/retrievals',
         json={
-            'query': query,
+            'query': normalized_query,
             'scope': 'business_rules',
             'top_k': min(max(int(top_k), 1), 8),
             'sources': ['knowledge_base'],

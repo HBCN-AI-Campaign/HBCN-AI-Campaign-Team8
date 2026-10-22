@@ -20,7 +20,7 @@ from .assistant_evidence import cited_sources, prepare_evidence
 from .assistant_readiness import ASSISTANT_PROTOCOL, runtime_readiness, runtime_problem
 from .assistant_skills import get_skill
 from .assistant_schemas import AssistantMessageOut
-from .assistant_knowledge import query_business_knowledge
+from .assistant_knowledge import RAG_QUERY_LIMIT_WARNING, query_business_knowledge
 from .config import settings
 
 ASSISTANT_INSTRUCTIONS = (
@@ -169,7 +169,10 @@ def _rag_search(
         return hits
 
     if result.get("warnings") and warnings is not None:
-        warning = "知识库未能提供完整匹配证据；请结合当前任务材料人工核实。"
+        # Preserve only our fixed local limit explanation. Other upstream text
+        # remains untrusted and is reduced to a neutral summary for the UI.
+        warning = (RAG_QUERY_LIMIT_WARNING if RAG_QUERY_LIMIT_WARNING in result["warnings"]
+                   else "知识库未能提供完整匹配证据；请结合当前任务材料人工核实。")
         if warning not in warnings:
             warnings.append(warning)
 
