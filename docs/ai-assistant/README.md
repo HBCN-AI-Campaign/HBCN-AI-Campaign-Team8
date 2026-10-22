@@ -21,7 +21,7 @@
 | 技能库：目录、加入/移除、版本更新提示 | 仅仓库审核发布的指引；不执行任意远程技能或上传脚本 |
 | 独立可安装 Python SDK / 助手 V1 契约 | 只依赖 HTTPX；委托的审核 JWT；不依赖后端源码，独立机器身份尚未实现 |
 
-**尚未验收：** 汇丰 ECS/真实 PostgreSQL、多实例协调与压力测试；正文尚非模型 token 实时流。不能据此宣称生产级，或给出未经用户测试的高分。
+**尚未验收：** 汇丰 ECS/目标 PostgreSQL 与真实 RAG 联合链路、多实例协调与压力测试；本机真实 PostgreSQL 的机制验证已通过，不能替代目标环境。正文尚非模型 token 实时流，不能据此宣称生产级或给出未经用户测试的高分。
 
 ## 2. 架构与模块边界
 
@@ -116,6 +116,8 @@ SSE 自行管理数据库会话，不依赖已结束的 HTTP 请求会话；完�
 
 最终答复、作者、`message_end/run_end`、completed 状态和运行槽释放由同一数据库事务提交。最终事件或提交失败则回滚本次答案，不留“历史有答案但运行未完成”的半成品；失败保留已接收的提问并标记 error，不自动重跑模型。
 
+助手时间在 SQLAlchemy 类型边界统一按 UTC 存取，保留既有无时区列，避免 PostgreSQL 会话时区改写时间及过期语义；不修改主站业务字段或全库时区。早期 PG 数据若已受时区偏移，须依据原部署时区审计，不能自动猜测修复。
+
 正文目前在完整答复校验后分段显示，**不是 token 实时流**。运行中步骤/工具状态来自真实事件；不展示内部推理，不制造固定检查项假装执行。
 
 RAG 按现有接口检索共享资料；任务概要、字段/规则结果先经主站授权再读取。自然中文提问不依赖空格分词命中才能保留本地上下文。知识库不可用或本轮输入被截断会显示并持久化依据限制，仍保留已加载授权材料。助手为实际发送给 runtime 的非专家证据分配本轮编号，前端只显示答复里出现且可解析的编号；未读取/不存在的编号会拦截完整答复。专家资料可供推荐，但不会作为审核证据或计数。编号校验只证明来源在本轮输入中，不验证答复是否正确、是否完整或是否忠实概括；仍需审核人员复核。RAG 及外部法规/任务文档 scope 以 RAG 模块实际接口为准。
@@ -163,7 +165,7 @@ RAG 按现有接口检索共享资料；任务概要、字段/规则结果先经
 ## 7. 验证与文档维护
 
 ~~~text
-code/backend:           python -m unittest tests.test_assistant_api tests.test_assistant_collaboration tests.test_assistant_atomic tests.test_assistant_evidence tests.test_assistant_preflight tests.test_assistant_contract tests.test_assistant_knowledge tests.test_rag_service
+code/backend:           python -m unittest tests.test_assistant_api tests.test_assistant_collaboration tests.test_assistant_atomic tests.test_assistant_evidence tests.test_assistant_preflight tests.test_assistant_contract tests.test_assistant_knowledge tests.test_assistant_timestamps tests.test_rag_service
 code/backend:           python -m unittest discover -s ../assistant-sdk/tests
 code/frontend:          npm test && npm run build
 code/assistant-runtime: bun test && bun run typecheck
@@ -172,12 +174,12 @@ code/backend:           python -m alembic -c assistant-alembic.ini upgrade head
 
 测试覆盖权限、撤权、幂等、并发拒绝、取消/超时、作者、旧消息、技能和 React 邀请/轨迹/异常；mock 不代替真实链路。本机另用汇丰 qwen3.8-flash 完成真实问答（约 11.6 / 16 秒），以及隔离双 JWT 账号的真实模型协作验收（约 12.9 秒）。后端显式执行 python -m tests.live_assistant_acceptance --live 可重做后一项：仅用临时库与合成数据，直接调用真实 ASGI 路由，模型走真实 HTTP；不等于双浏览器/反向代理验收。结果与待办见[当前修改规划](持续优化实施规划.md)。
 
-最新一轮：后端 **87 项**、独立 SDK **8 项**通过；React **30 项分批通过**（全套 29 项后补会话切换回归，协作文件 8 项复测通过），TypeScript/Vite 生产构建通过。专家服务端搜索、首屏之外人员、本人资料独立读取、保存失败保留和旧确认失效已覆盖。契约 **1.2.0** 仅新增本人资料 GET，OpenAPI **18 路径 / 23 操作**。兼容 SSE 已补发完成终态，仍保持最终数据库事务一致。
+最新一轮：后端 **90 项**、独立 SDK **8 项**通过。本机 WSL/Linux **PostgreSQL 18.3** 在 **Asia/Shanghai** 会话时区下通过首次/重复迁移、合成业务数据/结构保留、4 连接同键并发、双 JWT 协作/结果恢复/撤权。已核实验收 schema 为零，临时 PG 已停止且文件已删除。修复同键准入竞态及时间偏移；PG 验收模型为 mock、业务 API 为 ASGI，不是汇丰云端联合验收。临时库主应用启动和 /docs 检查也通过。运行方法见[部署验收](../../code/assistant-runtime/deploy/README.md)。
 
-汇丰 **qwen3.8-flash** 约 **17.9 秒**通过任务字段/引用、单人转共享同次运行、相同历史/事件、幂等、保存游标恢复和撤权。业务 API 使用临时合成库/ASGI、模型走真实 HTTP，不是浏览器或云端验收。
+另以临时 SQLite/ASGI + 汇丰真实 **qwen3.8-flash** 约 **10.1 秒**通过任务字段/引用、单人转共享同次运行、相同历史/事件、幂等、保存游标恢复和撤权；与上述 PG 验收分开。前轮 React **30 项分批通过**及 TypeScript/Vite 构建通过，本轮未改前端。契约仍为 **1.2.0**，OpenAPI **18 路径 / 23 操作**。
 
 SDK **1.1.2** 提供[双账号 HTTP 部署验收命令](../../code/assistant-sdk/README.md)，显式 contract 检查要求 API 至少 1.1.0，接受同主版本增量。此前临时合成库 + 真实 TCP API + 汇丰模型约 **12.6 秒**通过，临时服务已停止；实际 CLI 的 `--require-rag` 未就绪阻断、退出码、无凭证输出均已验证。
 
-本轮 `rag_available=false`；重新探测配置 RAG ready 返回 404、8011 不可达，未宣称真实检索成功。测试/构建直接用 Node 执行 package.json 对应命令（环境无 npm），保留主站大 chunk 告警。SDK 1.1.2 wheel 安装通过；此前干净环境独立安装和 Windows/Linux runtime 各 **3 项 / 52 断言**通过，本轮未改 runtime。Linux systemd 模板已离线校验，未安装服务。云端助手、真实 RAG、PostgreSQL和多台团队电脑验收仍待完成。
+本轮真实模型链路 `rag_available=false`；前轮重新探测配置 RAG ready 返回 404、8011 不可达，未宣称真实检索成功。前轮 Node 构建保留主站大 chunk 告警；SDK 1.1.2 wheel 安装通过，此前干净环境独立安装和 Windows/Linux runtime 各 **3 项 / 52 断言**通过，本轮未改 runtime。Linux systemd 模板已离线校验，未安装服务。云端助手、真实 RAG、目标 PostgreSQL和多台团队电脑联合验收仍待完成。
 
 维护三层：[本文](README.md)说当前是什么；[修改规划](持续优化实施规划.md)记录本轮实现和验证；[决策记录](决策记录.md)解释长期取舍。接口/行为落地时同步，不按日期复制。[早期调研](多人协作AI对话调研与优化方案.md)与[旧交接](开发记录与交接.md)是历史，遇冲突以当前代码和本文为准。

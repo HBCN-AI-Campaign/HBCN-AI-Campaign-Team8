@@ -105,4 +105,8 @@ python -m app.assistant_preflight --require-rag --production
 
 可先安装独立 SDK，使用其[双账号 HTTP 验收命令](../../assistant-sdk/README.md)检查发布后的站点：`python -m hbcn_assistant.verify --site <网站根地址> --task <获准演示任务> --expert-id <第二审核账号ID> --live --require-rag`。两个 JWT 从环境变量注入，不放命令行；仅新增并清理一个助手会话，不改业务任务。接口失败/清理失败返回非零；RAG ready 不证明真实检索质量，仍须检索引用与浏览器验收。现有站点未发布 V1 时该命令应失败，不能改为跳过契约检查。
 
+独立 PostgreSQL 机制验收：通过安全环境变量 `HBCN_ASSISTANT_TEST_POSTGRES_URL` 提供获准的测试库连接（`postgresql+psycopg2`），在 backend 执行 `python -m tests.postgres_assistant_acceptance --live-database`。测试账号须有创建/删除 schema 权限；仅在随机 `assistant_acceptance_...` schema 建合成业务表并迁移，使用 4 连接并发、非 UTC 会话、双 JWT API，结束删除本次 schema；不隐式读取主站 DATABASE_URL，不修改 public/RAG schema，不调用真实模型。报告失败阶段/清理状态，失败退出非零；若 cleanup_complete=false，管理员按报告 cleanup_schema 核对处理。不要为此给生产应用账号永久授予建 schema 权限。
+
+本机 PostgreSQL 18.3/Asia-Shanghai 已通过上述验证；模型为 mock、API 为 ASGI，不表示汇丰数据库、浏览器、TLS、吞吐或真实模型联合验收。助手写入的时间统一为 UTC，物理列保持原类型；早期 PG 数据若曾由旧代码写入，按原部署会话时区审计，工具不批量改写历史。
+
 失败时恢复上一版本的链接和配置并重启本项服务，保留助手新增表/历史，禁止用删库回滚。涉及主站重启由其部署负责人执行，不猜测或停止 80/8000 上的既有服务。
