@@ -104,7 +104,7 @@ class RagSearchMergeTests(unittest.TestCase):
             "documents": [],
         }
         with patch(
-            "app.rag_service.RAGClient.query",
+            "app.assistant_service.query_business_knowledge",
             return_value={
                 "evidence": [{"content": "规则片段", "document_id": "doc-1", "document_name": "rules.xlsx", "page": 3}],
                 "warnings": [],
@@ -125,7 +125,7 @@ class RagSearchMergeTests(unittest.TestCase):
             "results": [{"rule_id": "R04", "rule_name": "币种", "status": "fail", "why": "币种不符", "suggestion": ""}],
             "documents": [],
         }
-        with patch("app.rag_service.RAGClient.query", side_effect=RuntimeError("down")):
+        with patch("app.assistant_service.query_business_knowledge", side_effect=RuntimeError("down")):
             hits = _rag_search(context, "币种")
         self.assertEqual([h["type"] for h in hits], ["rule"])
 

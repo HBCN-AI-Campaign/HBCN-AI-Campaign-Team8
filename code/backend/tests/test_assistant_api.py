@@ -172,8 +172,6 @@ class AssistantApiTests(unittest.TestCase):
         self.assertNotIn("内部推理", "".join(deltas))
 
     def test_task_chat_queries_shared_knowledge_base(self):
-        from app.rag_service import RAGClient
-
         context = {"task": {"task_code": "TASK-1"}, "documents": [], "results": []}
         response = {
             "evidence": [{
@@ -184,34 +182,28 @@ class AssistantApiTests(unittest.TestCase):
             }],
             "warnings": [],
         }
-        with patch("app.assistant_service.settings.RAG_BASE_URL", "http://rag-service"), patch.object(
-            RAGClient, "query", return_value=response
+        with patch("app.assistant_service.settings.RAG_BASE_URL", "http://rag-service"), patch(
+            "app.assistant_service.query_business_knowledge", return_value=response
         ) as query:
             hits = _rag_search(context, "提款币种")
 
         query.assert_called_once_with(
-            query="提款币种",
-            scope="knowledge_base",
-            task_code="TASK-1",
+            "提款币种",
             top_k=6,
-            agentic=True,
-            include_external_law=False,
         )
         self.assertEqual(hits[0]["type"], "task")
         self.assertEqual(hits[-1]["type"], "knowledge")
         self.assertEqual(hits[-1]["source"], "审核规则")
 
     def test_rag_failure_is_reported_while_local_evidence_remains(self):
-        from app.rag_service import RAGClient
-
         context = {
             "task": {"task_code": "TASK-1"},
             "documents": [{"doc_code": "DOC-1", "fields": {"currency": "USD"}}],
             "results": [],
         }
         warnings = []
-        with patch("app.assistant_service.settings.RAG_BASE_URL", "http://rag-service"), patch.object(
-            RAGClient, "query", side_effect=RuntimeError("private connection detail")
+        with patch("app.assistant_service.settings.RAG_BASE_URL", "http://rag-service"), patch(
+            "app.assistant_service.query_business_knowledge", side_effect=RuntimeError("private connection detail")
         ):
             hits = _rag_search(context, "currency", warnings)
 

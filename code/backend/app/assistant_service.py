@@ -20,6 +20,7 @@ from .assistant_evidence import cited_sources, prepare_evidence
 from .assistant_readiness import ASSISTANT_PROTOCOL, runtime_readiness, runtime_problem
 from .assistant_skills import get_skill
 from .assistant_schemas import AssistantMessageOut
+from .assistant_knowledge import query_business_knowledge
 from .config import settings
 
 ASSISTANT_INSTRUCTIONS = (
@@ -108,8 +109,8 @@ def task_context(task: models.ReviewTask | None) -> dict[str, Any]:
 def search_evidence(context: dict[str, Any], query: str) -> list[dict[str, Any]]:
     """本地证据适配器，供无 RAG 配置时演示和 SDK tool 使用。
 
-    配置 RAG 服务后，助手仍通过同一工具名调用；外部 RAG 的专用协议由
-    `rag_service.RAGClient` 负责，避免把 RAGFlow 返回格式泄露给助手调用方。
+    配置 RAG 服务后，外部 HTTP 协议由助手侧 assistant_knowledge 适配，
+    RAG 索引/检索由独立知识库模块负责。
     """
     terms = [term.lower() for term in query.split() if term.strip()]
     hits: list[dict[str, Any]] = []
@@ -150,7 +151,7 @@ def _rag_search(
     """组合任务本地证据与外部 RAG 知识库证据。
 
     本地证据（规则结果 + 单据字段）始终返回，保证任务上下文不因 RAG 未配置、
-    未开放范围或服务异常而丢失；RAG 配置后追加 business_rules / project_design
+    未开放范围或服务异常而丢失；RAG 配置后仅追加 business_rules
     的检索片段，作为 ``type="knowledge"`` 引用返回给助手与前端溯源。
     """
     hits: list[dict[str, Any]] = list(search_evidence(context, query))
@@ -158,18 +159,7 @@ def _rag_search(
         return hits
 
     try:
-        from .rag_service import RAGClient
-
-        # The current RAG service indexes shared business/project knowledge only.
-        # Task documents are already permission-filtered and supplied as local evidence.
-        result = RAGClient().query(
-            query=query,
-            scope="knowledge_base",
-            task_code=(context.get("task") or {}).get("task_code"),
-            top_k=6,
-            agentic=True,
-            include_external_law=False,
-        )
+        result = query_business_knowledge(query, top_k=6)
     except Exception as exc:
         # 网关或 RAG 服务异常时保留本地证据，不阻断助手。
         logger.warning("Assistant RAG query failed (%s)", type(exc).__name__)
