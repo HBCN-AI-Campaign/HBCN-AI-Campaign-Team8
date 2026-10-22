@@ -30,7 +30,7 @@ from ..config import settings
 from ..database import get_db
 from ..security import get_current_user, require_role
 from ..assistant_collaboration import (admit_run, author_out, expire_runs, is_shared, public_event,
-    session_for_user, visible_sessions, run_out)
+    session_for_user, visible_sessions, run_out, commit_run_event)
 from ..assistant_models import AssistantAudit, AssistantEvent, AssistantMember, AssistantMessageAuthor, AssistantRun
 from ..assistant_contract import CONTRACT_VERSION, AssistantContractOut, AssistantHTTPError, contract_info
 from .assistant_collaboration import router as collaboration_router
@@ -246,12 +246,11 @@ async def stream_message(
                         if active.status != "running":
                             break
                         session_for_user(stream_db, session_id, actor)
-                        public_event(stream_db, session_id, item, run_id)
-                        if item.get("event") == "message_end":
-                            active.status = "completed"
-                        stream_db.commit()
+                        commit_run_event(stream_db, active, item)
                         event = item.get("event", "message")
                         yield f"event: {event}\ndata: {json.dumps(item, ensure_ascii=False)}\n\n"
+                        if event == "message_end":
+                            break
             except Exception:
                 stream_db.rollback()
                 logger.exception("Assistant stream failed")
@@ -260,10 +259,11 @@ async def stream_message(
                 stream_db.commit()
                 yield f"event: error\ndata: {json.dumps(error, ensure_ascii=False)}\n\n"
             finally:
-                active.status = "error" if active.status == "running" else active.status
-                active.active_session_id = None
-                public_event(stream_db, session_id, {"event": "run_end", "status": active.status}, run_id)
-                stream_db.commit()
+                if active.active_session_id is not None:
+                    active.status = "error" if active.status == "running" else active.status
+                    active.active_session_id = None
+                    public_event(stream_db, session_id, {"event": "run_end", "status": active.status}, run_id)
+                    stream_db.commit()
 
     return StreamingResponse(
         event_stream(),

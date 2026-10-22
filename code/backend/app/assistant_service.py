@@ -495,7 +495,12 @@ async def stream_assistant(
     db.add(persisted)
     db.flush()
     db.add(AssistantMessageAuthor(message_id=persisted.id, display_name="慧眼助手", run_id=run_id))
-    db.commit()
+    # A run's caller commits this message together with its public completion
+    # events and terminal status. A failed final-event write must roll it back.
+    if run_id is None:
+        db.commit()
+    else:
+        db.flush()
     yield {
         "event": "message_end",
         "message": AssistantMessageOut.model_validate(persisted).model_copy(update={

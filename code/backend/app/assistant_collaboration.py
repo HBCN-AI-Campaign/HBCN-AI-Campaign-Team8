@@ -72,6 +72,20 @@ def public_event(db: Session, session_id: int, payload: dict, run_id: str | None
     return row
 
 
+def commit_run_event(db: Session, run: AssistantRun, payload: dict):
+    """Commit the final message, events and terminal run as one DB transaction.
+
+    stream_assistant leaves its final message pending for this caller. Neither
+    history readers nor event/result readers may observe a partial completion.
+    """
+    public_event(db, run.session_id, payload, run.id)
+    if payload.get('event') == 'message_end':
+        run.status = 'completed'
+        run.active_session_id = None
+        public_event(db, run.session_id, {'event': 'run_end', 'status': 'completed'}, run.id)
+    db.commit()
+
+
 def expire_runs(db: Session, session_id: int):
     rows = db.query(AssistantRun).filter(
         AssistantRun.active_session_id == session_id, AssistantRun.expires_at < datetime.now(timezone.utc)
@@ -139,10 +153,10 @@ async def execute_run(factory, run_id: str, content: str, skill_id: str | None):
                         terminal = run.status
                         break
                     session_for_user(db, session.id, user)
+                    commit_run_event(db, run, event)
                     if event.get("event") == "message_end":
                         terminal = "completed"
-                    public_event(db, session.id, event, run.id)
-                    db.commit()
+                        break
         except asyncio.CancelledError:
             terminal = "cancelled"
             db.rollback()
@@ -154,10 +168,11 @@ async def execute_run(factory, run_id: str, content: str, skill_id: str | None):
             db.refresh(run)
             if run.status != "running":
                 terminal = run.status
-            run.status = terminal
-            run.active_session_id = None
-            public_event(db, run.session_id, {"event": "run_end", "status": terminal}, run.id)
-            db.commit()
+            if run.active_session_id is not None:
+                run.status = terminal
+                run.active_session_id = None
+                public_event(db, run.session_id, {"event": "run_end", "status": terminal}, run.id)
+                db.commit()
 
 
 def launch_run(db: Session, run: AssistantRun, content: str, skill_id: str | None):
