@@ -31,5 +31,9 @@ class Settings(BaseSettings):
     APP_NAME: str = "境外贷款单据智能审核平台 · API"
     DEBUG: bool = True
 
+    # --- OCR 服务 ---
+    # 本地开发时在 .env 里设置为服务器地址；部署到同台服务器后默认值直接可用
+    OCR_BASE_URL: str = "http://127.0.0.1:7888"
+
 
 settings = Settings()
