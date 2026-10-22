@@ -102,6 +102,24 @@ class AssistantApiTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 404)
 
+    def test_operator_cannot_retarget_stream_to_another_users_task(self):
+        created = self.client.post(
+            "/api/assistant/sessions",
+            headers=self.operator_headers,
+            json={"title": "unscoped"},
+        )
+        self.assertEqual(created.status_code, 201)
+
+        with patch("app.assistant_service.run_agent_events") as run_agent:
+            response = self.client.post(
+                f"/api/assistant/sessions/{created.json()['id']}/messages/stream",
+                headers=self.operator_headers,
+                json={"content": "读取任务材料", "task_code": "REVIEWER-ONLY"},
+            )
+
+        self.assertEqual(response.status_code, 404)
+        run_agent.assert_not_called()
+
     def test_strip_tool_echo_removes_model_tool_echo(self):
         # 网关模型会在调用工具前把参数 JSON 当文本回显，需从正文剔除。
         self.assertEqual(_strip_tool_echo('{"query":"abc"}这是答案'), "这是答案")
