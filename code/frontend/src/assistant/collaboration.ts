@@ -60,7 +60,9 @@ export const collaborationApi = {
       content, task_code: taskCode || null, skill_id: skillId || null, client_message_id: crypto.randomUUID(),
     })
     let ended = false
-    const deadline = Date.now() + 310_000
+    // RAG's documented enhanced-retrieval budget is 240s, then the model has
+    // its own request budget; leave margin for persistence and polling.
+    const deadline = Date.now() + 400_000
     try {
       yield { event: 'run_started', run }
       while (!signal?.aborted && Date.now() < deadline) {

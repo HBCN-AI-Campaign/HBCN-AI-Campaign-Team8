@@ -30,12 +30,12 @@ def parser() -> argparse.ArgumentParser:
     ask.add_argument("--request-id", required=True)
     ask.add_argument("--content", required=True)
     ask.add_argument("--skill")
-    ask.add_argument("--timeout", type=float, default=280)
+    ask.add_argument("--timeout", type=float, default=400)
     resume = actions.add_parser("resume", help="Read an existing run only; never submit a question")
     resume.add_argument("--session", type=int, required=True)
     resume.add_argument("--run", required=True)
     resume.add_argument("--after-id", type=int, default=0)
-    resume.add_argument("--timeout", type=float, default=280)
+    resume.add_argument("--timeout", type=float, default=400)
     return cli
 
 

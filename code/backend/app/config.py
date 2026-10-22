@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     RAG_BASE_URL: str = ""          # 例如 http://127.0.0.1:8011
     RAG_SERVICE_TOKEN: str = ""     # 与 rag-service/.env 的 SERVICE_TOKEN 保持一致
     RAG_REQUEST_TIMEOUT: float = 15.0
+    # Assistant uses enhanced /retrievals (240s service budget); keep this above
+    # the service budget. The legacy shared RAG adapter retains its own timeout.
+    ASSISTANT_RAG_REQUEST_TIMEOUT: float = 300.0
 
 
 settings = Settings()

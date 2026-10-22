@@ -27,6 +27,8 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(self.client.get(path, headers=self.operator_headers).status_code, 403)
         info = self.client.get(path, headers=self.reviewer_headers).json()
         self.assertEqual(info['contract_version'], '1.2.0')
+        self.assertEqual(info['limits']['run_timeout_seconds'], 360)
+        self.assertEqual(info['limits']['client_wait_seconds'], 400)
         self.assertEqual(info['api_base'], '/api/assistant/v1')
         self.assertEqual(info['authentication'], 'delegated_reviewer_jwt')
         self.assertFalse(info['approval_authority'])

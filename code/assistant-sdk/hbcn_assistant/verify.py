@@ -101,7 +101,7 @@ async def verify_site(site: str, owner_jwt: str, expert_jwt: str, task_code: str
             run = await owner.start_run(session_id, content, client_message_id=key)
             # The submitting request has returned; a second identity now reads
             # the admitted background run without submitting another question.
-            answer = await expert.wait(session_id, run['id'], timeout=260)
+            answer = await expert.wait(session_id, run['id'], timeout=380)
             require(bool(answer.get('content', '').strip()), stage)
             stage = 'citations'
             citations = answer.get('citations') or []

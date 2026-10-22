@@ -162,7 +162,7 @@ def _rag_search(
         result = query_business_knowledge(query, top_k=6)
     except Exception as exc:
         # 网关或 RAG 服务异常时保留本地证据，不阻断助手。
-        logger.warning("Assistant RAG query failed (%s)", type(exc).__name__)
+        logger.warning("Assistant RAG retrieval failed (%s)", type(exc).__name__)
         warning = "知识库暂不可用；本次回复仅基于当前任务已加载的本地证据。"
         if warnings is not None and warning not in warnings:
             warnings.append(warning)

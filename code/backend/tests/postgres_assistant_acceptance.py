@@ -122,7 +122,7 @@ def verify_database(database_url: str) -> dict:
         with factory() as db:
             run = db.get(AssistantRun, admissions[0][0])
             assert run.active_session_id == room_id
-            assert 250 < (run.expires_at - datetime.now(timezone.utc)).total_seconds() <= 300
+            assert 350 < (run.expires_at - datetime.now(timezone.utc)).total_seconds() <= 390
             from fastapi import HTTPException
             try:
                 admit_run(db, db.get(models.User, owner_id), db.get(models.AssistantSession, room_id),

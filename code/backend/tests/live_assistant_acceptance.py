@@ -84,7 +84,7 @@ async def verify():
         await call('POST', path + '/members', body={'user_id': expert_id})
         await call('POST', path + '/messages', headers=expert, body={'content': '建议下轮核对合同币种与提款申请是否一致。'})
         cursor, received = 0, []
-        async with asyncio.timeout(260):
+        async with asyncio.timeout(380):
             while True:
                 page = await call('GET', path + f"/events?after_id={cursor}&run_id={run['id']}")
                 received.extend(page['events']); cursor = page['cursor']

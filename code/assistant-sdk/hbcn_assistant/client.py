@@ -79,7 +79,7 @@ class AssistantClient:
             raise AssistantRunError(run_id, snapshot['status'])
         return None
 
-    async def wait(self, session_id: int, run_id: str, *, after_id=0, timeout=280) -> dict:
+    async def wait(self, session_id: int, run_id: str, *, after_id=0, timeout=400) -> dict:
         """Read an existing run only. Timeout/disconnect does not cancel it."""
         cursor = after_id
         async with asyncio.timeout(timeout):
@@ -106,7 +106,7 @@ class AssistantClient:
                     await asyncio.sleep(.7)
 
     async def ask(self, session_id: int, content: str, *, client_message_id: str,
-                  skill_id: str | None = None, timeout=280) -> dict:
+                  skill_id: str | None = None, timeout=400) -> dict:
         """Retry with the SAME client_message_id to resume, not invoke twice."""
         run = await self.start_run(session_id, content, client_message_id=client_message_id, skill_id=skill_id)
         return await self.wait(session_id, run['id'], timeout=timeout)

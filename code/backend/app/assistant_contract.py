@@ -5,6 +5,9 @@ from pydantic import BaseModel
 
 CONTRACT_VERSION = "1.2.0"
 API_BASE = "/api/assistant/v1"
+ASSISTANT_RUN_TIMEOUT_SECONDS = 360
+ASSISTANT_RUN_EXPIRY_SECONDS = 390
+ASSISTANT_CLIENT_WAIT_SECONDS = 400
 
 
 class AssistantContractOut(BaseModel):
@@ -32,7 +35,9 @@ def contract_info() -> dict:
         "public_events": ["message_start", "step", "tool", "delta", "citations",
                           "message_end", "error", "run_end", "discussion", "members_changed"],
         "limits": {"content_chars": 8000, "event_page_size": 100,
-                   "active_runs_per_session": 1},
+                   "active_runs_per_session": 1,
+                   "run_timeout_seconds": ASSISTANT_RUN_TIMEOUT_SECONDS,
+                   "client_wait_seconds": ASSISTANT_CLIENT_WAIT_SECONDS},
         "compatibility": "Additive optional fields/events in v1; ignore unknown fields/events. Breaking changes require a new major API path.",
         "deployment": {"api_workers": 1, "model_credentials": "server_only"},
         "approval_authority": False,

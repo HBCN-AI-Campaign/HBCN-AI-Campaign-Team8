@@ -124,13 +124,13 @@ SSE 自行管理数据库会话，不依赖已结束的 HTTP 请求会话；完�
 
 助手时间在 SQLAlchemy 类型边界统一按 UTC 存取，保留既有无时区列，避免 PostgreSQL 会话时区改写时间及过期语义；不修改主站业务字段或全库时区。早期 PG 数据若已受时区偏移，须依据原部署时区审计，不能自动猜测修复。
 
-正文目前在完整答复校验后分段显示，**不是 token 实时流**。运行中步骤/工具状态来自真实事件；不展示内部推理，不制造固定检查项假装执行。
+正文目前在完整答复校验后分段显示，**不是 token 实时流**。运行中步骤/工具状态来自真实事件；不展示内部推理，不制造固定检查项假装执行。增强检索按 RAG 文档预算最多 240 秒，完整助手运行留出 RAG、模型及持久化余量，客户端等待上限 400 秒。
 
 RAG 按现有接口检索共享资料；任务概要、字段/规则结果先经主站授权再读取。自然中文提问不依赖空格分词命中才能保留本地上下文。知识库不可用或本轮输入被截断会显示并持久化依据限制，仍保留已加载授权材料。助手为实际发送给 runtime 的非专家证据分配本轮编号，前端只显示答复里出现且可解析的编号；未读取/不存在的编号会拦截完整答复。专家资料可供推荐，但不会作为审核证据或计数。编号校验只证明来源在本轮输入中，不验证答复是否正确、是否完整或是否忠实概括；仍需审核人员复核。RAG 及外部法规/任务文档 scope 以 RAG 模块实际接口为准。
 
 ## 5. 同学如何调用
 
-审核知识检索策略：助手侧 `assistant_knowledge.py` 仅调用现有 `POST /api/v1/query` 的 `business_rules` 范围，不混入 `project_design`。响应范围、片段结构不符合契约时保留授权任务证据并显示知识库限制；未声称任务级检索、商业法规或增强 `/retrievals` 已联通。共享 `rag_service.py` 留给其模块维护，本轮只更新该测试文件中针对助手调用的 mock 位置。
+审核知识检索策略：助手侧 `assistant_knowledge.py` 按 RAG v1.2 调用 `POST /api/v1/retrievals`，仅启用 `business_rules` + `knowledge_base` + `reference`，消费原始来源片段及 sufficient/insufficient/clarification 结果；项目设计、外部法律、任务文档均不混入。检索缺口保留为用户可见限制，主站授权任务材料独立进入回答。只改助手专属适配器，不覆盖 RAG 实现或共享 `rag_service.py`。当前隔离云端尚未配置 RAG，真实响应/引用联合链路仍待两模块部署后验收。
 
 页面入口：/assistant?task_code=任务编号，或 /assistant?session_id=会话ID。ID 不授予访问权。所有 API 均要求 Authorization: Bearer 业务JWT。
 
@@ -155,6 +155,12 @@ RAG 按现有接口检索共享资料；任务概要、字段/规则结果先经
 业务工作流安装 `code/assistant-sdk` 后用 `hbcn_assistant.AssistantClient(base_url, user_jwt)`；旧 `app.assistant_client` 仅重新导出该包。委托 JWT 必须属于当前有效审核人员，`client_message_id` 使用调用方保存的业务请求唯一键；提供 start_run/wait 分离与 ask 快捷方法。无需 HSBC key 或 runtime token，不绕过任务权限；自主后台服务身份需另外设计授权。调用及兼容约定以[对外接口 V1](对外接口V1.md)为准。
 
 ## 6. 拉取与部署
+
+### 提交与部署的最小检查
+
+助手相关代码变化会触发 [Assistant checks](../../.github/workflows/assistant-ci.yml)：安装锁定的后端依赖，运行助手后端回归、独立 SDK 测试、React 测试与生产构建。2026-10-22 本机验证结果为后端 84 项、SDK 8 项、前端 30 项全部通过，构建通过。GitHub Actions 工作流本身不会自动启用分支保护；仓库管理员需把 `assistant` job 设为合并必需检查，红灯提交才会被真正挡住。
+
+检查通过后，同学不必重复跑完整开发测试。统一部署者仍需在目标环境做一次短冒烟，确认迁移、登录/权限与真实汇丰模型；若本次演示依赖 RAG，还需检查授权 ready、真实检索及引用。本机通过和 CI 通过都不能替代尚未配置的真实 RAG 联测。
 
 1. 团队授权渠道提供配置。后端按 .env.example 设置 runtime/RAG 地址及 token；runtime 按模板设置 AI_BASE_URL / AI_API_KEY / AI_MODEL。真实 key 不入仓库/浏览器。
 2. code/backend：安装 requirements-assistant.txt（包含原 requirements），首次按主站流程初始化业务数据库，再执行下方 Alembic 命令。只增加助手表；旧库缺业务字段时先按业务模块要求升级，不删除/重建业务库。

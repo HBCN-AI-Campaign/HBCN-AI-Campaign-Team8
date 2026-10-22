@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from . import models
 from .assistant_models import AssistantAudit, AssistantEvent, AssistantMember, AssistantMessageAuthor, AssistantRun
 from .assistant_service import task_for_user
+from .assistant_contract import ASSISTANT_RUN_EXPIRY_SECONDS, ASSISTANT_RUN_TIMEOUT_SECONDS
 
 log = logging.getLogger(__name__)
 workers: dict[str, asyncio.Task] = {}
@@ -121,7 +122,9 @@ def admit_run(db: Session, user: models.User, session: models.AssistantSession, 
     run = AssistantRun(
         id=str(uuid4()), session_id=session.id, user_id=user.id, client_message_id=client_id,
         request_hash=digest, active_session_id=session.id, status="running",
-        expires_at=datetime.now(timezone.utc) + timedelta(seconds=300),
+        # Enhanced RAG retrieval may use its full 240s budget before the model
+        # call; leave time for model completion and event persistence.
+        expires_at=datetime.now(timezone.utc) + timedelta(seconds=ASSISTANT_RUN_EXPIRY_SECONDS),
     )
     db.add(run)
     try:
@@ -152,7 +155,7 @@ async def execute_run(factory, run_id: str, content: str, skill_id: str | None):
         try:
             session = session_for_user(db, run.session_id, user)
             # wait_for bounds both model access and retrieval; no immortal room lock.
-            async with asyncio.timeout(240):
+            async with asyncio.timeout(ASSISTANT_RUN_TIMEOUT_SECONDS):
                 async for event in stream_assistant(db, user, session, content, session.task_code, skill_id, run_id=run.id):
                     db.refresh(run)
                     if run.status != "running":

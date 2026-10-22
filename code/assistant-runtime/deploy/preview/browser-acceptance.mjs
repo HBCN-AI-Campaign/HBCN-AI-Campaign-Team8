@@ -62,7 +62,7 @@ try {
   })
   const question = '请用两句话概括当前合成任务的币种和金额，引用任务证据编号，并强调最终审核结论须由有权限人员确认。'
   await send(owner, question)
-  await owner.getByText('复制答复', { exact: true }).waitFor({ timeout: 210000 })
+  await owner.getByText('复制答复', { exact: true }).waitFor({ timeout: 400000 })
   assert(roomId, 'room created through UI')
   const room = await json(owner, `sessions/${roomId}`)
   assert.equal(room.status, 200)

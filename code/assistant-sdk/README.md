@@ -26,7 +26,7 @@ async def explain(site_url, reviewer_jwt, task_code, request_id):
         return await assistant.wait(room['id'], run['id'])
 ```
 
-其他页面或进程稍后取结果：`snapshot = await assistant.run(session_id, run_id)`；返回 `status` 与完成后的 `message`。已保存事件游标时可 `wait(session_id, run_id, after_id=cursor)`，SDK 会在需要时读取持久结果，不重跑模型。此结果查询功能要求服务端契约至少 1.1.0；V1 入口保持不变。
+其他页面或进程稍后取结果：`snapshot = await assistant.run(session_id, run_id)`；返回 `status` 与完成后的 `message`。已保存事件游标时可 `wait(session_id, run_id, after_id=cursor)`，SDK 会在需要时读取持久结果，不重跑模型。默认等待上限 400 秒，需覆盖增强 RAG 预算、模型生成与持久化；超时只停止客户端等待，后续可用同一 run 恢复。服务端 `/contract` 声明整体运行上限 360 秒。此结果查询功能要求服务端契约至少 1.1.0；V1 入口保持不变。
 
 `site_url` 是网站根地址（可带站点反代前缀），不含 `/api/assistant/v1`。JWT 必须属于当前有效审核人员。SDK 不申请账号、不保存模型凭证，也不产生审批决定。
 

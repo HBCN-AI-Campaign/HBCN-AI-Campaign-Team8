@@ -32,7 +32,8 @@ from ..security import get_current_user, require_role
 from ..assistant_collaboration import (admit_run, author_out, expire_runs, is_shared, public_event,
     session_for_user, visible_sessions, run_out, commit_run_event)
 from ..assistant_models import AssistantAudit, AssistantEvent, AssistantMember, AssistantMessageAuthor, AssistantRun
-from ..assistant_contract import CONTRACT_VERSION, AssistantContractOut, AssistantHTTPError, contract_info
+from ..assistant_contract import (ASSISTANT_RUN_TIMEOUT_SECONDS, CONTRACT_VERSION,
+    AssistantContractOut, AssistantHTTPError, contract_info)
 from .assistant_collaboration import router as collaboration_router
 
 router = APIRouter(
@@ -238,7 +239,7 @@ async def stream_message(
                 room = session_for_user(stream_db, session_id, actor)
                 if active.status != "running":
                     raise HTTPException(409, "运行已经结束")
-                async with asyncio.timeout(240):
+                async with asyncio.timeout(ASSISTANT_RUN_TIMEOUT_SECONDS):
                     async for item in stream_assistant(
                         stream_db, actor, room, payload.content, task_code, payload.skill_id, run_id=run_id
                     ):
