@@ -250,6 +250,8 @@ async def stream_message(
                         event = item.get("event", "message")
                         yield f"event: {event}\ndata: {json.dumps(item, ensure_ascii=False)}\n\n"
                         if event == "message_end":
+                            terminal = {"event": "run_end", "run_id": run_id, "status": "completed"}
+                            yield f"event: run_end\ndata: {json.dumps(terminal, ensure_ascii=False)}\n\n"
                             break
             except Exception:
                 stream_db.rollback()

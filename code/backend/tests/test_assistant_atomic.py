@@ -36,6 +36,9 @@ class AtomicCompletionTests(unittest.TestCase):
             response = self.client.post(base + '/messages/stream', headers=self.reviewer_headers,
                                         json={'content': '核对授权材料'})
             self.assertEqual(response.status_code, 200)
+            if 'event: message_end' in response.text:
+                self.assertEqual(response.text.count('event: run_end'), 1)
+                self.assertLess(response.text.index('event: message_end'), response.text.index('event: run_end'))
             with self.session_factory() as db:
                 return db.query(AssistantRun).filter_by(session_id=room_id).one().id
         response = self.client.post(base + '/runs', headers=self.reviewer_headers,
