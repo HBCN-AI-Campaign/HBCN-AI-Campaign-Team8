@@ -182,8 +182,8 @@ class AssistantApiTests(unittest.TestCase):
             }],
             "warnings": [],
         }
-        with patch("app.assistant_service.settings.RAG_BASE_URL", "http://rag-service"), patch(
-            "app.assistant_service.query_business_knowledge", return_value=response
+        with patch("app.assistant_service.settings.RAG_BASE_URL", "http://rag-service"), patch.object(
+            RAGClient, "retrieve", return_value=response
         ) as query:
             hits = _rag_search(context, "提款币种")
 
@@ -202,8 +202,8 @@ class AssistantApiTests(unittest.TestCase):
             "results": [],
         }
         warnings = []
-        with patch("app.assistant_service.settings.RAG_BASE_URL", "http://rag-service"), patch(
-            "app.assistant_service.query_business_knowledge", side_effect=RuntimeError("private connection detail")
+        with patch("app.assistant_service.settings.RAG_BASE_URL", "http://rag-service"), patch.object(
+            RAGClient, "retrieve", side_effect=RuntimeError("private connection detail")
         ):
             hits = _rag_search(context, "currency", warnings)
 

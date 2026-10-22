@@ -74,6 +74,34 @@ class RAGClientTests(unittest.TestCase):
             with self.assertRaises(RAGServiceError):
                 RAGClient().query(query="q")
 
+    def test_retrieve_calls_agentic_evidence_endpoint(self):
+        response = {
+            "query": "提款用途",
+            "scope": "all",
+            "sources": [{"content": "业务规则片段", "document_id": "doc-1", "document_name": "rules.pdf"}],
+            "warnings": [],
+            "retrieval_rounds": 2,
+            "evidence_status": "sufficient",
+            "stop_reason": "sufficient",
+            "source_status": {"knowledge_base": "ok"},
+            "rerank_status": "not_run",
+            "context_coverage": {},
+            "legal_applicability": {},
+        }
+        calls = []
+
+        def fake_post(path, payload):
+            calls.append((path, payload))
+            return response
+
+        with patch.object(RAGClient, "_post", side_effect=fake_post):
+            result = RAGClient().retrieve(query="提款用途")
+
+        self.assertEqual(calls[0][0], "/api/v1/retrievals")
+        self.assertEqual(calls[0][1]["sources"], ["knowledge_base"])
+        self.assertEqual(result["evidence"][0]["document_id"], "doc-1")
+        self.assertEqual(result["evidence_status"], "sufficient")
+
 
 class RagSearchMergeTests(unittest.TestCase):
     def setUp(self):
@@ -104,7 +132,7 @@ class RagSearchMergeTests(unittest.TestCase):
             "documents": [],
         }
         with patch(
-            "app.assistant_service.query_business_knowledge",
+            "app.rag_service.RAGClient.retrieve",
             return_value={
                 "evidence": [{"content": "规则片段", "document_id": "doc-1", "document_name": "rules.xlsx", "page": 3}],
                 "warnings": [],
@@ -125,7 +153,7 @@ class RagSearchMergeTests(unittest.TestCase):
             "results": [{"rule_id": "R04", "rule_name": "币种", "status": "fail", "why": "币种不符", "suggestion": ""}],
             "documents": [],
         }
-        with patch("app.assistant_service.query_business_knowledge", side_effect=RuntimeError("down")):
+        with patch("app.rag_service.RAGClient.retrieve", side_effect=RuntimeError("down")):
             hits = _rag_search(context, "币种")
         self.assertEqual([h["type"] for h in hits], ["rule"])
 

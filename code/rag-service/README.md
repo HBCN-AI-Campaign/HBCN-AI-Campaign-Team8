@@ -1,6 +1,6 @@
 # RAG 模块总览与运行说明
 
-协作交付入口：服务 `0.4.0` / HTTP 契约 `1.2.0`。其他模块只调用 [接口契约](API_CONTRACT.md) 与 [OpenAPI](contracts/openapi-v1.json)，无需依赖 RAG 内部类、表或模型；云端部署同事使用 [部署交接](deploy/README.md)。现有 `/query` 保持兼容，新增消费者优先对接 `/retrievals` 原文证据接口；内部优化独立发布，云端可提供模型/API/存储资源，不因现有 ECS 配置降低质量目标。
+协作交付入口：服务 `0.5.0` / HTTP 契约 `1.3.0`。其他模块只调用 [接口契约](API_CONTRACT.md) 与 [OpenAPI](contracts/openapi-v1.json)，无需依赖 RAG 内部类、表或模型；云端部署同事使用 [部署交接](deploy/README.md)。现有 `/query` 保持兼容，新增消费者优先对接 `/retrievals` 原文证据接口；内部优化独立发布，云端可提供模型/API/存储资源，不因现有 ECS 配置降低质量目标。
 
 模块边界：RAG 管理检索、证据与独立问答；主站助手和专项 Agent 负责各自最终输出。调用方按接口消费原文证据和缺口，主站负责最终用户/任务授权。模块可独立部署与更新，真实云端接线及完整业务验收仍须分别取证。
 
@@ -8,7 +8,7 @@
 
 ## 一页现状
 
-持续优化入口：[优化规划 v3](../../docs/Agentic-RAG优化规划.md) 与 [执行台账](../../docs/RAG持续优化执行台账.md)。用户已授权按需求持续实现、测试、审查与迭代；R01–R17 各项以台账的实际证据为准。北大法宝只读适配源码已完成真实烟测，服务端默认未启用；专用重排契约已接入但模型未部署。下文区分历史已验收后端、本轮源码增量和仍待实现的完整目标。
+持续优化入口：[优化规划 v3](../../docs/Agentic-RAG优化规划.md) 与 [执行台账](../../docs/RAG持续优化执行台账.md)。用户已授权按需求持续实现、测试、审查与迭代；R01–R21 各项以台账的实际证据为准。北大法宝只读适配源码已完成真实烟测，服务端默认未启用；专用重排契约已接入但模型未部署。下文区分历史已验收后端、本轮源码增量和仍待实现的完整目标。
 
 | 项目 | 当前事实 |
 | --- | --- |
@@ -16,15 +16,17 @@
 | 已验收服务 | 本机 `127.0.0.1:8011`；旧 `8010` 是另一实例，不代表本次版本 |
 | 检索存储 | 汇丰 PostgreSQL 的 `hbcn_rag` schema，pgvector 1024 维向量表 `chunks_v1`，HNSW 索引 |
 | 已接能力 | 百炼 Embedding、OpenCode SDK、文件解析/切片、相关性核对与有限重检索、带引用回答、原文定位 |
-| 验收证据 | 自动回归 47 项通过；具体资料范围和测试边界见验收报告 |
+| 验收证据 | 当前版本全量 RAG 回归 199 项：186 项通过、13 项按设计跳过；另有 OpenAPI 快照、隔离 API 烟测、RAG UI 17 项测试与构建证据。具体资料范围和测试边界见执行台账与验收报告 |
 | 尚未完成 | ECS 常驻部署、真实模型/索引/MCP/UI 完整验收、主站助手部署联调、任务级资料权限、完整法规服务 |
 | 原件位置 | 当前验收环境为本机 `data/originals/`；迁移时必须与数据库记录一起搬迁并备份 |
 
-本轮源码增量：首次结构化问题规划、原始事实查询保留、中英互补表达、查询族归一 RRF、空召回恢复、跨轮候选保留、查询/轮次/时间预算与停止原因；新增 `/api/v1/retrievals` 仅返回原文证据。测试和 2 个真实模型规划冒烟见执行台账，第二轮新增可切换的中文词法/向量混合及显式回填，实际 PostgreSQL 隔离合成测试通过，见 [第二轮验证](../../docs/RAG优化第二轮验证记录.md)。第三轮新增法宝与知识库多源归并、显式来源选择和专用重排契约，见 [第三轮验证](../../docs/RAG优化第三轮验证记录.md)；尚未宣告正式语料检索质量、真实重排模型、完整法规服务、UI 或共享部署验收完成。第四轮增加可追溯长文窗口、按字节分批与联合覆盖核对，真实 SDK 已取回长文末尾限制；具体局限见第四轮记录。没有修改现有主站适配层，也没有重启共享实例。
+本轮源码增量：首次结构化问题规划、原始事实查询保留、中英互补表达、查询族归一 RRF、空召回恢复、跨轮候选保留、查询/轮次/时间预算与停止原因；新增 `/api/v1/retrievals` 仅返回原文证据。测试和 2 个真实模型规划冒烟见执行台账，第二轮新增可切换的中文词法/向量混合及显式回填，实际 PostgreSQL 隔离合成测试通过，见 [第二轮验证](../../docs/RAG优化第二轮验证记录.md)。第三轮新增法宝与知识库多源归并、显式来源选择和专用重排契约，见 [第三轮验证](../../docs/RAG优化第三轮验证记录.md)；尚未宣告正式语料检索质量、真实重排模型、完整法规服务、UI 或共享部署验收完成。第四轮增加可追溯长文窗口、按字节分批与联合覆盖核对，真实 SDK 已取回长文末尾限制；具体局限见第四轮记录。第十七轮主站适配接入 `/retrievals` 原文证据和检索充分性状态，保留旧 `/query` 兼容；第十九轮传入最近 12 条 user/assistant 会话背景；第二十轮增加带用户原文来源索引的事实槽位和未知/歧义输出；第二十一轮补充金额/币种单值边界与服务端 unknown 补全。真实模型、正式语料及主站/云端联合验收仍待完成。
 
 第十三轮补齐普通知识文档逻辑撤回：HTTP/React 确认、hash 绑定、事务关闭向量/词法可见性、原文拒读、在途入库发布屏障，以及跨轮候选和答复返回前复核。原件保留，未实现物理删除、跨系统缓存通知或案例依赖统一传播；详见[第十三轮验证](../../docs/RAG优化第十三轮验证记录.md)。
 
 第十四轮增加解析质量报告、隔离/待复核、独立凭证逐单元原文审核与旧库授权重检；**旧 ready 缺本版报告默认排除**，升级需迁移窗口。见[质量契约](../../docs/RAG文档质量门禁契约.md)和[第十四轮验证](../../docs/RAG优化第十四轮验证记录.md)。这不是 OCR 准确率或法规业务质量验收。
+
+第十五轮增加默认关闭的网页上下文适配：独立授权的调用方提交实际文本快照，与知识库/法宝候选共同重排和核对；不代抓任意 URL，不把网页自动升格为法规依据。见[接入契约](../../docs/RAG网页上下文接入契约.md)及[第十五轮验证](../../docs/RAG优化第十五轮验证记录.md)，真实浏览器采集和主站授权接线尚未完成。
 
 ## 当前 RAG 架构
 
@@ -44,7 +46,7 @@
 
 ```mermaid
 flowchart LR
-  Caller[已授权的后端调用方] -->|Bearer · HTTP| API[FastAPI RAG 服务<br/>本机 127.0.0.1:8011]
+  Caller[已授权的后端调用方<br/>主站助手通过 retrieve 调用增强证据接口] -->|Bearer · HTTP| API[FastAPI RAG 服务<br/>本机 127.0.0.1:8011]
   API --> QUALITY[版本化解析质量门禁<br/>乱码隔离 / OCR及结构不确定待复核]
   QUALITY --> QREVIEW[独立 reviewer 凭证 / 逐单元对照原件<br/>原件、解析、报告三 hash 绑定]
   QREVIEW --> DOC
@@ -54,7 +56,7 @@ flowchart LR
   WITHDRAW --> DOC
   WITHDRAW --> VEC
   WITHDRAW -.阻止在途发布.-> GRAPH
-  GRAPH --> RECHECK[候选与结果返回前复核<br/>当前质量策略 / 失效依据移除 / 隐藏原答复]
+  GRAPH --> RECHECK[候选与结果返回前复核<br/>本库质量 / 网页授权、时效与正文绑定<br/>失效依据移除 / 隐藏原答复]
   API --> DOC[(PostgreSQL<br/>hbcn_rag.documents)]
   API --> VEC[(pgvector<br/>chunks_v1 · 1024维 · HNSW)]
   API --> FILES[(持久化原件目录<br/>data/originals)]
@@ -64,7 +66,7 @@ flowchart LR
   REFDB --> REFLIMIT[仅历史参考与计划建议<br/>尚未接入问答图 / 主站任务 ACL]
   API -->|切片向量化| EMB[汇丰百炼 Embedding]
   API --> CTRL[请求断开检测与工作线程<br/>连接清理 / 退出后释放名额]
-  CTRL --> GRAPH[LangGraph<br/>问题规划 / 多查询 / 覆盖检查 / 有限重检索]
+  CTRL --> GRAPH[LangGraph<br/>问题规划与用户事实槽位 / 多查询 / 覆盖检查 / 有限重检索]
   GRAPH --> VEC
   GRAPH -.配置 hybrid 且回填后启用.-> LEX[(PostgreSQL FTS + GIN<br/>版本化中文分词 / 同范围过滤)]
   VEC --> FUSION[源内通道 RRF + 查询族归并]
@@ -73,16 +75,27 @@ flowchart LR
   MCP --> LAW[北大法宝法规服务]
   FUSION --> POOL[跨源 RRF / 来源状态 / 缺口]
   MCP --> POOL
-  POOL -.已接接口，模型尚未部署.-> RANK[专用重排契约]
+  API -.显式快照 / 默认关闭.-> WEBAUTH[独立 reader 凭证 / 精确 scope<br/>域名、时效与处理授权]
+  WEBAUTH --> WEB[请求内网页原文快照<br/>URL、采集时间和 hash / 真实性未核实]
+  POOL --> MIX[有序结果与无序上下文共同候选<br/>网页不制造 RRF 排名]
+  WEB --> MIX
+  MIX -.已接接口，模型尚未部署.-> RANK[专用重排契约]
   RANK --> CONTEXT[可追溯原文窗口<br/>UTF-16与字节预算 / 分批及联合覆盖]
   CONTEXT --> LEGAL[用途与法规适用性门禁<br/>本案结构化条件 / 服务端复核台账 / 原文版本绑定]
   LEGAL --> GRAPH
   GRAPH -->|结构化生成及逐段原文支持复核| RT[OpenCode SDK runtime<br/>本机 8090]
   GRAPH -->|增强检索跳过答复生成| EV[原文证据 / 充分性 / 缺口 / 停止原因]
+  EV --> CONSUMER[主站校验响应并保留缺口、澄清与来源状态<br/>主站生成最终辅助答复 / 充分不等于审批通过]
   EVAL[检索排名采集与重排对照 CLI<br/>同候选池 / 案件组配对区间<br/>真实金标题集尚未建立] -.复用检索与重排适配器.-> GRAPH
   RT --> LLM[汇丰百炼 LLM]
   UI[React + Ant Design X 工作台<br/>源码已接真实接口 / 合成依赖浏览器契约验证] -->|同源 Cookie / SSE 与 JSON| API
 ```
+
+### 主站增强证据接线（源码已实现）
+
+第十七/十八轮接线只检索共享知识库，任务资料仍在主站授权上下文；新增 v1 响应校验、具体缺口/澄清状态传递和可见执行提示。下图说明实际代码路径，不证明模型遵循率、原文链接可用率或云端已验收。可编辑[图源](../../docs/diagrams/rag-assistant-evidence.mmd)与[可缩放图](../../docs/diagrams/rendered/rag-assistant-evidence.svg)。
+
+![主站增强证据接线](../../docs/diagrams/rendered/rag-assistant-evidence.png)
 
 ## 优化后的目标架构（执行中，逐项验收）
 
@@ -97,7 +110,7 @@ flowchart LR
 ```mermaid
 flowchart TB
   UI["React 工作台 / 主站助手 / 审核调用方<br/>明确用途与业务条件 / 按消息绑定引用"] --> API["服务入口：用户与任务授权、请求预算、追踪 ID"]
-  API --> PLAN["LangGraph 查询与行动计划<br/>意图 / 澄清 / 精确与泛化 / 多语言 / 子问题"]
+  API --> PLAN["LangGraph 查询与行动计划<br/>意图 / 可追溯用户事实槽位 / 未知与歧义 / 澄清 / 多语言查询"]
   subgraph SOURCES["授权来源：按需并行"]
     KB["内部规则与本地法规<br/>词法 + pgvector"]
     LAW["北大法宝来源适配<br/>MCP SDK / 只读白名单<br/>优先 search_article 与 get_article"]
@@ -124,7 +137,7 @@ flowchart TB
   CHECK -->|"明确缺口且有预算"| PLAN
   CHECK -->|"充分"| DRAFT["结构化结论 + 原文短引<br/>服务端渲染引用 / 局限单列"]
   DRAFT --> ANSWER["逐段原文支持核验<br/>精确短引锚点 / 编号与完整映射<br/>未通过则隐藏答复"]
-  CHECK -->|"增强检索调用"| EOUT["仅返回原文证据 R17<br/>充分性 / 缺口 / 来源 / 停止原因"]
+  CHECK -->|"增强检索调用"| EOUT["仅返回原文证据 R17<br/>充分性 / 缺口 / 来源 / 停止原因<br/>用户陈述摘录 / 未知槽位"]
   CHECK -->|"不充分或停止条件满足"| STOP["说明缺口 / 澄清 / 转人工"]
   MEM["经审批的经验记忆<br/>命名空间 / 版本 / 撤销与期限"] -. "只提供检索与处理建议" .-> PLAN
   RT["既有 OpenCode SDK / 汇丰 LLM<br/>受控调用，不自行开放全部 MCP 工具"] -. "推理与生成" .-> PLAN
@@ -310,7 +323,7 @@ Copy-Item .env.example .env
 
 scope 为 business_rules/project_design/law/all。conversation 最多12条 role(user/assistant) + content，仅用于补全指代，不作为事实依据。sources 返回引用编号、原文、document_id、chunk_id、物理 PDF 页码（Office/文本为 null）、原件/全文相对 URL。
 
-`/retrievals` 使用相同请求字段；返回 sources、evidence_status（sufficient/insufficient/clarification）、missing、stop_reason、retrieval_rounds、warnings 和可选 clarification_question，不返回 answer 或 grounding。部分相关原文可以与 insufficient 状态同时存在，调用方必须处理缺口，不能因 sources 非空就宣告依据充分。该接口用于后续主站接线，现有 `/query` 语义不变。
+`/retrievals` 使用相同请求字段；返回 sources、evidence_status（sufficient/insufficient/clarification）、missing、stop_reason、retrieval_rounds、warnings、可选 clarification_question 和 `query_context`，不返回 answer 或 grounding。`query_context` 保留带原文位置的用户陈述摘录、未知槽位和多值歧义；来源匹配通过不等于陈述真实或提取完整。部分相关原文可以与 insufficient 状态同时存在，调用方必须处理缺口，不能因 sources 非空就宣告依据充分。该接口用于后续主站接线，现有 `/query` 语义不变。
 
 源码默认每次至多 4 个初始表达（原问题＋优先保留通用/翻译分支），全程至多 6 次引擎检索、2 轮，问答总预算 240 秒、单次 SDK 90 秒。配置见 `.env.example` 的 RAG_MAX_QUERY_VARIANTS / RAG_MAX_RETRIEVAL_QUERIES / RAG_MAX_RETRIEVAL_ROUNDS / RAG_TOTAL_TIMEOUT_SECONDS；总预算在阶段边界检查并传给 SDK，不是对数据库驱动的强制取消。词法混合的实现与迁移见下节；跨源 rerank 与完整撤销治理仍在后续阶段。
 

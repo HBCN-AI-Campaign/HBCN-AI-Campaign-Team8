@@ -2,9 +2,9 @@
 
 业务边界：
 - 主项目通过本适配层访问独立的 `code/rag-service`（默认端口 8010），
-  不直接接触 RAGFlow，避免把 RAGFlow 的鉴权与字段结构泄露给调用方。
+  不直接接触检索引擎或存储，避免把内部鉴权与字段结构泄露给调用方。
 - 本模块只做「服务鉴权 + scope 映射 + 证据透传」，不实现切片、向量或检索；
-  检索引擎由 RAGFlow 承担，业务检索契约由 rag-service 定义。
+  检索引擎由独立服务维护，业务检索契约由 rag-service 定义。
 
 scope 映射（主项目语义 → rag-service dataset scope）：
 
@@ -16,9 +16,10 @@ scope 映射（主项目语义 → rag-service dataset scope）：
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 import httpx
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .config import settings
 
@@ -29,6 +30,43 @@ class RAGServiceError(RuntimeError):
 
 class RAGServiceNotConfiguredError(RAGServiceError):
     """RAG_BASE_URL 尚未配置。"""
+
+
+class _RetrievedSource(BaseModel):
+    model_config = ConfigDict(strict=True)
+
+    content: str
+    document_id: str
+    document_name: str
+    page: int | None = None
+    score: float | None = None
+    chunk_id: str | None = None
+    source_url: str | None = None
+    reader_url: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class _RetrievalPayload(BaseModel):
+    """Consumer-owned projection: accept additive fields, reject broken v1 types."""
+    model_config = ConfigDict(strict=True)
+
+    sources: list[_RetrievedSource]
+    evidence_status: Literal["sufficient", "insufficient", "clarification"]
+    retrieval_rounds: int = Field(ge=0)
+    stop_reason: str
+    warnings: list[str] = Field(default_factory=list)
+    missing: list[str] = Field(default_factory=list)
+    clarification_question: str | None = None
+    source_status: dict[str, str] = Field(default_factory=dict)
+    rerank_status: str = "not_run"
+    context_coverage: dict[str, Any] = Field(default_factory=dict)
+    legal_applicability: dict[str, Any] = Field(default_factory=dict)
+
+
+def _truncate_utf16(text: str, limit: int) -> str:
+    """Match the downstream JavaScript SDK's UTF-16 character budget."""
+    encoded = text.encode("utf-16-le")
+    return encoded[: limit * 2].decode("utf-16-le", errors="ignore")
 
 
 # 主项目 scope -> rag-service dataset scope（见 code/rag-service/app/schemas.py）
@@ -120,6 +158,58 @@ class RAGClient:
                 seen.add(key)
                 evidence.append(item)
         return {"evidence": evidence, "warnings": warnings}
+
+    def retrieve(
+        self,
+        *,
+        query: str,
+        top_k: int = 6,
+        conversation: list[dict[str, str]] | None = None,
+    ) -> dict[str, Any]:
+        """Use the enhanced evidence-only endpoint for Agent and assistant callers."""
+        self._require_configured()
+        bounded_conversation = []
+        for item in conversation or []:
+            if not isinstance(item, dict) or item.get("role") not in {"user", "assistant"}:
+                continue
+            content = item.get("content")
+            if isinstance(content, str) and content:
+                bounded_conversation.append({
+                    "role": item["role"],
+                    "content": _truncate_utf16(content, 4_000),
+                })
+        bounded_conversation = bounded_conversation[-12:]
+        payload = self._post(
+            "/api/v1/retrievals",
+            {
+                "query": query,
+                "scope": "all",
+                "top_k": min(max(top_k, 1), 8),
+                "sources": ["knowledge_base"],
+                "purpose": "reference",
+                "conversation": bounded_conversation,
+            },
+        )
+        try:
+            parsed = _RetrievalPayload.model_validate(payload)
+        except ValidationError:
+            # ValidationError contains rejected source values; do not propagate
+            # that text into logs, execution steps, or model instructions.
+            raise RAGServiceError("增强检索响应不符合 v1 契约") from None
+        if parsed.evidence_status == "sufficient" and not any(
+            item.content.strip() for item in parsed.sources
+        ):
+            raise RAGServiceError("增强检索充分性状态缺少原文依据")
+        warnings = list(parsed.warnings)
+        status = parsed.evidence_status
+        if status in {"insufficient", "clarification"}:
+            warning = "增强检索未确认充分依据；回答须说明缺口或请求澄清，不得把候选片段当作已核实结论。"
+            if warning not in warnings:
+                warnings.append(warning)
+        result = parsed.model_dump()
+        result["evidence"] = result.pop("sources")
+        result["warnings"] = warnings
+        return result
 
     def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         try:

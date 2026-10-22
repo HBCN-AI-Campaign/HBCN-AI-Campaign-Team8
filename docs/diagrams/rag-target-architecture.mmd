@@ -1,6 +1,6 @@
 flowchart TB
   UI["React 工作台 / 主站助手 / 审核调用方<br/>明确用途与业务条件 / 按消息绑定引用"] --> API["服务入口：用户与任务授权、请求预算、追踪 ID"]
-  API --> PLAN["LangGraph 查询与行动计划<br/>意图 / 澄清 / 精确与泛化 / 多语言 / 子问题"]
+  API --> PLAN["LangGraph 查询与行动计划<br/>意图 / 可追溯用户事实槽位 / 未知与歧义 / 澄清 / 多语言查询"]
   subgraph SOURCES["授权来源：按需并行"]
     KB["内部规则与本地法规<br/>词法 + pgvector"]
     LAW["北大法宝来源适配<br/>MCP SDK / 只读白名单<br/>优先 search_article 与 get_article"]
@@ -27,7 +27,7 @@ flowchart TB
   CHECK -->|"明确缺口且有预算"| PLAN
   CHECK -->|"充分"| DRAFT["结构化结论 + 原文短引<br/>服务端渲染引用 / 局限单列"]
   DRAFT --> ANSWER["逐段原文支持核验<br/>精确短引锚点 / 编号与完整映射<br/>未通过则隐藏答复"]
-  CHECK -->|"增强检索调用"| EOUT["仅返回原文证据 R17<br/>充分性 / 缺口 / 来源 / 停止原因"]
+  CHECK -->|"增强检索调用"| EOUT["仅返回原文证据 R17<br/>充分性 / 缺口 / 来源 / 停止原因<br/>用户陈述摘录 / 未知槽位"]
   CHECK -->|"不充分或停止条件满足"| STOP["说明缺口 / 澄清 / 转人工"]
   MEM["经审批的经验记忆<br/>命名空间 / 版本 / 撤销与期限"] -. "只提供检索与处理建议" .-> PLAN
   RT["既有 OpenCode SDK / 汇丰 LLM<br/>受控调用，不自行开放全部 MCP 工具"] -. "推理与生成" .-> PLAN

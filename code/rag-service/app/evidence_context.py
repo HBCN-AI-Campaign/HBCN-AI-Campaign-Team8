@@ -24,10 +24,13 @@ def utf16_units(text):
 def evidence_source(item):
     metadata = item.get("metadata") or {}
     parts = [item["document_keyword"][:120]]
+    if metadata.get("source_type") == "web_context":
+        parts.insert(0, "未核实网页上下文；不是已确认事实、法规或审批依据")
     excerpt = metadata.get("excerpt")
     if excerpt:
         parts.append(f"原片段字符[{excerpt['start_char']},{excerpt['end_char']})/{excerpt['parent_chars']}")
-    for key in ("source_type", "scope", "jurisdiction", "doc_no", "timeliness", "implementation_date", "applicability"):
+    for key in ("source_type", "scope", "jurisdiction", "doc_no", "timeliness", "implementation_date", "applicability",
+                "evidence_role", "verification", "captured_at", "capture_completeness"):
         if metadata.get(key):
             parts.append(f"{key}={str(metadata[key])[:50]}")
     if metadata.get("scope") == "law":

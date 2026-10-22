@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .query_plan import QueryContext
+
 
 KnowledgeScope = Literal["business_rules", "project_design", "task_documents", "law", "all"]
 
@@ -40,6 +42,7 @@ class Capabilities(BaseModel):
     external_law_mcp: bool = False
     enhanced_retrieval: bool = False
     dedicated_reranking: bool = False
+    web_context: bool = False
     supported_scopes: list[str]
     max_upload_bytes: int = 50 * 1024 * 1024
     upload_timeout_seconds: int = 900
@@ -98,3 +101,4 @@ class RetrievalResponse(BaseModel):
     rerank_status: str = "not_run"
     context_coverage: dict = Field(default_factory=dict)
     legal_applicability: dict = Field(default_factory=dict)
+    query_context: QueryContext = Field(default_factory=QueryContext)

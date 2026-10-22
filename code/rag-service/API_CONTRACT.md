@@ -1,6 +1,6 @@
 # RAG 独立模块接口 v1
 
-服务版本 `0.4.0`，HTTP 契约版本 `1.2.0`。调用方只依赖本文和 [OpenAPI 快照](contracts/openapi-v1.json)，不导入 `app/`、不查 RAG 表、不读取模型凭证。部署方法见 [deploy/README.md](deploy/README.md)；完整现状与优化范围见 [README](README.md)。
+服务版本 `0.5.0`，HTTP 契约版本 `1.3.0`。调用方只依赖本文和 [OpenAPI 快照](contracts/openapi-v1.json)，不导入 `app/`、不查 RAG 表、不读取模型凭证。部署方法见 [deploy/README.md](deploy/README.md)；完整现状与优化范围见 [README](README.md)。
 
 ## 接线约定
 
@@ -17,7 +17,7 @@ v1 保持路径、已有字段含义/类型、scope 和鉴权约定。新增可�
 | `POST /api/v1/query` | 保留已有主站适配器的单次检索，不调用规划/答复 LLM | `evidence[]`、`warnings[]` |
 | `POST /api/v1/retrievals` | 新调用方的增强证据检索；问题规划、有限补查、证据覆盖与法规门禁，**不生成最终答复** | `sources[]`、充分性、缺口、停止原因和来源状态 |
 
-助手或专项 Agent 已负责最终回答时，调用 `/retrievals` 并消费原文证据，避免 RAG 再生成一次答案。独立问答 UI 才使用 `/answers` 或 `/answers/stream`。现有主站 `code/backend/app/rag_service.py` 仍调用 `/query`，本版本保留兼容；升级增强入口由主站负责人按新响应映射接线，本模块不覆盖其适配层。
+助手或专项 Agent 已负责最终回答时，调用 `/retrievals` 并消费原文证据，避免 RAG 再生成一次答案。独立问答 UI 才使用 `/answers` 或 `/answers/stream`。主站 `code/backend/app/rag_service.py` 保留旧 `query()` 兼容方法，并新增 `retrieve()` 适配 `/retrievals` 原文证据及充分性字段；主站助手只选择 `knowledge_base`，任务资料仍由主站按任务权限提供。调用方必须保留 `evidence_status`、`missing`、`stop_reason` 等限制，不能把 HTTP 200 或候选片段当作已核实结论。
 
 增强检索的最小 JSON：
 
@@ -33,9 +33,15 @@ v1 保持路径、已有字段含义/类型、scope 和鉴权约定。新增可�
 
 这是调用示例，不是预置答案。`scope` 为 business_rules/project_design/law/all，不能传 task_documents；`top_k` 增强入口 1–8，旧 query 入口 1–20。query 最长 4,000 字符；可选 conversation 最多 12 条 user/assistant 消息，每条同时满足 4,000 字符和 SDK UTF-16 限制。conversation 是提问背景，不是已证实事实或规范依据。
 
+主站助手会把当前会话中最近的 user/assistant 消息作为 conversation 传入，以支持“这是支付指令”“币种是 USD”这类补充信息参与问题规划；system 消息、任务资料和历史答复不会因此取得新的 RAG 权限，也不会被当作证据。调用方仍需在自己的授权边界内构造会话并接受服务端的 12 条/单条 4,000 UTF-16 限制。
+
 增强响应中的 `sources[]` 每项有 citation、content、document_id、document_name、page、score、chunk_id、source_url、reader_url、metadata。content 是所选原文窗口；page/score 可以为空，不能伪造页码或将分数显示为置信概率。相对原文 URL 由主站在重新校验权限后代理；外部链接按来源处理，不让浏览器直接携带服务 Token。
 
 `evidence_status` 为 sufficient/insufficient/clarification，联合查看 missing、stop_reason、clarification_question、warnings、source_status、rerank_status、context_coverage、legal_applicability。HTTP 200 只表示本轮得到业务结果，**不等于可以审批通过**；片段有来源不等于支持全部结论，来源失败不等于无相关法规。调用方保留这些限定，不仅取 content 后丢弃缺口。
+
+`/retrievals` 另返回 `query_context`：`user_statements[]` 为带 `slot/value/source/source_index/quote` 的用户陈述摘录，`unknown_slots[]` 表示未提供或仍不明确的槽位，`ambiguous_slots[]` 表示同一槽位有多个不同陈述。服务端校验每条 quote 是否存在于对应的当前问题或 user 会话消息、value 是否出现在 quote 中；金额和币种值还必须对应单一数值/币种，不能用子串或把多个值伪装成一个值。`extraction_status=provenance_checked` 只表示该来源校验通过，不表示语义提取完整、陈述真实或法规适用。`partial` 表示部分摘录未能匹配而已丢弃，`unavailable` 表示规划器未返回该结构；服务端会把未出现的槽位补入 `unknown_slots`，旧兼容规划仍可返回检索结果，但调用方不得假定槽位已抽取。此字段只用于检索背景与澄清，不授予权限，也不代替原文证据。
+
+主站 `retrieve()` 校验消费字段的 v1 类型并接受新增字段；未知/缺失充分性、错误的 sources/missing 类型或“充分但没有原文”视为契约异常，不使用其中共享证据。主站把具体缺口、澄清问题、停止原因、轮次和来源/重排状态传给模型并显示概括限制；这些文字是检索数据，不能成为指令或已确认本案事实。原文引用代理、真实模型遵循和云端链路仍需独立验收。
 
 法宝仅在 scope=law/all、sources 显式包含 pkulaw、服务端授权配置启用时调用；默认关闭。`purpose=case_assessment` 必须提供经授权的 legal_context，并满足服务端法规复核；条件或有效依据不够时阻断本案结论。`case_reference`/`experience_memory` 为独立默认关闭的治理接口，尚不属于本增强来源列表，详见 [治理契约](../../docs/RAG案例与经验治理契约.md)。
 
@@ -83,3 +89,9 @@ v1.1 新增文档 `sha256`、状态 `withdrawn` 及撤回入口；调用方需�
 新增 GET `/documents/{id}/quality`、POST `/documents/{id}/quality-review` 和 POST `/documents/{id}/quality-recheck`，除服务鉴权外要求独立 X-Document-Review-Key。默认未配置注册表时关闭，不把凭证暴露浏览器。三份 hash、单元核对、响应/错误与运维工具见[质量契约](../../docs/RAG文档质量门禁契约.md)。
 
 这是有意收紧知识可用性的质量升级：旧 ready 缺当前策略报告将不再召回，ready 增加 quality_policy_version/unverified_ready_documents 并可返回 503/degraded。需先备份/隔离预演、授权重检/必要复核、真实召回回归，不能直接覆盖版本后认为升级完成。现有 query/retrievals 请求结构保持兼容；云端迁移和主站接线另行验收。
+
+## 网页上下文（1.3，默认关闭）
+
+retrievals / answers / answers/stream 新增可选 web_context 快照数组，sources 显式支持 web_context；接口同时要求服务 Bearer 与独立 X-Web-Context-Key。仅 URL 不可，实际文本/采集时间/精确 scope/处理授权必填，严格大小与域名/时效门禁。旧请求不受影响，query 不接快照。配置、字段、状态码和调用示例见[网页上下文契约](../../docs/RAG网页上下文接入契约.md)。
+
+响应沿用 sources，并标 source_type=web_context、verification=caller_supplied_unverified；page/score/reader_url 为空，原链接可能变化，不提供虚构的持久原文接口。source_status.web_context=provided_unverified 只表示已收到获授权快照，不表示本服务已抓取、确认全文或证明事实。调用方须保留这些局限，不把网页来源包装为法规已审核。增强接口仍不生成最终业务答复。
