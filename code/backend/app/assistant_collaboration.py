@@ -110,7 +110,13 @@ def admit_run(db: Session, user: models.User, session: models.AssistantSession, 
         if existing.request_hash != digest:
             raise HTTPException(409, "同一请求标识不能用于不同消息")
         return existing, False
-    if db.query(AssistantRun).filter_by(active_session_id=session.id).first():
+    active = db.query(AssistantRun).filter_by(active_session_id=session.id).first()
+    if active:
+        # Another transaction may admit this same request between our first
+        # lookup and the active-slot query. It is a retry, not a busy conflict.
+        if (active.user_id == user.id and active.client_message_id == client_id
+                and active.request_hash == digest):
+            return active, False
         raise HTTPException(409, "当前会话的 AI 正在工作；可继续发送讨论消息，稍后再提问")
     run = AssistantRun(
         id=str(uuid4()), session_id=session.id, user_id=user.id, client_message_id=client_id,

@@ -1,11 +1,12 @@
 """Additive assistant tables. Existing task/user/message columns are untouched."""
 import datetime as dt
 
-from sqlalchemy import JSON, DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import JSON, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
 from .models import _now
+from .assistant_timestamps import AssistantUTCDateTime
 
 
 class AssistantMember(Base):
@@ -13,7 +14,7 @@ class AssistantMember(Base):
     session_id: Mapped[int] = mapped_column(ForeignKey("assistant_sessions.id", ondelete="CASCADE"), primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
     invited_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)
+    created_at: Mapped[dt.datetime] = mapped_column(AssistantUTCDateTime(), default=_now)
 
 
 class AssistantExpertProfile(Base):
@@ -35,8 +36,8 @@ class AssistantRun(Base):
     # NULL for terminal runs. A database unique constraint coordinates workers.
     active_session_id: Mapped[int | None] = mapped_column(unique=True, nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="running")
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)
-    expires_at: Mapped[dt.datetime] = mapped_column(DateTime)
+    created_at: Mapped[dt.datetime] = mapped_column(AssistantUTCDateTime(), default=_now)
+    expires_at: Mapped[dt.datetime] = mapped_column(AssistantUTCDateTime())
 
 
 class AssistantMessageAuthor(Base):
@@ -53,7 +54,7 @@ class AssistantEvent(Base):
     session_id: Mapped[int] = mapped_column(ForeignKey("assistant_sessions.id", ondelete="CASCADE"), index=True)
     run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     payload: Mapped[dict] = mapped_column(JSON)
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)
+    created_at: Mapped[dt.datetime] = mapped_column(AssistantUTCDateTime(), default=_now)
 
 
 class AssistantAudit(Base):
@@ -63,7 +64,7 @@ class AssistantAudit(Base):
     actor_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     action: Mapped[str] = mapped_column(String(32))
     subject_id: Mapped[int | None] = mapped_column(nullable=True)
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)
+    created_at: Mapped[dt.datetime] = mapped_column(AssistantUTCDateTime(), default=_now)
 
 
 class AssistantUserSkill(Base):
@@ -72,4 +73,4 @@ class AssistantUserSkill(Base):
     skill_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     version: Mapped[str] = mapped_column(String(64))
     content_hash: Mapped[str] = mapped_column(String(64))
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)
+    created_at: Mapped[dt.datetime] = mapped_column(AssistantUTCDateTime(), default=_now)

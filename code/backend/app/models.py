@@ -21,6 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
+from .assistant_timestamps import AssistantUTCDateTime
 
 
 def _now() -> dt.datetime:
@@ -57,8 +58,8 @@ class AssistantSession(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     title: Mapped[str] = mapped_column(String(128), default="新会话")
     task_code: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)
-    updated_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+    created_at: Mapped[dt.datetime] = mapped_column(AssistantUTCDateTime(), default=_now)
+    updated_at: Mapped[dt.datetime] = mapped_column(AssistantUTCDateTime(), default=_now, onupdate=_now)
 
     messages: Mapped[list["AssistantMessage"]] = relationship(
         back_populates="session", cascade="all, delete-orphan", order_by="AssistantMessage.id"
@@ -75,7 +76,7 @@ class AssistantMessage(Base):
     status: Mapped[str] = mapped_column(String(16), default="completed")
     steps: Mapped[list] = mapped_column(JSON, default=list)
     citations: Mapped[list] = mapped_column(JSON, default=list)
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)
+    created_at: Mapped[dt.datetime] = mapped_column(AssistantUTCDateTime(), default=_now)
 
     session: Mapped["AssistantSession"] = relationship(back_populates="messages")
 
