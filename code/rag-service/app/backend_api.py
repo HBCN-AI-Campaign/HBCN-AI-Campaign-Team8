@@ -6,19 +6,20 @@ import uuid
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 from starlette.concurrency import run_in_threadpool
 
 from .answer_graph import build_answer_graph
 from .config import settings
-from .database import ResourceError
-from .embedding import EmbeddingError
 from .engine import engine_kind, get_engine
 from .postgres_engine import SUPPORTED_EXTENSIONS
-from .runtime_client import RuntimeErrorResponse, SDKRuntime
-from .schemas import AnswerResponse
+from .runtime_client import SDKRuntime
+from .schemas import AnswerResponse, RetrievalResponse
+from .evidence_context import utf16_units
+from .legal_applicability import LegalContext
+from .graph_transport import GraphRun
 
 
 router = APIRouter(prefix="/api/v1")
@@ -29,12 +30,30 @@ class ConversationMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str = Field(min_length=1, max_length=4000)
 
+    @field_validator("content")
+    @classmethod
+    def runtime_character_limit(cls, value):
+        if utf16_units(value) > 4000:
+            raise ValueError("会话内容超过 SDK 的 4000 UTF-16 字符限制")
+        return value
+
 
 class AnswerRequest(BaseModel):
     query: str = Field(min_length=1, max_length=4000)
     scope: Literal["all", "business_rules", "project_design", "law"] = "all"
     top_k: int = Field(default=5, ge=1, le=8)
     conversation: list[ConversationMessage] = Field(default_factory=list, max_length=12)
+    sources: list[Literal["knowledge_base", "pkulaw"]] = Field(default_factory=lambda: ["knowledge_base"], min_length=1, max_length=2)
+    purpose: Literal["reference", "case_assessment"] = "reference"
+    legal_context: LegalContext | None = None
+
+    @model_validator(mode="after")
+    def source_scope(self):
+        if len(set(self.sources)) != len(self.sources):
+            raise ValueError("来源不能重复")
+        if "pkulaw" in self.sources and self.scope not in {"all", "law"}:
+            raise ValueError("北大法宝仅用于 law/all 范围，不能扩展当前知识范围")
+        return self
 
     @field_validator("query")
     @classmethod
@@ -153,35 +172,71 @@ def answer_state(payload):
 
 
 @router.post("/answers", response_model=AnswerResponse)
-def answer(payload: AnswerRequest):
-    engine = postgres_engine()
+async def answer(payload: AnswerRequest, request: Request):
+    return await graph_response(payload, request, generate_answer=True)
+
+
+@router.post("/retrievals", response_model=RetrievalResponse)
+async def enhanced_retrieval(payload: AnswerRequest, request: Request):
+    """Return original evidence after query planning; never generate an answer."""
+    return await graph_response(payload, request, generate_answer=False)
+
+
+async def start_graph(payload, *, generate_answer=True, stream=False):
+    engine = await run_in_threadpool(postgres_engine)
+    graph = build_answer_graph(engine, generate_answer=generate_answer)
     if not answer_slots.acquire(blocking=False):
-        raise HTTPException(429, "当前问答请求较多，请稍后重试")
+        raise HTTPException(429, "当前检索请求较多，请稍后重试")
+    return GraphRun(graph, answer_state(payload), answer_slots, stream=stream)
+
+
+async def graph_response(payload, request, *, generate_answer):
+    run = await start_graph(payload, generate_answer=generate_answer)
     try:
-        return build_answer_graph(engine).invoke(answer_state(payload), {"recursion_limit": 10})["result"]
+        while True:
+            if await request.is_disconnected():
+                raise HTTPException(499, "请求已断开")
+            event = await run.next()
+            if event is None:
+                raise HTTPException(503, "本轮请求未返回完整结果")
+            kind, data = event
+            if kind == "result":
+                return data
+            if kind == "error":
+                raise HTTPException(503, data["message"])
     finally:
-        answer_slots.release()
+        run.cancel()
+
+
+class GraphStreamingResponse(StreamingResponse):
+    """Cancel even if ASGI fails before entering the event generator."""
+
+    def __init__(self, content, run):
+        self.run = run
+        super().__init__(content, media_type="text/event-stream",
+                         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+    async def __call__(self, scope, receive, send):
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            self.run.cancel()
 
 
 @router.post("/answers/stream")
-def answer_stream(payload: AnswerRequest):
-    engine = postgres_engine()
-    if not answer_slots.acquire(blocking=False):
-        raise HTTPException(429, "当前问答请求较多，请稍后重试")
+async def answer_stream(payload: AnswerRequest):
+    run = await start_graph(payload, stream=True)
 
-    def events():
+    async def events():
         try:
-            graph = build_answer_graph(engine)
-            for mode, update in graph.stream(answer_state(payload), {"recursion_limit": 10}, stream_mode=["custom", "updates"]):
-                if mode == "custom":
-                    yield f"event: step\ndata: {json.dumps(update, ensure_ascii=False)}\n\n"
-                elif "generate" in update:
-                    yield f"event: result\ndata: {json.dumps(update['generate']['result'], ensure_ascii=False)}\n\n"
-        except (RuntimeErrorResponse, EmbeddingError, ResourceError):
-            yield 'event: error\ndata: {"message":"检索或生成服务暂不可用，请稍后重试；本次未完成回答"}\n\n'
-        except Exception:
-            yield 'event: error\ndata: {"message":"问答未完成，请检查服务状态或稍后重试"}\n\n'
+            while True:
+                event = await run.next()
+                if event is None:
+                    break
+                kind, data = event
+                if kind != "pending":
+                    yield f"event: {kind}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
         finally:
-            answer_slots.release()
+            run.cancel()
 
-    return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+    return GraphStreamingResponse(events(), run)

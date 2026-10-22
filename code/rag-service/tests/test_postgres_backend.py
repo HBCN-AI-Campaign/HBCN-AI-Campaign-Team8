@@ -98,18 +98,20 @@ class AnswerGraphTests(unittest.TestCase):
     def state(self):
         return {"query": "贷款用途有什么限制", "scope": "all", "top_k": 5, "attempts": 0, "warnings": []}
 
-    def test_no_evidence_abstains_without_calling_model(self):
+    def test_no_evidence_plans_and_checks_but_does_not_generate(self):
         engine, runtime = Mock(), Mock()
         engine.retrieve.return_value = []
+        runtime.complete.side_effect = ['{"intent":"rule","queries":[]}', '{"relevant":false,"sufficient":false}']
         result = build_answer_graph(engine, runtime).invoke(self.state())["result"]
-        runtime.complete.assert_not_called()
+        self.assertEqual(runtime.complete.call_count, 2)
         self.assertEqual(result["grounding"], "insufficient")
         self.assertFalse(result["sources"])
 
     def test_answer_uses_real_sources(self):
         engine, runtime = Mock(), Mock()
         engine.retrieve.return_value = sample_evidence()
-        runtime.complete.side_effect = ['{"relevant":true,"selected":[1],"rewrite":""}', "不得用于股权投资。[1]"]
+        runtime.complete.side_effect = ['{"intent":"rule","queries":[]}', '{"relevant":true,"sufficient":true,"selected":[1],"rewrite":""}', '{"statements": [{"text": "不得用于股权投资。", "supports": [{"citation": 1, "quote": "贷款资金不得用于股权投资"}]}]}',
+            '{"checks":[{"segment":1,"verdict":"supported","supports":[{"citation":1,"quote":"贷款资金不得用于股权投资"}],"reason":"禁止用途一致"}]}']
         result = build_answer_graph(engine, runtime).invoke(self.state())["result"]
         self.assertEqual(result["grounding"], "cited")
         self.assertEqual(result["sources"][0]["document_id"], "doc-1")
@@ -117,7 +119,7 @@ class AnswerGraphTests(unittest.TestCase):
     def test_invalid_citations_are_not_presented_as_supported_answer(self):
         engine, runtime = Mock(), Mock()
         engine.retrieve.return_value = sample_evidence()
-        runtime.complete.side_effect = ['{"relevant":true,"selected":[1]}', "伪造的结论[9]"]
+        runtime.complete.side_effect = ['{"intent":"rule","queries":[]}', '{"relevant":true,"sufficient":true,"selected":[1]}', '{"statements": [{"text": "伪造的结论", "supports": [{"citation": 9, "quote": "贷款资金不得用于股权投资"}]}]}']
         result = build_answer_graph(engine, runtime).invoke(self.state())["result"]
         self.assertNotIn("伪造的结论", result["answer"])
         self.assertEqual(result["grounding"], "insufficient")
@@ -125,7 +127,9 @@ class AnswerGraphTests(unittest.TestCase):
     def test_retrieval_refinement_is_bounded_at_two_rounds(self):
         engine, runtime = Mock(), Mock()
         engine.retrieve.return_value = sample_evidence()
-        runtime.complete.return_value = '{"relevant":false,"selected":[],"rewrite":"更准确的贷款用途限制"}'
+        runtime.complete.side_effect = ['{"intent":"rule","queries":[]}',
+            '{"relevant":false,"sufficient":false,"selected":[],"rewrite":"更准确的贷款用途限制"}',
+            '{"relevant":false,"sufficient":false,"selected":[]}']
         result = build_answer_graph(engine, runtime).invoke(self.state())["result"]
         self.assertEqual(result["retrieval_rounds"], 2)
         self.assertEqual(engine.retrieve.call_count, 2)
@@ -141,7 +145,10 @@ class AnswerGraphTests(unittest.TestCase):
     def test_conversation_rewrites_search_but_is_not_evidence(self):
         engine, runtime = Mock(), Mock()
         engine.retrieve.return_value = []
-        runtime.complete.return_value = '{"query":"固定资产贷款用途限制"}'
+        runtime.complete.side_effect = [
+            '{"intent":"rule","queries":[{"text":"固定资产贷款用途限制","family":"general"}]}',
+            '{"relevant":false,"sufficient":false}',
+        ]
         state = {**self.state(), "conversation": [{"role": "user", "content": "固定资产贷款"}]}
         result = build_answer_graph(engine, runtime).invoke(state)["result"]
         self.assertEqual(engine.retrieve.call_args.kwargs["query"], "固定资产贷款用途限制")
@@ -152,7 +159,8 @@ class AnswerGraphTests(unittest.TestCase):
         evidence = sample_evidence()
         evidence[0]["metadata"] = {"scope": "law"}
         engine.retrieve.return_value = evidence
-        runtime.complete.side_effect = ['{"relevant":true,"selected":[1]}', "示例法规材料内容[1]"]
+        runtime.complete.side_effect = ['{"intent":"law","queries":[]}', '{"relevant":true,"sufficient":true,"selected":[1]}', '{"statements": [{"text": "贷款资金不得用于股权投资。", "supports": [{"citation": 1, "quote": "贷款资金不得用于股权投资"}]}]}',
+            '{"checks":[{"segment":1,"verdict":"supported","supports":[{"citation":1,"quote":"贷款资金不得用于股权投资"}],"reason":"原文有此限制"}]}']
         result = build_answer_graph(engine, runtime).invoke(self.state())["result"]
         self.assertEqual(result["grounding"], "cited")
         self.assertTrue(any("效力" in warning for warning in result["warnings"]))
@@ -172,8 +180,8 @@ class AnswerGraphTests(unittest.TestCase):
 class RuntimeTests(unittest.TestCase):
     def call_runtime(self, body, status_code=200):
         transport = httpx.MockTransport(lambda request: httpx.Response(status_code, text=body))
-        client = httpx.Client(transport=transport)
-        with patch("app.runtime_client.httpx.stream", side_effect=client.stream), patch.object(settings, "ASSISTANT_RUNTIME_URL", "http://runtime"), patch("app.runtime_client.runtime_token", return_value="test-only"):
+        client = httpx.AsyncClient(transport=transport)
+        with patch("app.runtime_client.httpx.AsyncClient", return_value=client), patch.object(settings, "ASSISTANT_RUNTIME_URL", "http://runtime"), patch("app.runtime_client.runtime_token", return_value="test-only"):
             return SDKRuntime().complete(message="问题", instructions="要求", evidence=[])
 
     def test_reads_sdk_final_result_not_steps(self):
@@ -200,6 +208,7 @@ class BackendContractTests(unittest.TestCase):
         for path in ["/api/v1/ready", "/api/v1/documents/not-a-uuid/content", "/api/v1/documents/not-a-uuid/source"]:
             self.assertEqual(self.client.get(path).status_code, 401)
         self.assertEqual(self.client.post("/api/v1/answers", json={"query": "test"}).status_code, 401)
+        self.assertEqual(self.client.post("/api/v1/retrievals", json={"query": "test"}).status_code, 401)
 
     def test_task_scoped_query_and_empty_questions_are_rejected(self):
         for query in [{"query": " "}, {"query": "question", "scope": "task_documents"}]:

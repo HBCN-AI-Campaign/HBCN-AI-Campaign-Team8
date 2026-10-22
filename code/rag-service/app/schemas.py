@@ -29,6 +29,7 @@ class QueryResponse(BaseModel):
 
 
 class Capabilities(BaseModel):
+    workbench_contract_version: int = 0
     service: str = "hbcn-rag-service"
     engine: str = "none"
     retrieval: bool
@@ -37,6 +38,8 @@ class Capabilities(BaseModel):
     answer_generation: bool = False
     document_source: bool = False
     external_law_mcp: bool = False
+    enhanced_retrieval: bool = False
+    dedicated_reranking: bool = False
     supported_scopes: list[str]
     max_upload_bytes: int = 50 * 1024 * 1024
     upload_timeout_seconds: int = 900
@@ -71,3 +74,27 @@ class AnswerResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     retrieval_rounds: int
     grounding: Literal["cited", "insufficient"]
+    stop_reason: str | None = None
+    clarification_question: str | None = None
+    source_status: dict[str, str] = Field(default_factory=dict)
+    rerank_status: str = "not_run"
+    context_coverage: dict = Field(default_factory=dict)
+    answer_verification: dict = Field(default_factory=dict)
+    legal_applicability: dict = Field(default_factory=dict)
+    missing: list[str] = Field(default_factory=list)
+
+
+class RetrievalResponse(BaseModel):
+    query: str
+    scope: KnowledgeScope
+    sources: list[AnswerSource]
+    warnings: list[str] = Field(default_factory=list)
+    retrieval_rounds: int
+    evidence_status: Literal["sufficient", "insufficient", "clarification"]
+    stop_reason: str
+    clarification_question: str | None = None
+    missing: list[str] = Field(default_factory=list)
+    source_status: dict[str, str] = Field(default_factory=dict)
+    rerank_status: str = "not_run"
+    context_coverage: dict = Field(default_factory=dict)
+    legal_applicability: dict = Field(default_factory=dict)
