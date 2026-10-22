@@ -12,7 +12,7 @@ git switch --track origin/codex/rag-module-v0.3.0
 cd code/rag-service
 ```
 
-调用方先按服务 Token 和现有 `/query` 完成最小联调，再按需接增强 `/retrievals`；无需等待整个优化规划完成。以下未验收项仍是后续工作，不能将协作版本标记为生产就绪。
+主站助手源码已通过 `RAGClient.retrieve()` 调用增强 `/retrievals`；部署同事须一并评审对应主站适配提交并验证 `RAG_BASE_URL`、`RAG_SERVICE_TOKEN`、`RAG_REQUEST_TIMEOUT=300` 和反向代理超时。其他调用方仍可通过 `/query` 完成旧契约最小联调；无需等待整个优化规划完成。以下未验收项仍是后续工作，不能将协作版本标记为生产就绪。
 
 ## 资源与配置
 

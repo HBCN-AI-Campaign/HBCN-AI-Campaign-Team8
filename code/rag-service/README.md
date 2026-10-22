@@ -46,7 +46,7 @@
 
 ```mermaid
 flowchart LR
-  Caller[已授权的后端调用方] -->|Bearer · HTTP| API[FastAPI RAG 服务<br/>本机 127.0.0.1:8011]
+  Caller[已授权的后端调用方<br/>主站助手通过 retrieve 调用增强证据接口] -->|Bearer · HTTP| API[FastAPI RAG 服务<br/>本机 127.0.0.1:8011]
   API --> QUALITY[版本化解析质量门禁<br/>乱码隔离 / OCR及结构不确定待复核]
   QUALITY --> QREVIEW[独立 reviewer 凭证 / 逐单元对照原件<br/>原件、解析、报告三 hash 绑定]
   QREVIEW --> DOC
@@ -85,10 +85,17 @@ flowchart LR
   LEGAL --> GRAPH
   GRAPH -->|结构化生成及逐段原文支持复核| RT[OpenCode SDK runtime<br/>本机 8090]
   GRAPH -->|增强检索跳过答复生成| EV[原文证据 / 充分性 / 缺口 / 停止原因]
+  EV --> CONSUMER[主站校验响应并保留缺口、澄清与来源状态<br/>主站生成最终辅助答复 / 充分不等于审批通过]
   EVAL[检索排名采集与重排对照 CLI<br/>同候选池 / 案件组配对区间<br/>真实金标题集尚未建立] -.复用检索与重排适配器.-> GRAPH
   RT --> LLM[汇丰百炼 LLM]
   UI[React + Ant Design X 工作台<br/>源码已接真实接口 / 合成依赖浏览器契约验证] -->|同源 Cookie / SSE 与 JSON| API
 ```
+
+### 主站增强证据接线（源码已实现）
+
+第十七/十八轮接线只检索共享知识库，任务资料仍在主站授权上下文；新增 v1 响应校验、具体缺口/澄清状态传递和可见执行提示。下图说明实际代码路径，不证明模型遵循率、原文链接可用率或云端已验收。可编辑[图源](../../docs/diagrams/rag-assistant-evidence.mmd)与[可缩放图](../../docs/diagrams/rendered/rag-assistant-evidence.svg)。
+
+![主站增强证据接线](../../docs/diagrams/rendered/rag-assistant-evidence.png)
 
 ## 优化后的目标架构（执行中，逐项验收）
 

@@ -14,3 +14,4 @@
 更新时依次修改图源、同步 [优化规划](../../Agentic-RAG优化规划.md) 与 [模块总览](../../../code/rag-service/README.md) 的 Mermaid 块、重新导出本目录图像，并检查三处一致。当前架构仍以总览的“当前 RAG 架构”一节为准。
 
 - 文档撤回（第十三轮）：[图源](../rag-document-withdrawal.mmd)、[SVG](rag-document-withdrawal.svg)、[PNG](rag-document-withdrawal.png)。逻辑撤回与在途发布/答复屏障；标明未实现的物理/备份清理。
+- 主站增强证据接线（第十八轮）：[图源](../rag-assistant-evidence.mmd)、[SVG](rag-assistant-evidence.svg)、[PNG](rag-assistant-evidence.png)。这是当前源码接线图，包含响应校验、缺口与澄清传递、主站模型输出边界；真实模型和云端联调未验收。

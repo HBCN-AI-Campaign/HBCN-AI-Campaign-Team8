@@ -78,6 +78,39 @@ class RAGClientTests(unittest.TestCase):
         self.assertEqual(result["missing"], ["业务日期"])
         self.assertTrue(result["warnings"])
 
+    def test_enhanced_retrieval_rejects_broken_contract_without_leaking_payload(self):
+        baseline = {
+            "sources": [], "evidence_status": "insufficient",
+            "retrieval_rounds": 1, "stop_reason": "round_budget",
+        }
+        for invalid in (
+            {"evidence_status": "private-invalid-state"},
+            {"evidence_status": None},
+            {"sources": "private-source-text"},
+            {"sources": [{"content": "private-fragment", "document_id": "doc-1"}]},
+            {"missing": "private-missing-text"},
+            {"warnings": "private-warning-text"},
+            {"retrieval_rounds": True},
+        ):
+            with self.subTest(field=next(iter(invalid))), patch.object(
+                RAGClient, "_post", return_value={**baseline, **invalid}
+            ):
+                with self.assertRaisesRegex(RAGServiceError, "响应不符合 v1 契约") as raised:
+                    RAGClient().retrieve(query="金额")
+                self.assertNotIn("private-", str(raised.exception))
+
+    def test_enhanced_retrieval_rejects_sufficient_without_original_text(self):
+        with patch.object(RAGClient, "_post", return_value={
+            "sources": [{
+                "content": "", "document_id": "doc-1", "document_name": "规则.pdf",
+            }],
+            "evidence_status": "sufficient",
+            "retrieval_rounds": 1,
+            "stop_reason": "sufficient",
+        }):
+            with self.assertRaisesRegex(RAGServiceError, "缺少原文依据"):
+                RAGClient().retrieve(query="金额")
+
     def test_duplicate_evidence_deduped_across_scopes(self):
         shared = {"content": "同一片段", "document_id": "doc-1", "document_name": "x"}
 
