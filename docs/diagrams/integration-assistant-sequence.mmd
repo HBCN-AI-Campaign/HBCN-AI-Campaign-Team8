@@ -1,0 +1,30 @@
+sequenceDiagram
+  actor H as 审核人
+  participant T as 任务异常项
+  participant C as 慧眼助手
+  participant BE as 主后端
+  participant AI as 共享AI适配
+  participant K as RAG
+  participant RT as SDK runtime
+  participant D as 聊天与任务库
+  H->>T: 解释并查依据
+  T->>C: task_code；目标增补rule/run引用
+  C->>BE: 创建私有session（JWT）
+  BE->>D: 校验当前任务权限
+  H->>C: 确认发送问题
+  C->>BE: messages/stream
+  BE->>D: 加载获准快照与历史
+  BE->>AI: explain_rule + 已授权上下文
+  AI->>K: 取规则原文证据
+  K-->>AI: 证据、定位、告警
+  AI->>RT: 本轮证据与指引
+  RT-->>AI: 工具状态与答复
+  AI-->>BE: 答复、引用、来源缺口
+  BE->>D: 保存私有消息
+  BE-->>C: SSE message_end
+  H->>C: 点击引用
+  C->>BE: 原文网关（JWT）
+  BE->>K: 验权后取指定document/chunk
+  K-->>BE: 原文与定位
+  BE-->>C: 展示依据
+  Note over C,D: 问答不写业务审批状态；人工处置回任务页

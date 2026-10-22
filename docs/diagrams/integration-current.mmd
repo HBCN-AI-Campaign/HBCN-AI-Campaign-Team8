@@ -1,0 +1,21 @@
+flowchart TB
+  WEB[React 网站] --> TASK[任务页 /tasks/:code]
+  WEB --> CHAT[慧眼助手 /assistant]
+  TASK --> API[FastAPI tasks 路由]
+  API --> PARSE[parse_files：Mock 字段]
+  API --> RULE[27 条注册规则]
+  API --> MOCK[review_agent.build_session：Mock 步骤]
+  MOCK --> PLAY[前端定时播放与本地暂停]
+  API --> DB[(任务 / 单据 / 规则结果)]
+  CHAT --> CA[assistant 路由与 service]
+  CA --> DB
+  CA --> AD[RAGClient：scope 映射]
+  AD --> Q[RAG /api/v1/query：证据]
+  CA --> RT[OpenCode runtime /runs]
+  LAB[RAG 独立问答 /answers] --> GRAPH[LangGraph 问答图]
+  GRAPH --> RET[PostgreSQL 向量检索]
+  Q --> RET
+  GRAPH --> RT
+  RT --> MODEL[汇丰模型 API]
+  KBUI[RAG React UI：固定演示答案] -. 尚未接真实问答 .-> LAB
+  MOCK -. 尚未调用 .-> RT

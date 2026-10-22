@@ -1,0 +1,155 @@
+{
+  "$defs": {
+    "LegalReview": {
+      "additionalProperties": false,
+      "properties": {
+        "review_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Review Id",
+          "type": "string"
+        },
+        "document_id": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Document Id",
+          "type": "string"
+        },
+        "chunk_id": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "content_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Content Sha256",
+          "type": "string"
+        },
+        "source_version": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source Version"
+        },
+        "state": {
+          "enum": [
+            "approved",
+            "revoked"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "reviewed_by": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Reviewed By",
+          "type": "string"
+        },
+        "reviewed_at": {
+          "title": "Reviewed At",
+          "type": "string"
+        },
+        "review_expires_on": {
+          "title": "Review Expires On",
+          "type": "string"
+        },
+        "valid_from": {
+          "title": "Valid From",
+          "type": "string"
+        },
+        "valid_to_exclusive": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Valid To Exclusive"
+        },
+        "jurisdictions": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Jurisdictions",
+          "type": "array"
+        },
+        "subject_types": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Subject Types",
+          "type": "array"
+        },
+        "business_types": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Business Types",
+          "type": "array"
+        },
+        "authority_url": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Authority Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "review_id",
+        "document_id",
+        "chunk_id",
+        "content_sha256",
+        "source_version",
+        "state",
+        "reviewed_by",
+        "reviewed_at",
+        "review_expires_on",
+        "valid_from",
+        "valid_to_exclusive",
+        "jurisdictions",
+        "subject_types",
+        "business_types",
+        "authority_url"
+      ],
+      "title": "LegalReview",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "reviews": {
+      "items": {
+        "$ref": "#/$defs/LegalReview"
+      },
+      "maxItems": 10000,
+      "title": "Reviews",
+      "type": "array"
+    }
+  },
+  "required": [
+    "version",
+    "reviews"
+  ],
+  "title": "Registry",
+  "type": "object"
+}

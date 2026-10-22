@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Team 8 · 全组接线图览</title>
+<style>
+body{font:16px/1.7 "Microsoft YaHei",sans-serif;background:#f2f6f6;color:#193d43;max-width:1500px;margin:32px auto;padding:0 20px}h1{font-size:28px}article{background:white;border:1px solid #cbdedb;border-radius:12px;padding:24px;margin:24px 0}img{display:block;width:100%;height:auto}a{color:#087f77}p{max-width:1000px}.note{background:#fff5d8;padding:12px 18px;border-radius:8px}h2{font-size:21px}
+</style>
+<h1>业务审核 · 慧眼助手 · RAG · SDK 接线图览</h1>
+<p>研究草案 v0.1 · 2026-10-22。先看目标架构，再看两条时序。<a href="README.md">接线总览</a> · <a href="接口与时序.md">接口细则</a> · <a href="分工与验收.md">分工与验收</a> · <a href="../../mockup/mockup_integration_workbench.html">页面原型</a></p>
+<p class="note">目标图表示待实施设计，并非上线证明。基线图记录研究开始时源码；研究期间新增的助手协作与 RAG 检索实现见接线总览的增量说明。下图不代表同学已经确认排期。</p>
+<article><h2>1. 目标模块架构：两条入口，共用能力</h2><p>网站和任务状态由主后端管理；专项 Agent 和助手复用受控 AI 适配、RAG 与模型服务。<a href="../diagrams/integration-target.mmd">Mermaid 源文件</a></p><img src="../diagrams/rendered/integration-target.svg" alt="目标模块架构"></article>
+<article><h2>2. 业务审核目标时序</h2><p>上传、字段确认、规则、专项、人工处置和终审形成业务闭环。<a href="../diagrams/integration-review-sequence.mmd">Mermaid 源文件</a></p><img src="../diagrams/rendered/integration-review-sequence.svg" alt="业务审核目标时序"></article>
+<article><h2>3. 审核页与独立助手目标时序</h2><p>解释、取证和引用走助手链路，审核决定仍需回任务页明确操作。<a href="../diagrams/integration-assistant-sequence.mmd">Mermaid 源文件</a></p><img src="../diagrams/rendered/integration-assistant-sequence.svg" alt="助手目标时序"></article>
+<article><h2>4. 状态归属</h2><p>任务、业务审核运行与聊天分别保存自己的状态；运行成功不能自动批准贷款。<a href="../diagrams/integration-state-ownership.mmd">Mermaid 源文件</a></p><img src="../diagrams/rendered/integration-state-ownership.svg" alt="任务、运行与聊天的状态归属"></article>
+<article><h2>5. 研究开始时的实际接线</h2><p>用于定位 Mock、演示 UI 与真实服务之间的缺口；并行开发增量以文字核查记录为准。<a href="../diagrams/integration-current.mmd">Mermaid 源文件</a></p><img src="../diagrams/rendered/integration-current.svg" alt="源码基线实际接线"></article>
+</html>

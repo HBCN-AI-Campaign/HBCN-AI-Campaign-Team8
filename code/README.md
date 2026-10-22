@@ -1,5 +1,7 @@
 # 境外贷款单据智能审核平台
 
+全组协作入口：[架构接线总览](../docs/integration/README.md) · [详细接口与时序](../docs/integration/接口与时序.md) · [实名分工与验收](../docs/integration/分工与验收.md)。包含现状/目标区别，不能把规划接口当已上线能力。
+
 > HBCN AI Campaign · Team 8
 > 前后端一体 POC：**数据库 → 解析 Agent → 规则引擎 → 专项审核 Agent → API → 前端**
 

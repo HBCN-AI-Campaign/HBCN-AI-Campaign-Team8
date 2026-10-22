@@ -1,0 +1,11 @@
+flowchart TD
+  MANAGER["可信管理调用方 / 本机 React 工作台"] --> CONFIRM["确认撤回具体版本<br/>document ID + expected SHA256 + reason"]
+  CONFIRM --> TX["PostgreSQL 单事务<br/>锁定文档行 / 版本校验 / 幂等"]
+  TX --> DOC["文档状态 withdrawn<br/>追加服务级操作事件"]
+  TX --> HIDE["本版全部片段 searchable=false<br/>向量和词法均停止返回"]
+  DOC --> READER["原件与解析内容接口返回 404<br/>管理状态仍可查看"]
+  DOC --> FENCE["在途入库最后发布事务<br/>同文档锁 + 撤回检查 / 禁止重新 ready"]
+  HIDE --> CHECK["检索结果 / 跨轮候选 / 后续模型调用前<br/>以及最终答复返回前重新核对"]
+  CHECK --> INVALID["发现来源失效<br/>移除片段 / 隐藏原答复 / 标注缺口"]
+  DOC --> KEEP["原件、正文及不可检索索引保留<br/>逻辑撤回不代表物理擦除"]
+  LIMIT["仍待：用户任务 ACL / 跨系统通知<br/>案例依赖绑定 / 备份与物理清理<br/>无法召回已经交付的正文或在途外部调用"] -.-> KEEP

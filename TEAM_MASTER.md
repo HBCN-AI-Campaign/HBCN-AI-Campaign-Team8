@@ -1,8 +1,6 @@
 # Team 8 项目 Master
 
-> 最后更新：2026-10-20
-
----
+> 最后更新：2026-10-22。本次更新基于源码 `f722291`＋当前工作区与既有验收记录；没有重新宣称 ECS 全链路上线。
 
 ## 1. 团队分工
 
@@ -13,121 +11,46 @@
 | 3 | **诸葛 + 吴杨** | 专项审核 Agent，**诸葛负责答辩** | 26263050084@m.fudan.edu.cn / yangwu26@m.fudan.edu.cn |
 | 4 | **陈子业 + 肖瑶** | 文件解析 + OCR，**负责部署** | ziyechen26@m.fudan.edu.cn / 26263050060@m.fudan.edu.cn |
 
-### 分工时序图
+模块归属沿用原分工。个人具体任务、提供/消费接口、依赖与验收见[跨模块分工与验收](docs/integration/分工与验收.md)；组内主导人拆分是待成员确认的建议，不代表重新分配模块所有权。
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor B as 业务经办人
-    participant FE as 前端工作台(罗检)
-    participant BE as 后端编排器(罗检)
-    participant P as 文件解析OCR(肖瑶+陈子业)
-    participant RAG as RAG服务(刘范聪)
-    participant A as 专项审核Agent(诸葛+吴杨)
-    participant S as 汇总Agent(诸葛+吴杨)
-    actor H as 审核人员
+## 2. 全组接线入口
 
-    B->>FE: 创建任务并上传材料
-    FE->>BE: 文件、任务信息、权限范围
-    BE->>P: 创建解析OCR子任务
-    P->>P: OCR识别+字段提取
-    P->>BE: 交易事实、材料清单、原文证据
-    BE->>RAG: 创建更新文档版本
-    RAG->>RAG: 切片向量化+索引
-    RAG-->>BE: 索引就绪
-    
-    BE->>A: 启动专项审核
-    A->>RAG: 受限检索(法规+材料+术语)
-    loop 最多N轮
-        RAG->>RAG: 混合检索+证据覆盖检查
-    end
-    RAG-->>A: 证据包与检索轨迹
-    A->>A: 结构化专项审核输出
-    A-->>BE: 专项结论、证据和未决事项
-    
-    BE->>S: 汇总专项结果
-    S->>RAG: 跨文件证据补查
-    RAG-->>S: 汇总证据与引用检查
-    S->>S: 生成汇总结论
-    S-->>BE: 提交汇总
-    
-    BE-->>FE: 结论、风险、来源和状态
-    FE-->>H: 逐条确认并跳转原文
-    H->>FE: 人工终审
-```
+- [一分钟总览与现状/目标架构](docs/integration/README.md)：业务 workflow 与独立慧眼助手如何共用 RAG、SDK，哪些已实现、哪些待接。
+- [详细接口与时序](docs/integration/接口与时序.md)：C01–C05 已有接口，N01–N05 拟议能力/运行/证据/网关契约，业务与助手两条时序。
+- [任务分工与联合验收](docs/integration/分工与验收.md)：I01–I14 backlog、G0–G4 里程碑、A01–A15 验收。
+- [目标界面原型](mockup/mockup_integration_workbench.html)：审核页、助手与知识工作台如何体现能力；只有示例数据，未接真实API。
 
----
+共同交付目标：一笔脱敏任务完成“上传与真实解析 → 确定性核对 → 专项取证/结构化建议 → 审核页内求助与原文定位 → 人工处置/补件重审 → 人工终审”。聊天答复、run完成与业务审批完成分别记录，业务状态权威属于主后端。
 
-## 2. 当前状态
+## 3. 当前模块状态与代码归属
 
-| 序号 | 模块 | 负责人 | 进度 |
-|:----:|------|--------|------|
-| 1 | 前端工作台 + 后端编排 | 罗检 | 🚧 持续迭代 |
-| 2 | 规则引擎（20 条） | 罗检 | 🚧 持续迭代 |
-| 3 | AI 助手（慧眼） | 刘范聪 | 🚧 持续迭代 |
-| 4 | RAG 本地引擎 | 刘范聪 | 🚧 持续迭代 |
-| 5 | 文件解析 Agent | 陈子业 + 肖瑶 | 🚧 Mock → 真实实现 |
-| 6 | OCR 服务 | 陈子业 + 肖瑶 | 🚧 待部署 |
-| 7 | 专项审核 Agent | 诸葛 + 吴杨 | 🚧 Mock → 真实实现 |
-| 8 | RAGFlow 底座 | 刘范聪 | ⏳ 待部署 |
-| 9 | 部署上线 | 陈子业 + 肖瑶 | ⏳ 待开始 |
-| 10 | 答辩准备 | 诸葛 | 🚧 梳理业务与技术选型 |
+| 模块 | 负责人 | 当前依据与边界 |
+|---|---|---|
+| React 主站 / 任务API / 规则 | 罗检 | React 18、Ant Design 5、FastAPI；27个注册规则。业务任务与规则接口已有实现；持久化review-run、统一任务ACL、原文鉴权与终审门禁需继续完成 |
+| 解析与 OCR | 陈子业＋肖瑶 | 主站 parse_agent 仍Mock；ocr_demo有HTTP全文识别源码，但字段抽取与page/bbox须完成联合验收；源码存在不等于已部署 |
+| 专项与汇总Agent | 诸葛＋吴杨 | review_agent当前为Mock会话构造；尚未连接真实专项工具/SDK。须按结构化契约接业务run，不依赖前端动画 |
+| 慧眼助手 | 刘范聪 | React路由、JSON/SSE、授权上下文与runtime已有基线；并行新增成员/专家、聊天run、事件轮询/审计源码与路由，完成状态以模块执行规划和联合验收为准；业务review-run是另一契约 |
+| RAG | 刘范聪 | PostgreSQL/pgvector、检索、LangGraph问答与SDK已有本机验收；并行新增查询规划/融合与增强retrievals接口，按执行台账复验；主站adapter仍需对接，law/task_documents未开放 |
+| 北大法宝MCP | 刘范聪 | 9个地址初始化成功，法条检索工具曾实际查询；不等于RAG后端/ECS已集成。见MCP接入文档 |
+| SDK runtime | 刘范聪 | code/assistant-runtime；OpenCode SDK固定2.0.32，汇丰模型凭证只在服务端，供助手和RAG调用；专项共享能力适配待实现 |
+| 部署上线 | 陈子业＋肖瑶 | ECS曾发现主站前后端进程；不能据旧记录声称最新RAG/runtime/OCR/助手已统一上线，按部署方案复验 |
+| 答辩 | 诸葛 | 按真实用例与证据展示，明确Mock、已实现、已联调、已部署和规划，避免把图当上线证明 |
 
----
+### 源码所有权
 
-## 3. 系统结构
+| 路径 | 主维护方 | 协作边界 |
+|---|---|---|
+| code/backend/app/routers/tasks.py、models.py、schemas.py、rule_engine/ | 罗检 | 共享文件由罗检整合，其他模块提供DTO/适配补丁，不并行覆盖 |
+| code/backend/app/parse_agent.py、code/ocr_demo/ | 陈子业＋肖瑶 | 保持解析输入输出契约；真实识别、质量与位置由解析组交付 |
+| code/backend/app/review_agent.py | 诸葛＋吴杨 | 专项/汇总建议与工具适配，不自行写审批状态 |
+| code/backend/app/assistant_*、routers/assistant.py、rag_service.py | 刘范聪 | 助手与共享AI适配；权限策略/共享表修改与罗检对齐 |
+| code/frontend/ | 罗检主站架构；刘范聪助手页面 | React统一，业务API与助手SSE分层；共享组件和路由双方复核 |
+| code/rag-service/、code/assistant-runtime/ | 刘范聪 | RAG、SDK为独立服务；只经接口供业务消费 |
+| 部署配置与运行环境 | 陈子业＋肖瑶 | 各模块交运行说明、就绪/真实验收与回滚，不在仓库放凭证 |
 
-### 整体架构
+### 版本与计划维护
 
-```
-境外贷款单据智能审核平台
-│
-├─ 前端层（端口 5173）— 罗检
-│  ├─ Vue 3 + TypeScript + Element Plus
-│  ├─ 登录 & 权限守卫
-│  ├─ 任务创建 & 上传
-│  ├─ 规则核对 & AI 审核
-│  ├─ PDF 原文定位（bbox 高亮）
-│  └─ AI 助手「慧眼」对话界面
-│
-├─ 后端层（端口 8000）— 罗检
-│  ├─ FastAPI + SQLAlchemy
-│  ├─ JWT 鉴权 & 角色权限
-│  ├─ 任务编排 & 状态流转
-│  ├─ parse_agent.py — 文件解析（Mock）— 陈子业 + 肖瑶
-│  ├─ review_agent.py — 专项审核（Mock）— 诸葛 + 吴杨
-│  ├─ assistant_service.py — AI 助手（SSE 流式）— 刘范聪
-│  └─ rule_engine/ — 20 条硬性规则 — 罗检
-│
-├─ RAG 服务（端口 8010）— 刘范聪
-│  ├─ 独立 Python 服务
-│  ├─ 百炼 Embedding + SQLite 本地引擎
-│  ├─ /api/v1/query — 业务规则 & 项目设计查询
-│  ├─ /api/v1/documents — 文档上传 & 解析
-│  └─ （待部署）RAGFlow 正式底座
-│
-├─ OCR 服务（待部署）— 陈子业 + 肖瑶
-│  ├─ 文本层 PDF 直接提取
-│  ├─ 扫描 PDF / 图片进入 OCR
-│  └─ 保留页码 & bbox 坐标
-│
-└─ 数据层
-   ├─ PostgreSQL — 任务、单据、结果
-   └─ 文件存储 — sample_pdfs、uploads
-```
-
-### 代码目录
-
-| 序号 | 目录 | 负责人 | 说明 |
-|:----:|------|--------|------|
-| 1 | `code/backend/` | 罗检 | FastAPI 后端，源码全在 `app/` |
-| 2 | `code/frontend/` | 罗检 | Vue 3 前端，源码全在 `src/` |
-| 3 | `code/rag-service/` | 刘范聪 | 独立 RAG 服务，不合并到 backend |
-| 4 | `code/ocr_demo/` | 陈子业 + 肖瑶 | OCR 服务，待部署 |
-| 5 | `docs/` | 全员 | 技术文档、架构图、交接说明 |
-| 6 | `mockup/` | 全员 | 各成员 HTML 设计稿 |
-
----
+跨模块任务的逐项状态只在[分工与验收](docs/integration/分工与验收.md)维护，本文保留总体状态和入口；模块细节归各自README。旧时序中“全体任务自动入RAG、混合检索已完成、专项Agent已真调用”的描述是目标，不是当前事实，已由接线总览中的现状/目标双图替代。RAGFlow是历史候选/兼容适配，不再固定视为必须补部署的底座；按最新RAG规划和质量/资源评测决策。
 
 ## 4. 基础设施
 
