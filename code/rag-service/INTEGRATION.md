@@ -2,6 +2,8 @@
 
 交付范围：独立知识库服务 `0.5.0`，HTTP 契约 `1.3.0`。代码在 `lfc` 分支；部署前固定经过评审的提交。只需要通过 HTTP 调用，不需要复制 RAG 内部代码或连接其数据库。
 
+模块详细流程和当前缺口见 [专属架构图](ARCHITECTURE.md)，特别是OCR待复核在Embedding之前、后台批准与真实页面批准尚未闭环这一区别。
+
 ## 1. 向部署方取得两个配置
 
 在调用方**服务端**注入 `RAG_BASE_URL` 和 `RAG_SERVICE_TOKEN`。服务端的 `SERVICE_TOKEN` 与调用方 `RAG_SERVICE_TOKEN` 值相同；不要把它们放进前端、Git 或聊天记录。请求头：`Authorization: Bearer <token>`。

@@ -30,6 +30,12 @@
 
 ## 当前 RAG 架构
 
+详细展开见 [RAG专属架构图与实测缺口](ARCHITECTURE.md)：包括上传、OCR、质量门禁、人工批准、Embedding、Agentic检索与回答。**当前OCR一律待复核，后台机制已有，但页面批准入口和审核身份未配置，真实操作尚未闭环。** 该状态在Embedding之前，不是没有OCR能力。
+
+![RAG当前模块详细架构](docs/diagrams/rag-module-current.png)
+
+[放大SVG](docs/diagrams/rag-module-current.svg) · [入库/质量拦截详细图](docs/diagrams/rag-ingestion-quality.svg)。以下保留可选来源和依赖关系的补充图，当前启用/实测状态以专属图和验收记录为准。
+
 第八轮 React 工作台已接同源真实问答 SSE、增强检索、原文与文档入库状态，使用 Ant Design X 成熟组件；移除固定答复/来源/假页数。浏览器→实际 FastAPI 传输验收采用合成依赖，不等于模型/数据库/MCP 完整业务验收。契约兼容标记、构建/鉴权与复现见 [UI 说明](ui/README.md)。未重启共享后端，旧进程不具备本轮接口时 UI 会提示版本不匹配。
 
 第九轮补充请求取消：HTTP 断开可通知图工作线程，阻止后续调用并取消在途模型、Embedding、rerank 和 MCP 异步操作；并发名额在实际线程退出后释放。浏览器与合成依赖清理已验证，阻塞数据库不会强制杀线程，真实 SDK 会话和外部服务实际停止尚待验收；见[第九轮记录](../../docs/RAG优化第九轮验证记录.md)。
