@@ -1,0 +1,407 @@
+{
+  "date": "2026-10-23",
+  "base_commit": "f43be99",
+  "change": "bounded native LangChain batch retrieval; current RAG working tree",
+  "scope": "one fixed-question paired observation, real Embedding/PG/runtime; no document writes",
+  "query": "流动资金贷款和固定资产贷款的用途限制分别是什么？",
+  "knowledge_scope": "business_rules",
+  "top_k": 8,
+  "generate_answer": false,
+  "limits": [
+    "single observation, not a stable performance or quality benchmark",
+    "model plans were generated independently; query text and exact candidate identities were not frozen or recorded",
+    "nested operation durations overlap and cannot be summed",
+    "both runs failed assessment; no business answer was delivered",
+    "local SSH-connected diagnostic, not a cloud RAG deployment"
+  ],
+  "runs": [
+    {
+      "variant": "baseline",
+      "configuration": {
+        "search_mode": "vector",
+        "total_budget": 240.0,
+        "call_budget": 90.0,
+        "max_context_windows": 80,
+        "concurrency": 1
+      },
+      "initialization_seconds": 52.218,
+      "duration_seconds": 127.5,
+      "query_count": 4,
+      "operations": [
+        {
+          "operation": "sdk_call",
+          "offset_seconds": 0.094,
+          "outcome": "completed",
+          "seconds": 18.656
+        },
+        {
+          "operation": "embedding_http",
+          "offset_seconds": 18.797,
+          "outcome": "completed",
+          "seconds": 4.078
+        },
+        {
+          "operation": "vector_search_including_embedding",
+          "offset_seconds": 18.782,
+          "outcome": "completed",
+          "seconds": 12.343
+        },
+        {
+          "operation": "lifecycle_sql",
+          "offset_seconds": 31.125,
+          "outcome": "completed",
+          "seconds": 3.047
+        },
+        {
+          "operation": "retrieval_total",
+          "offset_seconds": 18.782,
+          "outcome": "completed",
+          "seconds": 15.406
+        },
+        {
+          "operation": "embedding_http",
+          "offset_seconds": 34.188,
+          "outcome": "completed",
+          "seconds": 3.797
+        },
+        {
+          "operation": "vector_search_including_embedding",
+          "offset_seconds": 34.188,
+          "outcome": "completed",
+          "seconds": 8.156
+        },
+        {
+          "operation": "lifecycle_sql",
+          "offset_seconds": 42.344,
+          "outcome": "completed",
+          "seconds": 3.11
+        },
+        {
+          "operation": "retrieval_total",
+          "offset_seconds": 34.188,
+          "outcome": "completed",
+          "seconds": 11.266
+        },
+        {
+          "operation": "embedding_http",
+          "offset_seconds": 45.469,
+          "outcome": "completed",
+          "seconds": 4.281
+        },
+        {
+          "operation": "vector_search_including_embedding",
+          "offset_seconds": 45.469,
+          "outcome": "completed",
+          "seconds": 8.25
+        },
+        {
+          "operation": "lifecycle_sql",
+          "offset_seconds": 53.719,
+          "outcome": "completed",
+          "seconds": 3.094
+        },
+        {
+          "operation": "retrieval_total",
+          "offset_seconds": 45.469,
+          "outcome": "completed",
+          "seconds": 11.36
+        },
+        {
+          "operation": "embedding_http",
+          "offset_seconds": 56.829,
+          "outcome": "completed",
+          "seconds": 4.171
+        },
+        {
+          "operation": "vector_search_including_embedding",
+          "offset_seconds": 56.829,
+          "outcome": "completed",
+          "seconds": 8.562
+        },
+        {
+          "operation": "lifecycle_sql",
+          "offset_seconds": 65.391,
+          "outcome": "completed",
+          "seconds": 3.953
+        },
+        {
+          "operation": "retrieval_total",
+          "offset_seconds": 56.829,
+          "outcome": "completed",
+          "seconds": 12.515
+        },
+        {
+          "operation": "lifecycle_sql",
+          "offset_seconds": 69.36,
+          "outcome": "completed",
+          "seconds": 3.156
+        },
+        {
+          "operation": "lifecycle_sql",
+          "offset_seconds": 72.532,
+          "outcome": "completed",
+          "seconds": 3.859
+        },
+        {
+          "operation": "sdk_call",
+          "offset_seconds": 76.391,
+          "outcome": "RuntimeErrorResponse",
+          "seconds": 51.094
+        }
+      ],
+      "events": [
+        {
+          "key": "understand",
+          "status": "running",
+          "offset_seconds": 0.094
+        },
+        {
+          "key": "understand",
+          "status": "done",
+          "offset_seconds": 18.766
+        },
+        {
+          "key": "retrieve",
+          "status": "running",
+          "offset_seconds": 18.797
+        },
+        {
+          "key": "retrieve",
+          "status": "done",
+          "offset_seconds": 72.516
+        },
+        {
+          "key": "assess",
+          "status": "running",
+          "offset_seconds": 72.532
+        },
+        {
+          "key": "assess",
+          "status": "running",
+          "offset_seconds": 72.532
+        },
+        {
+          "key": "assess",
+          "status": "done",
+          "offset_seconds": 127.485
+        },
+        {
+          "key": "generate",
+          "status": "running",
+          "offset_seconds": 127.485
+        },
+        {
+          "key": "generate",
+          "status": "done",
+          "offset_seconds": 127.5
+        }
+      ],
+      "result": {
+        "stop_reason": "assessment_unavailable",
+        "evidence_status": "insufficient",
+        "source_count": 0,
+        "context_coverage": {
+          "candidate_windows": 20,
+          "presented_windows": 0,
+          "batch_count": 0,
+          "input_complete": false,
+          "selection_checked": false
+        }
+      }
+    },
+    {
+      "variant": "parallel",
+      "configuration": {
+        "search_mode": "vector",
+        "concurrency": 3,
+        "total_budget": 240.0,
+        "call_budget": 90.0,
+        "max_context_windows": 80
+      },
+      "initialization_seconds": 58.64,
+      "duration_seconds": 103.25,
+      "query_count": 4,
+      "operations": [
+        {
+          "operation": "sdk_call",
+          "offset_seconds": 0.125,
+          "outcome": "completed",
+          "seconds": 15.735
+        },
+        {
+          "operation": "embedding_http",
+          "offset_seconds": 16.156,
+          "outcome": "completed",
+          "seconds": 4.485
+        },
+        {
+          "operation": "embedding_http",
+          "offset_seconds": 16.031,
+          "outcome": "completed",
+          "seconds": 5.219
+        },
+        {
+          "operation": "embedding_http",
+          "offset_seconds": 15.969,
+          "outcome": "completed",
+          "seconds": 6.219
+        },
+        {
+          "operation": "vector_search_including_embedding",
+          "offset_seconds": 15.938,
+          "outcome": "completed",
+          "seconds": 16.468
+        },
+        {
+          "operation": "vector_search_including_embedding",
+          "offset_seconds": 15.938,
+          "outcome": "completed",
+          "seconds": 17.218
+        },
+        {
+          "operation": "vector_search_including_embedding",
+          "offset_seconds": 15.906,
+          "outcome": "completed",
+          "seconds": 17.641
+        },
+        {
+          "operation": "lifecycle_sql",
+          "offset_seconds": 32.406,
+          "outcome": "completed",
+          "seconds": 3.594
+        },
+        {
+          "operation": "retrieval_total",
+          "offset_seconds": 15.938,
+          "outcome": "completed",
+          "seconds": 20.062
+        },
+        {
+          "operation": "lifecycle_sql",
+          "offset_seconds": 33.156,
+          "outcome": "completed",
+          "seconds": 4.75
+        },
+        {
+          "operation": "retrieval_total",
+          "offset_seconds": 15.938,
+          "outcome": "completed",
+          "seconds": 21.968
+        },
+        {
+          "operation": "lifecycle_sql",
+          "offset_seconds": 33.547,
+          "outcome": "completed",
+          "seconds": 4.797
+        },
+        {
+          "operation": "retrieval_total",
+          "offset_seconds": 15.906,
+          "outcome": "completed",
+          "seconds": 22.438
+        },
+        {
+          "operation": "embedding_http",
+          "offset_seconds": 36.016,
+          "outcome": "completed",
+          "seconds": 4.25
+        },
+        {
+          "operation": "vector_search_including_embedding",
+          "offset_seconds": 36.016,
+          "outcome": "completed",
+          "seconds": 8.64
+        },
+        {
+          "operation": "lifecycle_sql",
+          "offset_seconds": 44.672,
+          "outcome": "completed",
+          "seconds": 3.516
+        },
+        {
+          "operation": "retrieval_total",
+          "offset_seconds": 36.016,
+          "outcome": "completed",
+          "seconds": 12.172
+        },
+        {
+          "operation": "lifecycle_sql",
+          "offset_seconds": 48.188,
+          "outcome": "completed",
+          "seconds": 3.031
+        },
+        {
+          "operation": "lifecycle_sql",
+          "offset_seconds": 51.235,
+          "outcome": "completed",
+          "seconds": 3.203
+        },
+        {
+          "operation": "sdk_call",
+          "offset_seconds": 54.438,
+          "outcome": "RuntimeErrorResponse",
+          "seconds": 48.797
+        }
+      ],
+      "events": [
+        {
+          "key": "understand",
+          "status": "running",
+          "offset_seconds": 0.125
+        },
+        {
+          "key": "understand",
+          "status": "done",
+          "offset_seconds": 15.875
+        },
+        {
+          "key": "retrieve",
+          "status": "running",
+          "offset_seconds": 16.031
+        },
+        {
+          "key": "retrieve",
+          "status": "done",
+          "offset_seconds": 51.219
+        },
+        {
+          "key": "assess",
+          "status": "running",
+          "offset_seconds": 51.235
+        },
+        {
+          "key": "assess",
+          "status": "running",
+          "offset_seconds": 51.25
+        },
+        {
+          "key": "assess",
+          "status": "done",
+          "offset_seconds": 103.25
+        },
+        {
+          "key": "generate",
+          "status": "running",
+          "offset_seconds": 103.25
+        },
+        {
+          "key": "generate",
+          "status": "done",
+          "offset_seconds": 103.25
+        }
+      ],
+      "result": {
+        "stop_reason": "assessment_unavailable",
+        "evidence_status": "insufficient",
+        "source_count": 0,
+        "context_coverage": {
+          "candidate_windows": 20,
+          "presented_windows": 0,
+          "batch_count": 0,
+          "input_complete": false,
+          "selection_checked": false
+        }
+      }
+    }
+  ]
+}

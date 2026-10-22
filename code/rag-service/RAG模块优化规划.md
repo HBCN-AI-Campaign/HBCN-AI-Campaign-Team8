@@ -176,3 +176,15 @@ sequenceDiagram
 | 4 | 接服务器与外层AI/法宝，验证真实身份、任务边界、持久化和恢复 | 目标环境证据和部署同事签认；本机通过不能替代 |
 
 本轮没有增加自研通用Agent或评测框架。新增能力实施前继续按项目要求先查官方资料与成熟方案，把选型/许可/资源决策写入本规划；只实现本项目需要的适配。
+
+### 7.1 查询召回并行：先测量再修改
+
+固定复杂题诊断：规划18.66秒；四个召回串行约50.55秒，加归并前失效复查约3.16秒；原文核对模型约51.09秒后未返回答案。初始化52.22秒另计，图内127.50秒。召回中的Embedding/SQL耗时相互包含，不能叠加成总时长；这不是吞吐基准，也尚未证明模型空答的根因。
+
+比较[LangGraph原生分支/Send](https://docs.langchain.com/oss/python/langgraph/use-graph-api)、[LangChain Runnable.batch](https://reference.langchain.com/python/langchain-core/runnables/base/Runnable/batch)和自建线程调度。选择已有langchain-core的RunnableLambda.batch：官方支持I/O并发及max_concurrency，保持当前图节点和HTTP契约，只并行独立查询，不另建Agent框架。LangGraph Send留作以后确有独立节点持久化/重试需要时评估；本次没有该需求。沿用现有依赖及MIT许可，不新增SaaS或自动上传正文。
+
+实现约束：默认至多3路（RAG_RETRIEVAL_CONCURRENCY，1—6）；先按原顺序去重、预留查询预算，再按输入顺序归并结果。工作线程必须继承请求取消上下文，开始调用前检查取消与总预算；退出时等待在途调用清理，不能提前释放请求名额。每路及最终返回前保留原有生命周期检查；不删查询、窗口或核对调用。测试并发上限、计划顺序、预算、取消上下文、等待清理和失败；用同一真实题复测召回阶段，模型问题独立记录。
+
+观测依据：[LangGraph事件流](https://docs.langchain.com/oss/python/langgraph/streaming)、[SQLAlchemy性能诊断](https://docs.sqlalchemy.org/en/21/faq/performance.html)。当前先本机记录固定操作名、时长、计数；[LangSmith tracing](https://docs.langchain.com/oss/python/langgraph/observability)需另评数据和服务授权，本轮未启用。默认不记录SQL参数、凭证或整段业务原文。
+
+复审结果：同题单次对照召回节点53.719→35.188秒，图内127.500→103.250秒；仍为assessment_unavailable，不算业务通过。两次改写和候选未冻结，不作稳定性能/召回质量结论。详见[报告第6节](RAG模块流程验收报告.md#6-10月23日追加复审召回并行模型失败保留)。下一步优先取证runtime终止状态：只记录白名单错误类别/耗时/版本，不输出正文或密钥；区分超时、执行失败、最终文本提取为空，再决定RAG适配、预算协商或交给runtime维护方。不得无证据反复加超时或重跑整套流程。

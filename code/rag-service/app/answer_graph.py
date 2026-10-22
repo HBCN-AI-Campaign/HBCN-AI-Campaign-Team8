@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import time
 import json
+import threading
 from types import SimpleNamespace
 from typing import TypedDict
 
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
+from langchain_core.runnables import RunnableLambda
 from pydantic import ValidationError
 
 from .config import settings
@@ -132,21 +134,50 @@ def build_answer_graph(engine, runtime=None, *, generate_answer=True, law_source
         external_batches = list(state.get("external_batches", []))
         external_queries = list(state.get("external_queries", []))
         step("retrieve", f"检索授权知识库（第 {attempt} 轮）", "running")
+        pending, reserved = [], set(used)
         for query in queries if "knowledge_base" in requested_sources else []:
             check_cancelled()
             key = query_key(query.text)
-            if key in used:
+            if key in reserved:
                 continue
-            if len(used) >= settings.RAG_MAX_RETRIEVAL_QUERIES:
+            if len(reserved) >= settings.RAG_MAX_RETRIEVAL_QUERIES:
                 stop_reason = "query_budget"
                 break
             if time.monotonic() >= state["deadline"]:
                 stop_reason = "time_budget"
                 break
-            items = engine.retrieve(query=query.text, scope=state["scope"], top_k=min(20, state["top_k"] * 3))
+            pending.append(query)
+            reserved.add(key)
+
+        batch_failed = threading.Event()
+
+        def retrieve_query(query):
+            # Runnable.batch propagates ContextVars and waits for its executor
+            # on exit. Queued work must not start I/O after cancellation/deadline.
             check_cancelled()
+            if batch_failed.is_set() or time.monotonic() >= state["deadline"]:
+                return None
+            try:
+                items = engine.retrieve(query=query.text, scope=state["scope"], top_k=min(20, state["top_k"] * 3))
+                check_cancelled()
+                return items
+            except BaseException:
+                # Stop queued work after the first failed branch; active work
+                # still drains before the caller's capacity can be released.
+                batch_failed.set()
+                raise
+
+        results = RunnableLambda(retrieve_query).batch(pending, config={
+            "max_concurrency": settings.RAG_RETRIEVAL_CONCURRENCY}) if pending else []
+        # Native batch preserves input order; completion order must not change
+        # candidate selection, query-family weighting, or cross-round budgets.
+        for query, items in zip(pending, results):
+            check_cancelled()
+            if items is None:
+                stop_reason = "time_budget"
+                continue
             batches.append((query, items))
-            used.append(key)
+            used.append(query_key(query.text))
             retrieved += 1
             statuses["knowledge_base"] = "ok"
         if "pkulaw" in requested_sources:

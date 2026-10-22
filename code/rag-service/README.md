@@ -98,7 +98,7 @@ scope 为 business_rules/project_design/law/all。conversation 最多12条 role(
 
 `/retrievals` 使用相同请求字段；返回 sources、evidence_status（sufficient/insufficient/clarification）、missing、stop_reason、retrieval_rounds、warnings、可选 clarification_question 和 `query_context`，不返回 answer 或 grounding。`query_context` 保留带原文位置的用户陈述摘录、未知槽位和多值歧义；来源匹配通过不等于陈述真实或提取完整。部分相关原文可以与 insufficient 状态同时存在，调用方必须处理缺口，不能因 sources 非空就宣告依据充分。该接口用于后续主站接线，现有 `/query` 语义不变。
 
-源码默认每次至多 4 个初始表达（原问题＋优先保留通用/翻译分支），全程至多 6 次引擎检索、2 轮，问答总预算 240 秒、单次 SDK 90 秒。配置见 `.env.example` 的 RAG_MAX_QUERY_VARIANTS / RAG_MAX_RETRIEVAL_QUERIES / RAG_MAX_RETRIEVAL_ROUNDS / RAG_TOTAL_TIMEOUT_SECONDS；总预算在阶段边界检查并传给 SDK，不是对数据库驱动的强制取消。词法混合的实现与迁移见下节；跨源 rerank 与完整撤销治理仍在后续阶段。
+源码默认每次至多 4 个初始表达（原问题＋优先保留通用/翻译分支），全程至多 6 次引擎检索、2 轮，问答总预算 240 秒、单次 SDK 90 秒。独立查询通过现有 LangChain batch 默认并发3路，`RAG_RETRIEVAL_CONCURRENCY` 可设1—6；结果按计划顺序归并。配置见 `.env.example` 的 RAG_MAX_QUERY_VARIANTS / RAG_MAX_RETRIEVAL_QUERIES / RAG_MAX_RETRIEVAL_ROUNDS / RAG_TOTAL_TIMEOUT_SECONDS；总预算在阶段边界及排队查询启动前检查并传给 SDK，不是对数据库驱动的强制取消，在途调用清理完成前保留请求名额。词法混合的实现与迁移见下节；跨源 rerank 与完整撤销治理仍在后续阶段。
 
 多查询融合复用已锁定的 langchain-postgres RRF，只增加本项目的查询族去偏、来源/版本标识与评分类型适配；不把融合分标成相似度或审批概率。当前相关性/充分性选择仍依赖 SDK，未替代独立金融质量评测。
 

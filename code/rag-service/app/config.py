@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     RAG_TOTAL_TIMEOUT_SECONDS: float = Field(default=240, ge=10, le=900)
     RAG_MAX_QUERY_VARIANTS: int = Field(default=4, ge=1, le=6)
     RAG_MAX_RETRIEVAL_QUERIES: int = Field(default=6, ge=1, le=12)
+    RAG_RETRIEVAL_CONCURRENCY: int = Field(default=3, ge=1, le=6)
     RAG_MAX_RETRIEVAL_ROUNDS: int = Field(default=2, ge=1, le=3)
     RAG_MAX_CONTEXT_WINDOWS: int = Field(default=80, ge=20, le=200)
     RAG_MAX_CONTEXT_BATCHES: int = Field(default=6, ge=1, le=10)
