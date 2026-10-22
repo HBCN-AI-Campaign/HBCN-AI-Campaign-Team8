@@ -12,6 +12,8 @@
 
 **当前本机演示入口（2026-10-22）：** [慧眼助手](http://127.0.0.1:5173/assistant)，正式 React 页面代理到本轮助手 API **8003**，再调用已验证的 runtime **8092**；保留旧 8000/8002 服务。通过前端代理的真实汇丰 qwen3.8-flash 问答约 **14.2 秒**，同键重试及游标恢复通过，临时会话已清理。真实 RAG 仍不可用。本机启动/地址覆盖见[部署说明](../../code/assistant-runtime/deploy/README.md#当前本机实例2026-10-22)；不是云端地址或默认端口变更。
 
+**候选交付：** 固定 **57563ed** 的源码/前端构建/SDK/runtime 源码已生成约 **8.1 MB** 的无凭证、无业务库交付包，并从解包目录通过 API/契约 28 项和 SDK 8 项。构建与 runtime 3 项/52 断言通过；Linux runtime 仍须目标机按锁文件构建。见[交付清单与切换前交接](../../code/assistant-runtime/deploy/README.md#6-候选交付与切换前交接)。包尚未上传云站；发布执行归属与配置交接待明确。
+
 云端事实（2026-10-22 只读 SSH）：已运行网站不是助手已部署。Ubuntu 24.04 上 80 为 Vite 开发服务器，前端无助手页面/Ant Design X；8000 为无助手路由的 FastAPI 登录会话进程。无 runtime、助手表和 backend `.env`；DB/JWT 环境变量未提供，后端 Python 依赖 Alembic/HTTPX 缺失。详见[环境核对与发布路径](../../code/assistant-runtime/deploy/README.md)。未改远端文件、配置、进程或数据。
 
 | 已实现 | 真实边界 |
