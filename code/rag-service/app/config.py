@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     RAG_REFERENCES_ENABLED: bool = False
     RAG_REFERENCE_PRINCIPALS_FILE: str = ""
     RAG_DOCUMENT_REVIEW_PRINCIPALS_FILE: str = ""
+    RAG_WEB_CONTEXT_ENABLED: bool = False
+    RAG_WEB_CONTEXT_PRINCIPALS_FILE: str = ""
+    RAG_WEB_CONTEXT_ALLOWED_HOSTS: str = ""
+    RAG_WEB_CONTEXT_MAX_AGE_SECONDS: int = Field(default=900, ge=60, le=3600)
     PKULAW_MCP_ENABLED: bool = False
     PKULAW_MCP_TOKEN: SecretStr = SecretStr("")
     PKULAW_MCP_LAW_SEARCH_URL: str = "https://apim-gateway.pkulaw.com/mcp-law-search-service"

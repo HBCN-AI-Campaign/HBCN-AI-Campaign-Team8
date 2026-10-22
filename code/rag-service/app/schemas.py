@@ -40,6 +40,7 @@ class Capabilities(BaseModel):
     external_law_mcp: bool = False
     enhanced_retrieval: bool = False
     dedicated_reranking: bool = False
+    web_context: bool = False
     supported_scopes: list[str]
     max_upload_bytes: int = 50 * 1024 * 1024
     upload_timeout_seconds: int = 900

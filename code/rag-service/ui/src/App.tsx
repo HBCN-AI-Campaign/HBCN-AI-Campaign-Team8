@@ -7,7 +7,7 @@ import type { Capabilities, DocumentContent, Evidence, KnowledgeDocument, LegalC
 interface Message { id: number; role: 'user' | 'assistant'; content: string; result?: Result; steps: Step[]; pending?: boolean; error?: string }
 const SCOPES = [{ value: 'all', label: '全部资料' }, { value: 'business_rules', label: '内部业务规则' }, { value: 'law', label: '法规' }, { value: 'project_design', label: '项目设计' }]
 const LEGAL_STATUS: Record<string, string> = { source_changed: '依据已变化，需要重新核验', not_checked: '尚未核验', not_required: '本轮未要求法规核验', reference_only: '仅资料参考', legal_evidence_required: '缺少法规原文', context_required: '缺少本案条件', review_required: '需要法规复核记录', blocked: '适用条件未通过', reviewed_constraints_match: '已复核条件匹配，仍需业务审批' }
-const SOURCE_STATUS: Record<string, string> = { changed: '依据已变化，需要重新检索', ok: '本次调用完成', partial: '部分完成', unavailable: '不可用', disabled: '未启用', time_budget: '时间预算耗尽', blocked_scope: '范围未授权' }
+const SOURCE_STATUS: Record<string, string> = { provided_unverified: '快照已提供，真实性未核实', changed: '依据已变化，需要重新检索', ok: '本次调用完成', partial: '部分完成', unavailable: '不可用', disabled: '未启用', time_budget: '时间预算耗尽', blocked_scope: '范围未授权' }
 
 function SourceReader({ source }: { source: Evidence }) {
   const [content, setContent] = useState<DocumentContent>()
@@ -35,6 +35,7 @@ function SourceReader({ source }: { source: Evidence }) {
     <h4>本轮实际引用片段</h4><pre className="original-text" data-testid="source-content">{source.content}</pre>
     {source.metadata.excerpt != null && <Alert type="info" message="此处是原文窗口，可能只覆盖父片段的一部分；不能视为已读取全文。" />}
     {source.metadata.source_type === 'pkulaw' && <Alert type="warning" message="外部法规片段；完整正文、附件与本案适用范围须按授权及复核状态确认。" />}
+    {source.metadata.source_type === 'web_context' && <Alert type="warning" message="调用方提供的网页文本快照；本服务未核实网页真实性或全文完整性，不能作为本案法规或审批依据。" description={`采集时间：${String(source.metadata.captured_at || '未知')}；范围：${source.metadata.capture_completeness === 'selection' ? '选中片段' : '调用方声明的页面文本'}。外部链接可能已变化。`} />}
     {loading && <p role="status">正在读取已入库原文…</p>}
     {error && <Alert type="error" message={error} />}
     {content && <><h4>已入库解析原文</h4><p>以下为解析文本；版式和附件请对照原始文件。</p>{content.pages.map((page, index) => <section className="parsed-page" key={index}>
@@ -52,7 +53,7 @@ function ResultDetails({ result }: { result: Result }) {
     {result.missing?.length > 0 && <Alert type="warning" message="仍缺少的条件或依据" description={<ul>{result.missing.map((text, i) => <li key={i}>{text}</li>)}</ul>} />}
     {result.warnings?.length > 0 && <Alert type="info" message="本轮局限" description={<ul>{result.warnings.map((text, i) => <li key={i}>{text}</li>)}</ul>} />}
     <Collapse size="small" ghost items={[{ key: 'status', label: '来源与核验状态', children: <>
-      {Object.entries(result.source_status || {}).map(([source, status]) => <p key={source}>{source === 'pkulaw' ? '北大法宝' : source === 'knowledge_base' ? '知识库' : source}：{SOURCE_STATUS[status] || status}</p>)}
+      {Object.entries(result.source_status || {}).map(([source, status]) => <p key={source}>{source === 'pkulaw' ? '北大法宝' : source === 'knowledge_base' ? '知识库' : source === 'web_context' ? '网页上下文' : source}：{SOURCE_STATUS[status] || status}</p>)}
       <p>重排：{result.rerank_status === 'disabled' ? '未启用专用模型' : result.rerank_status}</p>
       <p>答复支持核验：{result.answer_verification?.status || '增强检索不生成答复'}</p>
       <p>停止原因：{result.stop_reason}</p><p>相关性与短引核验不能代替法律、信贷或放款审批。</p>

@@ -168,6 +168,7 @@ def capabilities():
         enhanced_retrieval=kind == "postgres",
         external_law_mcp=kind == "postgres" and settings.PKULAW_MCP_ENABLED and bool(settings.PKULAW_MCP_TOKEN.get_secret_value()),
         dedicated_reranking=kind == "postgres" and settings.RAG_RERANK_PROVIDER != "disabled" and bool(settings.RAG_RERANK_URL and settings.RAG_RERANK_MODEL),
+        web_context=kind == "postgres" and settings.RAG_WEB_CONTEXT_ENABLED and bool(settings.RAG_WEB_CONTEXT_PRINCIPALS_FILE and settings.RAG_WEB_CONTEXT_ALLOWED_HOSTS),
         supported_scopes=configured_scopes,
         max_upload_bytes=settings.MAX_UPLOAD_BYTES,
         upload_timeout_seconds=settings.UPLOAD_TIMEOUT_SECONDS,

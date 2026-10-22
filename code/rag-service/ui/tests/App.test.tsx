@@ -48,6 +48,19 @@ it('keeps gaps visible without claiming the case passed', async () => {
   expect(screen.getByText('缺少本案条件')).toBeTruthy()
   expect(screen.queryByText('本轮依据覆盖检查通过')).toBeNull()
 })
+it('labels supplied web context without implying that the service fetched or verified it', async () => {
+  const value = result('网页快照')
+  value.sources[0] = { ...value.sources[0], source_url: 'https://docs.example.com/rules', reader_url: null,
+    metadata: { source_type: 'web_context', captured_at: '2026-10-22T00:00:00+00:00', capture_completeness: 'selection' } }
+  vi.mocked(api.answer).mockResolvedValue(value)
+  render(<App />); await screen.findByText(/服务接口可访问/)
+  await submit('网页说了什么')
+  fireEvent.click(await screen.findByRole('button', { name: '打开引用 1' }))
+  expect(await screen.findByText(/调用方提供的网页文本快照/)).toBeTruthy()
+  expect(screen.getByText(/选中片段/)).toBeTruthy()
+  expect(screen.getByRole('link', { name: '打开外部来源' }).getAttribute('href')).toBe('https://docs.example.com/rules')
+  expect(screen.queryByRole('link', { name: '打开原始文件' })).toBeNull()
+})
 it('reports interruption and never substitutes a demo answer', async () => {
   vi.mocked(api.answer).mockRejectedValue(new Error('连接提前结束'))
   render(<App />); await screen.findByText(/服务接口可访问/)

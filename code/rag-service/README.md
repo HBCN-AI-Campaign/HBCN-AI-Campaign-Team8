@@ -1,6 +1,6 @@
 # RAG 模块总览与运行说明
 
-协作交付入口：服务 `0.4.0` / HTTP 契约 `1.2.0`。其他模块只调用 [接口契约](API_CONTRACT.md) 与 [OpenAPI](contracts/openapi-v1.json)，无需依赖 RAG 内部类、表或模型；云端部署同事使用 [部署交接](deploy/README.md)。现有 `/query` 保持兼容，新增消费者优先对接 `/retrievals` 原文证据接口；内部优化独立发布，云端可提供模型/API/存储资源，不因现有 ECS 配置降低质量目标。
+协作交付入口：服务 `0.5.0` / HTTP 契约 `1.3.0`。其他模块只调用 [接口契约](API_CONTRACT.md) 与 [OpenAPI](contracts/openapi-v1.json)，无需依赖 RAG 内部类、表或模型；云端部署同事使用 [部署交接](deploy/README.md)。现有 `/query` 保持兼容，新增消费者优先对接 `/retrievals` 原文证据接口；内部优化独立发布，云端可提供模型/API/存储资源，不因现有 ECS 配置降低质量目标。
 
 模块边界：RAG 管理检索、证据与独立问答；主站助手和专项 Agent 负责各自最终输出。调用方按接口消费原文证据和缺口，主站负责最终用户/任务授权。模块可独立部署与更新，真实云端接线及完整业务验收仍须分别取证。
 
@@ -25,6 +25,8 @@
 第十三轮补齐普通知识文档逻辑撤回：HTTP/React 确认、hash 绑定、事务关闭向量/词法可见性、原文拒读、在途入库发布屏障，以及跨轮候选和答复返回前复核。原件保留，未实现物理删除、跨系统缓存通知或案例依赖统一传播；详见[第十三轮验证](../../docs/RAG优化第十三轮验证记录.md)。
 
 第十四轮增加解析质量报告、隔离/待复核、独立凭证逐单元原文审核与旧库授权重检；**旧 ready 缺本版报告默认排除**，升级需迁移窗口。见[质量契约](../../docs/RAG文档质量门禁契约.md)和[第十四轮验证](../../docs/RAG优化第十四轮验证记录.md)。这不是 OCR 准确率或法规业务质量验收。
+
+第十五轮增加默认关闭的网页上下文适配：独立授权的调用方提交实际文本快照，与知识库/法宝候选共同重排和核对；不代抓任意 URL，不把网页自动升格为法规依据。见[接入契约](../../docs/RAG网页上下文接入契约.md)及[第十五轮验证](../../docs/RAG优化第十五轮验证记录.md)，真实浏览器采集和主站授权接线尚未完成。
 
 ## 当前 RAG 架构
 
@@ -54,7 +56,7 @@ flowchart LR
   WITHDRAW --> DOC
   WITHDRAW --> VEC
   WITHDRAW -.阻止在途发布.-> GRAPH
-  GRAPH --> RECHECK[候选与结果返回前复核<br/>当前质量策略 / 失效依据移除 / 隐藏原答复]
+  GRAPH --> RECHECK[候选与结果返回前复核<br/>本库质量 / 网页授权、时效与正文绑定<br/>失效依据移除 / 隐藏原答复]
   API --> DOC[(PostgreSQL<br/>hbcn_rag.documents)]
   API --> VEC[(pgvector<br/>chunks_v1 · 1024维 · HNSW)]
   API --> FILES[(持久化原件目录<br/>data/originals)]
@@ -73,7 +75,11 @@ flowchart LR
   MCP --> LAW[北大法宝法规服务]
   FUSION --> POOL[跨源 RRF / 来源状态 / 缺口]
   MCP --> POOL
-  POOL -.已接接口，模型尚未部署.-> RANK[专用重排契约]
+  API -.显式快照 / 默认关闭.-> WEBAUTH[独立 reader 凭证 / 精确 scope<br/>域名、时效与处理授权]
+  WEBAUTH --> WEB[请求内网页原文快照<br/>URL、采集时间和 hash / 真实性未核实]
+  POOL --> MIX[有序结果与无序上下文共同候选<br/>网页不制造 RRF 排名]
+  WEB --> MIX
+  MIX -.已接接口，模型尚未部署.-> RANK[专用重排契约]
   RANK --> CONTEXT[可追溯原文窗口<br/>UTF-16与字节预算 / 分批及联合覆盖]
   CONTEXT --> LEGAL[用途与法规适用性门禁<br/>本案结构化条件 / 服务端复核台账 / 原文版本绑定]
   LEGAL --> GRAPH

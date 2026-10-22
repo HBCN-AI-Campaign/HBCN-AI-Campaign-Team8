@@ -24,6 +24,7 @@ from .graph_transport import GraphRun
 from .document_store import DocumentConflict
 from .document_quality import QualityReview
 from .reference_security import ReferenceForbidden, resolve_principal
+from .web_context import WebSnapshot, WebContextSource
 
 
 router = APIRouter(prefix="/api/v1")
@@ -47,7 +48,8 @@ class AnswerRequest(BaseModel):
     scope: Literal["all", "business_rules", "project_design", "law"] = "all"
     top_k: int = Field(default=5, ge=1, le=8)
     conversation: list[ConversationMessage] = Field(default_factory=list, max_length=12)
-    sources: list[Literal["knowledge_base", "pkulaw"]] = Field(default_factory=lambda: ["knowledge_base"], min_length=1, max_length=2)
+    sources: list[Literal["knowledge_base", "pkulaw", "web_context"]] = Field(default_factory=lambda: ["knowledge_base"], min_length=1, max_length=3)
+    web_context: list[WebSnapshot] = Field(default_factory=list, max_length=4)
     purpose: Literal["reference", "case_assessment"] = "reference"
     legal_context: LegalContext | None = None
 
@@ -57,6 +59,12 @@ class AnswerRequest(BaseModel):
             raise ValueError("来源不能重复")
         if "pkulaw" in self.sources and self.scope not in {"all", "law"}:
             raise ValueError("北大法宝仅用于 law/all 范围，不能扩展当前知识范围")
+        if bool(self.web_context) != ("web_context" in self.sources):
+            raise ValueError("网页上下文须显式选择来源并提交实际文本快照")
+        if sum(len(item.text.encode()) for item in self.web_context) > 160000:
+            raise ValueError("网页上下文超过 160000 UTF-8 字节预算，不能静默截断")
+        if len({(item.url, item.captured_at, item.text) for item in self.web_context}) != len(self.web_context):
+            raise ValueError("网页快照不能重复提交")
         return self
 
     @field_validator("query")
@@ -242,30 +250,32 @@ def document_source(document_id: str):
 
 
 def answer_state(payload):
-    return {**payload.model_dump(), "attempts": 0, "warnings": []}
+    return {**payload.model_dump(exclude={"web_context"}), "attempts": 0, "warnings": []}
 
 
 @router.post("/answers", response_model=AnswerResponse)
-async def answer(payload: AnswerRequest, request: Request):
-    return await graph_response(payload, request, generate_answer=True)
+async def answer(payload: AnswerRequest, request: Request, web_key: str | None = Header(default=None, alias="X-Web-Context-Key")):
+    return await graph_response(payload, request, generate_answer=True, web_key=web_key)
 
 
 @router.post("/retrievals", response_model=RetrievalResponse)
-async def enhanced_retrieval(payload: AnswerRequest, request: Request):
+async def enhanced_retrieval(payload: AnswerRequest, request: Request, web_key: str | None = Header(default=None, alias="X-Web-Context-Key")):
     """Return original evidence after query planning; never generate an answer."""
-    return await graph_response(payload, request, generate_answer=False)
+    return await graph_response(payload, request, generate_answer=False, web_key=web_key)
 
 
-async def start_graph(payload, *, generate_answer=True, stream=False):
+async def start_graph(payload, *, generate_answer=True, stream=False, web_key=None):
+    web_source = (WebContextSource(payload.web_context, scope=payload.scope, key=web_key)
+                  if payload.web_context else None)
     engine = await run_in_threadpool(postgres_engine)
-    graph = build_answer_graph(engine, generate_answer=generate_answer)
+    graph = build_answer_graph(engine, generate_answer=generate_answer, web_source=web_source)
     if not answer_slots.acquire(blocking=False):
         raise HTTPException(429, "当前检索请求较多，请稍后重试")
     return GraphRun(graph, answer_state(payload), answer_slots, stream=stream)
 
 
-async def graph_response(payload, request, *, generate_answer):
-    run = await start_graph(payload, generate_answer=generate_answer)
+async def graph_response(payload, request, *, generate_answer, web_key=None):
+    run = await start_graph(payload, generate_answer=generate_answer, web_key=web_key)
     try:
         while True:
             if await request.is_disconnected():
@@ -298,8 +308,8 @@ class GraphStreamingResponse(StreamingResponse):
 
 
 @router.post("/answers/stream")
-async def answer_stream(payload: AnswerRequest):
-    run = await start_graph(payload, stream=True)
+async def answer_stream(payload: AnswerRequest, web_key: str | None = Header(default=None, alias="X-Web-Context-Key")):
+    run = await start_graph(payload, stream=True, web_key=web_key)
 
     async def events():
         try:

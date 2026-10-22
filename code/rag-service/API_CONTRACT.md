@@ -1,6 +1,6 @@
 # RAG 独立模块接口 v1
 
-服务版本 `0.4.0`，HTTP 契约版本 `1.2.0`。调用方只依赖本文和 [OpenAPI 快照](contracts/openapi-v1.json)，不导入 `app/`、不查 RAG 表、不读取模型凭证。部署方法见 [deploy/README.md](deploy/README.md)；完整现状与优化范围见 [README](README.md)。
+服务版本 `0.5.0`，HTTP 契约版本 `1.3.0`。调用方只依赖本文和 [OpenAPI 快照](contracts/openapi-v1.json)，不导入 `app/`、不查 RAG 表、不读取模型凭证。部署方法见 [deploy/README.md](deploy/README.md)；完整现状与优化范围见 [README](README.md)。
 
 ## 接线约定
 
@@ -83,3 +83,9 @@ v1.1 新增文档 `sha256`、状态 `withdrawn` 及撤回入口；调用方需�
 新增 GET `/documents/{id}/quality`、POST `/documents/{id}/quality-review` 和 POST `/documents/{id}/quality-recheck`，除服务鉴权外要求独立 X-Document-Review-Key。默认未配置注册表时关闭，不把凭证暴露浏览器。三份 hash、单元核对、响应/错误与运维工具见[质量契约](../../docs/RAG文档质量门禁契约.md)。
 
 这是有意收紧知识可用性的质量升级：旧 ready 缺当前策略报告将不再召回，ready 增加 quality_policy_version/unverified_ready_documents 并可返回 503/degraded。需先备份/隔离预演、授权重检/必要复核、真实召回回归，不能直接覆盖版本后认为升级完成。现有 query/retrievals 请求结构保持兼容；云端迁移和主站接线另行验收。
+
+## 网页上下文（1.3，默认关闭）
+
+retrievals / answers / answers/stream 新增可选 web_context 快照数组，sources 显式支持 web_context；接口同时要求服务 Bearer 与独立 X-Web-Context-Key。仅 URL 不可，实际文本/采集时间/精确 scope/处理授权必填，严格大小与域名/时效门禁。旧请求不受影响，query 不接快照。配置、字段、状态码和调用示例见[网页上下文契约](../../docs/RAG网页上下文接入契约.md)。
+
+响应沿用 sources，并标 source_type=web_context、verification=caller_supplied_unverified；page/score/reader_url 为空，原链接可能变化，不提供虚构的持久原文接口。source_status.web_context=provided_unverified 只表示已收到获授权快照，不表示本服务已抓取、确认全文或证明事实。调用方须保留这些局限，不把网页来源包装为法规已审核。增强接口仍不生成最终业务答复。

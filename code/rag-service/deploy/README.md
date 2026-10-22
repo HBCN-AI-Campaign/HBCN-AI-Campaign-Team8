@@ -1,10 +1,10 @@
-# 汇丰云服务器部署交接：独立 RAG 0.3.1
+# 汇丰云服务器部署交接：独立 RAG 0.5.0
 
 这是供同事部署/联调的模块版本，不表示已经迁移到汇丰 ECS 或通过完整业务质量验收。模块只通过 HTTP 与主站、模型 runtime、Embedding、reranker、法宝连接；调用方接口见 [API_CONTRACT.md](../API_CONTRACT.md)，不需要随内部模型或数据库实现改代码。
 
 ## 获取协作版本
 
-协作分支为 `codex/rag-module-v0.3.0`（当前源码版本 0.4.0）；在独立干净 checkout 获取该分支，部署时固定审核过的 commit，避免直接覆盖同事正在修改的工作区。它是仓库内的协作版本，尚未合入 main。交接范围为 `code/rag-service` 及对应 RAG 规划/验证文档，不包含个人凭证、已建索引或真实资料。
+协作分支为 `codex/rag-module-v0.3.0`（当前源码版本 0.5.0）；在独立干净 checkout 获取该分支，部署时固定审核过的 commit，避免直接覆盖同事正在修改的工作区。它是仓库内的协作版本，尚未合入 main。交接范围为 `code/rag-service` 及对应 RAG 规划/验证文档，不包含个人凭证、已建索引或真实资料。
 
 ```bash
 git fetch origin codex/rag-module-v0.3.0
@@ -58,10 +58,10 @@ cd ..
 模块根目录提供多阶段 Dockerfile：构建 React UI，安装锁定的 Python 直接依赖，以非 root 运行。只复制应用、脚本、接口快照和公开目录说明，排除 .env、data、业务原件和 node_modules。镜像中不内置模型、账号、数据库、个人文件或真实知识库；这些由外部服务和受控存储提供。
 
 ```bash
-docker build -t hbcn-rag:0.3.1 .
+docker build -t hbcn-rag:0.5.0 .
 docker volume create hbcn-rag-data
 docker run --name hbcn-rag --env-file /etc/hbcn-rag/rag.env \
-  -p 127.0.0.1:8011:8011 -v hbcn-rag-data:/var/lib/hbcn-rag hbcn-rag:0.3.1
+  -p 127.0.0.1:8011:8011 -v hbcn-rag-data:/var/lib/hbcn-rag hbcn-rag:0.5.0
 ```
 
 部署方确保数据卷 UID/GID 10001 可写；覆盖 RAG_DATA_DIR 时同步挂载。示例不指定 CPU/内存限额；资源按目标质量与实测容量配置。HEALTHCHECK 仅查存活，发布仍要查就绪和真实提问。当前 Windows 开发机无 Docker，**本轮没有验证 Linux 镜像构建和云端运行**；Dockerfile/原生模板均需部署同事在目标环境验证，不能把模板存在视为部署成功。
@@ -88,3 +88,9 @@ docker run --name hbcn-rag --env-file /etc/hbcn-rag/rag.env \
 新增 RAG_DOCUMENT_REVIEW_PRINCIPALS_FILE 默认为空；部署同事配置受控注册表、精确业务 scope、reviewer 角色、有效期与高熵独立凭证。只把 key SHA256 存服务端文件，原 key 仅给受控审核方，禁止前端持有。HTTP 复核工具不导入内部类，默认读取而非审批。没有新增数据库列；报告保存在已有 JSONB。重检可能产生 OCR/Embedding 费用，仍按单实例进程内队列运行，多实例持久队列/租约尚未完成。
 
 回滚必须同时保留质量和撤回门禁；0.3.x 忽略质量报告，不能无条件回滚后开放读取。使用兼容修复版或停读、恢复经批准的一致快照并复验，不能重新公开已撤回/待核验资料。Docker/Linux/云端实际运行、备份恢复及负载验收仍由部署环境取证，不因本机构建成功标记完成。
+
+## 0.5.0 / 契约 1.3 网页快照接线
+
+默认不启用，无数据库 DDL。按[网页上下文契约](../../../docs/RAG网页上下文接入契约.md)提供独立主体注册表、精确域名和时效，后端调用方使用自己的采集/用户授权流程，逐请求传实际文本及允许模型处理声明。key 不能进浏览器，不能把页面 URL 直接当抓取器入口。模型/重排数据流继续由部署方按授权配置，不自动降模型或放松质量门槛。
+
+验收需真实采集页面→可信后端授权→RAG JSON/SSE→原文定位与来源警示，并测处理中撤权、超时、跨语言/冲突、费用和云负载。源码合成测试不能替代此链；保留 0.4 的质量迁移和撤回回滚约束。本轮不重启共享服务、不开启真实网页功能，已有主站适配层由对应同事按 HTTP 契约接线。
