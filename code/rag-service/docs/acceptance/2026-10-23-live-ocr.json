@@ -1,0 +1,53 @@
+{
+  "passed": true,
+  "service": "0.5.1",
+  "contract": "1.3.1",
+  "fixture": "synthetic two-page scanned PDF",
+  "document_id": "49a8f95c-1357-4516-86ed-b4e1b15ebe0e",
+  "ocr_seconds": 47.28,
+  "checks": {
+    "scanned_ocr_not_published": true,
+    "ocr_exact_two_page_text": true,
+    "visible_text_matches_source": true,
+    "original_pdf_matches_version": true,
+    "unchecked_approval_disabled": true,
+    "partial_approval_disabled": true,
+    "approved_202": true,
+    "ready_and_approval_audited": true,
+    "real_vector_retrieval": true,
+    "original_two_page_locator": true,
+    "real_agentic_evidence": true,
+    "fixture_withdrawn": true,
+    "withdrawn_source_unreadable": true,
+    "withdrawn_not_retrieved": true,
+    "docs_available": true
+  },
+  "timings": {
+    "approval_to_ready_seconds": 57.016,
+    "vector_query_seconds": 14.769,
+    "agentic_retrieval_seconds": 120.98
+  },
+  "last_state": {
+    "state": "ready",
+    "stage": "ready",
+    "chunks": 2
+  },
+  "chunk_count": 2,
+  "vector": {
+    "http_status": 200,
+    "sources": 2
+  },
+  "enhanced": {
+    "http_status": 200,
+    "stop_reason": "sufficient",
+    "evidence_status": "sufficient",
+    "sources": 2,
+    "warnings": [],
+    "missing": []
+  },
+  "readiness": {
+    "http_status": 200,
+    "status": "ready",
+    "sdk_runtime": "ready"
+  }
+}

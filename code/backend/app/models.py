@@ -21,6 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
+from .assistant_timestamps import AssistantUTCDateTime
 
 
 def _now() -> dt.datetime:
@@ -45,6 +46,39 @@ class User(Base):
     role: Mapped[Role] = mapped_column(Enum(Role), default=Role.REVIEWER)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)
+
+
+# ============================================================
+# AI 助手会话（用户级隔离，供流式助手与审计使用）
+# ============================================================
+class AssistantSession(Base):
+    __tablename__ = "assistant_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(128), default="新会话")
+    task_code: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    created_at: Mapped[dt.datetime] = mapped_column(AssistantUTCDateTime(), default=_now)
+    updated_at: Mapped[dt.datetime] = mapped_column(AssistantUTCDateTime(), default=_now, onupdate=_now)
+
+    messages: Mapped[list["AssistantMessage"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan", order_by="AssistantMessage.id"
+    )
+
+
+class AssistantMessage(Base):
+    __tablename__ = "assistant_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_id: Mapped[int] = mapped_column(ForeignKey("assistant_sessions.id"), index=True)
+    role: Mapped[str] = mapped_column(String(16))  # user / assistant
+    content: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(16), default="completed")
+    steps: Mapped[list] = mapped_column(JSON, default=list)
+    citations: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[dt.datetime] = mapped_column(AssistantUTCDateTime(), default=_now)
+
+    session: Mapped["AssistantSession"] = relationship(back_populates="messages")
 
 
 # ============================================================

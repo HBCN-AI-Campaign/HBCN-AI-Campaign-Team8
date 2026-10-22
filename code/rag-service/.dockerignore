@@ -1,0 +1,16 @@
+.env
+*.env
+!*.env.example
+.venv
+**/__pycache__
+**/*.pyc
+data
+*.sqlite3
+ui/node_modules
+app/static/ui-build
+knowledge-base/docs
+knowledge-base/manifest.json
+evaluation
+tests
+.git
+*.log

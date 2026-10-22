@@ -1,0 +1,23 @@
+flowchart TB
+  U[经办人 / 审核人员] --> WEB[React 主站与 JWT]
+  WEB --> W[业务审核页]
+  WEB --> C[独立慧眼助手]
+  W --> B[FastAPI：任务授权与编排]
+  C --> A[FastAPI：助手会话]
+  B --> P[解析 / OCR]
+  B --> R[确定性规则]
+  B --> S[专项 / 汇总 Agent]
+  S --> AI[共享 AI 能力适配：拟议]
+  A --> AI
+  AI --> K[RAG：证据检索]
+  AI --> SDK[OpenCode runtime：模型能力]
+  S --> EXT[验真 / 名单 / 汇率等专项工具]
+  K --> LAW[法规 MCP]
+  K --> KB[(共享知识与来源)]
+  B --> DB[(任务快照 / run / 结果 / 人工处置)]
+  A --> CHAT[(私有聊天 / 引用 / 会话)]
+  SDK --> LLM[汇丰授权模型]
+  DB --> E[真实业务事件与引用]
+  E --> W
+  E -->|经权限校验的上下文| A
+  H[有权限的审核人] -->|明确处置 / 终审操作| B

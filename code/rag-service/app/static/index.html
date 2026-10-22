@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light" />
+  <title>HBCN 知识库工作台</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #202b29;
+      --muted: #687572;
+      --subtle: #8b9693;
+      --line: #dfe6e2;
+      --surface: #fff;
+      --canvas: #f4f7f5;
+      --green: #087a58;
+      --green-dark: #075d45;
+      --green-soft: #e8f4ef;
+      --mint: #f1f8f4;
+      --orange: #a44d22;
+      --orange-soft: #fff3e9;
+      --red: #b33b36;
+      --red-soft: #fff0ef;
+      --shadow: 0 1px 2px rgb(25 52 42 / 5%), 0 12px 34px rgb(25 52 42 / 4%);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; background: var(--canvas); color: var(--ink); font: 14px/1.5 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid rgb(8 122 88 / 25%); outline-offset: 2px; }
+    .shell { display: grid; grid-template-columns: 228px minmax(0, 1fr); min-height: 100vh; }
+    .sidebar { display: flex; flex-direction: column; border-right: 1px solid var(--line); background: #fbfcfb; padding: 22px 14px 16px; }
+    .brand { display: flex; align-items: center; gap: 11px; padding: 4px 9px 27px; }
+    .brand-mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: var(--green); color: white; font-weight: 750; font-size: 14px; }
+    .brand-copy { min-width: 0; }
+    .brand-name { font-weight: 700; font-size: 14px; }
+    .brand-caption { color: var(--muted); font-size: 11px; }
+    .nav-label { padding: 0 10px; color: var(--subtle); font-size: 11px; font-weight: 700; text-transform: uppercase; }
+    .nav { display: grid; gap: 4px; margin-top: 8px; }
+    .nav button { display: flex; align-items: center; gap: 10px; min-height: 40px; width: 100%; border: 0; border-radius: 6px; padding: 0 11px; background: transparent; color: #52605c; text-align: left; }
+    .nav button:hover { background: #edf3ef; color: var(--ink); }
+    .nav button.active { background: var(--green-soft); color: var(--green-dark); font-weight: 650; }
+    .nav-icon { display: inline-grid; place-items: center; width: 18px; color: currentColor; font-size: 16px; }
+    .sidebar-spacer { flex: 1; min-height: 32px; }
+    .connection { display: grid; grid-template-columns: 9px 1fr auto; align-items: center; gap: 8px; border-top: 1px solid var(--line); padding: 15px 9px 12px; color: var(--muted); font-size: 12px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #9ba7a3; }
+    .dot.online { background: #16936b; box-shadow: 0 0 0 3px #e0f2ea; }
+    .connection-value { color: var(--subtle); }
+    .settings-button { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 38px; border: 0; border-radius: 6px; padding: 0 10px; background: transparent; color: #52605c; text-align: left; }
+    .settings-button:hover { background: #edf3ef; }
+    .main { min-width: 0; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; min-height: 60px; padding: 0 34px; border-bottom: 1px solid var(--line); background: rgb(255 255 255 / 86%); }
+    .breadcrumb { color: var(--muted); font-size: 12px; }
+    .top-actions { display: flex; align-items: center; gap: 10px; }
+    .workarea { width: min(1160px, 100%); margin: 0 auto; padding: 32px 34px 64px; }
+    .page-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 24px; }
+    .eyebrow { margin-bottom: 5px; color: var(--green); font-size: 11px; font-weight: 700; }
+    h1 { margin: 0; font-size: 24px; line-height: 1.25; font-weight: 700; }
+    .subtitle { margin: 7px 0 0; color: var(--muted); font-size: 13px; }
+    .button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 36px; border: 1px solid var(--line); border-radius: 6px; padding: 0 13px; background: var(--surface); color: var(--ink); font-weight: 600; white-space: nowrap; }
+    .button:hover { background: #f7faf8; border-color: #b9c9c1; }
+    .button.primary { border-color: var(--green); background: var(--green); color: #fff; }
+    .button.primary:hover { background: var(--green-dark); }
+    .button:disabled { cursor: not-allowed; opacity: .55; }
+    .tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--line); margin-bottom: 22px; }
+    .tab { position: relative; border: 0; background: none; padding: 0 1px 12px; color: var(--muted); font-size: 13px; font-weight: 600; }
+    .tab.active { color: var(--green-dark); }
+    .tab.active::after { position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; background: var(--green); content: ""; }
+    .toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+    .scope-switch { display: inline-flex; flex-wrap: wrap; gap: 3px; border: 1px solid var(--line); border-radius: 7px; padding: 3px; background: #edf2ef; }
+    .scope-switch button { border: 0; border-radius: 4px; padding: 6px 11px; background: transparent; color: var(--muted); font-size: 12px; }
+    .scope-switch button.active { background: white; color: var(--ink); box-shadow: 0 1px 3px rgb(25 52 42 / 12%); font-weight: 650; }
+    .toolbar-right { display: flex; align-items: center; gap: 8px; }
+    .search-input, .select, .query-input, .token-input { min-height: 36px; border: 1px solid var(--line); border-radius: 6px; padding: 0 10px; background: white; color: var(--ink); }
+    .search-input { width: 230px; }
+    .select { min-width: 155px; }
+    .dropzone { display: flex; justify-content: space-between; align-items: center; gap: 18px; min-height: 90px; border: 1px dashed #b7c9bf; border-radius: 7px; padding: 17px 20px; background: #f9fcfa; transition: background .15s, border-color .15s; }
+    .dropzone.drag { border-color: var(--green); background: var(--green-soft); }
+    .drop-copy { display: flex; align-items: center; gap: 13px; min-width: 0; }
+    .upload-icon { display: grid; flex: 0 0 38px; place-items: center; height: 38px; border-radius: 7px; background: var(--green-soft); color: var(--green-dark); font-size: 19px; }
+    .drop-title { font-weight: 650; }
+    .drop-hint { margin-top: 2px; color: var(--muted); font-size: 12px; }
+    .queue { display: grid; gap: 7px; margin-top: 10px; }
+    .queue-item { display: flex; justify-content: space-between; align-items: center; gap: 12px; border: 1px solid var(--line); border-radius: 6px; padding: 8px 11px; background: white; font-size: 12px; }
+    .queue-item.error { border-color: #f0c6c1; background: var(--red-soft); color: var(--red); }
+    .queue-item.done { color: var(--green-dark); }
+    .message { min-height: 20px; margin: 8px 0; color: var(--muted); font-size: 12px; }
+    .message.error { color: var(--red); }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); box-shadow: var(--shadow); }
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+    th { height: 40px; border-bottom: 1px solid var(--line); padding: 0 15px; background: #f8faf9; color: var(--muted); font-size: 11px; font-weight: 650; white-space: nowrap; }
+    td { height: 56px; border-bottom: 1px solid #edf1ef; padding: 8px 15px; font-size: 12px; }
+    tr:last-child td { border-bottom: 0; }
+    .file-name { display: flex; align-items: center; gap: 10px; min-width: 230px; color: var(--ink); font-weight: 600; }
+    .file-type { display: grid; flex: 0 0 29px; place-items: center; height: 31px; border: 1px solid var(--line); border-radius: 5px; background: #f7faf8; color: var(--muted); font-size: 9px; font-weight: 700; text-transform: uppercase; }
+    .scope-label { color: #52605c; }
+    .status-label { display: inline-flex; align-items: center; gap: 6px; color: var(--green-dark); white-space: nowrap; }
+    .status-label.pending { color: var(--orange); }
+    .status-label.failed { color: var(--red); }
+    .empty { padding: 30px 14px; color: var(--muted); text-align: center; }
+    .stats { display: flex; align-items: center; gap: 16px; color: var(--muted); font-size: 12px; }
+    .stats strong { color: var(--ink); font-weight: 650; }
+    .query-panel { max-width: 860px; }
+    .query-form { display: grid; grid-template-columns: minmax(0, 1fr) 150px 95px auto; align-items: end; gap: 10px; padding: 17px; border: 1px solid var(--line); border-radius: 7px; background: white; box-shadow: var(--shadow); }
+    .field { display: grid; gap: 6px; min-width: 0; }
+    .field label { color: var(--muted); font-size: 11px; font-weight: 650; }
+    .query-input { width: 100%; }
+    .query-input:focus, .search-input:focus, .select:focus { border-color: var(--green); outline: 2px solid rgb(8 122 88 / 12%); }
+    .results-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 22px 0 10px; }
+    .results-head h2 { margin: 0; font-size: 14px; }
+    .result-count { color: var(--muted); font-size: 12px; }
+    .result-list { display: grid; gap: 9px; }
+    .result { border: 1px solid var(--line); border-radius: 7px; padding: 14px 16px; background: white; box-shadow: 0 1px 2px rgb(25 52 42 / 4%); }
+    .result-top { display: flex; justify-content: space-between; gap: 14px; margin-bottom: 9px; }
+    .result-source { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 650; }
+    .result-source span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .relevance { flex: 0 0 auto; color: var(--green-dark); font-size: 11px; font-weight: 650; }
+    .result-content { color: #34413d; font-size: 13px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .result-meta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; color: var(--muted); font-size: 11px; }
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #cde3d8; border-top-color: var(--green); border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -3px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    dialog { width: min(440px, calc(100vw - 28px)); border: 1px solid var(--line); border-radius: 8px; padding: 22px; color: var(--ink); box-shadow: 0 18px 70px rgb(12 37 27 / 22%); }
+    dialog::backdrop { background: rgb(22 36 31 / 38%); }
+    dialog h2 { margin: 0 0 7px; font-size: 17px; }
+    dialog p { margin: 0 0 16px; color: var(--muted); font-size: 12px; }
+    .token-input { width: 100%; }
+    .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+    .lock-screen { display: none; position: fixed; inset: 0; z-index: 5; place-items: center; padding: 20px; background: rgb(244 247 245 / 86%); backdrop-filter: blur(3px); }
+    .lock-screen.show { display: grid; }
+    .lock-card { width: min(400px, 100%); border: 1px solid var(--line); border-radius: 8px; padding: 24px; background: white; box-shadow: var(--shadow); }
+    .lock-card h2 { margin: 0; font-size: 18px; }
+    .lock-card p { margin: 7px 0 17px; color: var(--muted); font-size: 12px; }
+    .lock-card .token-input { margin-bottom: 10px; }
+    @media (max-width: 850px) {
+      .shell { grid-template-columns: 66px minmax(0, 1fr); }
+      .sidebar { padding: 16px 8px; }
+      .brand { justify-content: center; padding: 3px 0 22px; }
+      .brand-copy, .nav-label, .nav-text, .connection span:not(.dot), .settings-text { display: none; }
+      .nav button, .settings-button { justify-content: center; padding: 0; }
+      .connection { display: flex; justify-content: center; padding: 15px 0; }
+      .topbar { padding: 0 20px; }
+      .workarea { padding: 25px 20px 48px; }
+    }
+    @media (max-width: 600px) {
+      .shell { display: block; padding-bottom: 58px; }
+      .sidebar { position: fixed; z-index: 4; right: 0; bottom: 0; left: 0; display: flex; flex-direction: row; justify-content: space-around; height: 58px; border-top: 1px solid var(--line); border-right: 0; padding: 5px 12px; background: white; }
+      .brand, .sidebar-spacer, .connection, .settings-button { display: none; }
+      .nav { display: flex; width: 100%; justify-content: space-around; margin: 0; }
+      .nav button { display: grid; justify-items: center; align-content: center; gap: 1px; min-width: 105px; min-height: 48px; }
+      .nav-text { display: block; font-size: 10px; }
+      .nav-icon { font-size: 15px; }
+      .topbar { min-height: 48px; padding: 0 15px; }
+      .workarea { padding: 22px 14px 38px; }
+      .page-heading { align-items: flex-start; margin-bottom: 20px; }
+      h1 { font-size: 21px; }
+      .dropzone { align-items: flex-start; flex-direction: column; }
+      .toolbar { align-items: flex-start; flex-direction: column; }
+      .toolbar-right { width: 100%; }
+      .search-input { flex: 1; width: 100%; min-width: 0; }
+      .query-form { grid-template-columns: 1fr 1fr; }
+      .query-form .field:first-child { grid-column: 1 / -1; }
+      .query-form .button { grid-column: 1 / -1; }
+      .tabs { gap: 20px; }
+      th, td { padding-right: 11px; padding-left: 11px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">H</div><div class="brand-copy"><div class="brand-name">HBCN 知识库</div><div class="brand-caption">Team 8 · RAG Service</div></div></div>
+      <div class="nav-label">工作区</div>
+      <nav class="nav" aria-label="主导航">
+        <button id="nav-docs" class="active" type="button" onclick="showView('documents')"><span class="nav-icon" aria-hidden="true">▤</span><span class="nav-text">知识文档</span></button>
+        <button id="nav-search" type="button" onclick="showView('search')"><span class="nav-icon" aria-hidden="true">⌕</span><span class="nav-text">检索测试</span></button>
+      </nav>
+      <div class="sidebar-spacer"></div>
+      <div class="connection"><span id="connection-dot" class="dot"></span><span id="connection-text">正在连接服务</span><span id="engine-name" class="connection-value"></span></div>
+      <button class="settings-button" type="button" onclick="openCredentials()"><span class="nav-icon" aria-hidden="true">⚙</span><span class="settings-text">服务凭据</span></button>
+    </aside>
+
+    <main class="main">
+      <header class="topbar"><div class="breadcrumb">工作区 <span aria-hidden="true">/</span> 知识库</div><div class="top-actions"><button class="button" type="button" onclick="openCredentials()">服务设置</button></div></header>
+      <div class="workarea">
+        <section id="documents-view">
+          <div class="page-heading"><div><div class="eyebrow">KNOWLEDGE BASE</div><h1>业务知识库</h1><p class="subtitle">管理审核规则与项目资料，并查看索引状态。</p></div><div class="stats"><span><strong id="doc-count">—</strong> 份资料</span></div></div>
+          <div class="tabs" role="tablist"><button class="tab active" role="tab" aria-selected="true">文档管理</button><button class="tab" role="tab" aria-selected="false" onclick="showView('search')">检索测试</button></div>
+          <div class="toolbar">
+            <div class="scope-switch" role="group" aria-label="知识范围">
+              <button class="active" type="button" data-scope="all" onclick="setScope('all',this)">全部</button>
+              <button type="button" data-scope="business_rules" onclick="setScope('business_rules',this)">业务规则</button>
+              <button type="button" data-scope="project_design" onclick="setScope('project_design',this)">项目设计</button>
+            </div>
+            <div class="toolbar-right"><input id="doc-filter" class="search-input" type="search" placeholder="筛选文件名" aria-label="筛选文件名" /><button class="button" type="button" onclick="loadDocuments()" title="刷新文档列表">刷新</button></div>
+          </div>
+          <div class="dropzone" id="dropzone">
+            <div class="drop-copy"><div class="upload-icon" aria-hidden="true">↑</div><div><div class="drop-title">导入资料</div><div class="drop-hint">拖放文件到这里，或选择多个文件；单个文件最大 50 MB。</div></div></div>
+            <button class="button primary" id="choose-files" type="button" onclick="document.getElementById('file-input').click()">选择文件</button>
+          </div>
+          <input id="file-input" type="file" multiple hidden />
+          <div id="upload-queue" class="queue" aria-live="polite"></div>
+          <div id="docs-message" class="message" aria-live="polite"></div>
+          <div class="table-wrap"><table><thead><tr><th>文档</th><th>知识范围</th><th>索引片段</th><th>状态</th></tr></thead><tbody id="docs-body"><tr><td colspan="4" class="empty">正在读取文档列表…</td></tr></tbody></table></div>
+        </section>
+
+        <section id="search-view" hidden>
+          <div class="page-heading"><div><div class="eyebrow">RETRIEVAL PLAYGROUND</div><h1>检索测试</h1><p class="subtitle">直接检查知识库召回的原文证据；本页不生成审核结论。</p></div></div>
+          <div class="tabs" role="tablist"><button class="tab" role="tab" aria-selected="false" onclick="showView('documents')">文档管理</button><button class="tab active" role="tab" aria-selected="true">检索测试</button></div>
+          <div class="query-panel">
+            <form id="query-form" class="query-form">
+              <div class="field"><label for="query">测试问题</label><input id="query" class="query-input" type="search" placeholder="例如：贷款用途证明材料有哪些要求？" autocomplete="off" required /></div>
+              <div class="field"><label for="query-scope">知识范围</label><select id="query-scope" class="select"><option value="all">全部知识库</option><option value="business_rules">业务规则</option><option value="project_design">项目设计</option></select></div>
+              <div class="field"><label for="top-k">返回条数</label><input id="top-k" class="query-input" type="number" value="5" min="1" max="20" /></div>
+              <button id="search-button" class="button primary" type="submit">开始检索</button>
+            </form>
+            <div id="query-message" class="message" aria-live="polite"></div>
+            <div class="results-head"><h2>召回证据</h2><span id="result-count" class="result-count">等待检索</span></div>
+            <div id="results" class="result-list"><div class="empty">输入问题后运行检索，结果会显示来源片段与相关度。</div></div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="credentials-dialog">
+    <form method="dialog" id="credentials-form">
+      <h2>连接知识库服务</h2>
+      <p>输入本机 RAG 服务凭据。凭据只保存在当前浏览器标签页会话中，不会嵌入页面源码。</p>
+      <label class="field" for="service-token"><span>服务 Token</span><input id="service-token" class="token-input" type="password" autocomplete="current-password" required /></label>
+      <div id="credentials-error" class="message error" aria-live="polite"></div>
+      <div class="dialog-actions"><button class="button" type="button" onclick="closeCredentials()">取消</button><button class="button primary" type="submit">连接</button></div>
+    </form>
+  </dialog>
+  <div id="lock-screen" class="lock-screen"><div class="lock-card"><h2>连接知识库服务</h2><p>输入本机 RAG 服务 Token 后查看资料与检索结果。</p><form id="unlock-form"><input id="unlock-token" class="token-input" type="password" autocomplete="current-password" placeholder="服务 Token" required /><button class="button primary" type="submit">连接</button></form></div></div>
+
+  <script>
+    const TOKEN_KEY = 'hbcn_rag_service_token';
+    const scopeLabels = { business_rules: '业务规则', project_design: '项目设计' };
+    let token = sessionStorage.getItem(TOKEN_KEY) || '';
+    let activeScope = 'all';
+
+    async function api(path, options = {}) {
+      const headers = new Headers(options.headers || {});
+      if (token) headers.set('Authorization', `Bearer ${token}`);
+      const response = await fetch(path, { ...options, headers });
+      const body = await response.text();
+      let data;
+      try { data = JSON.parse(body); } catch { data = { detail: body }; }
+      if (response.status === 401) {
+        sessionStorage.removeItem(TOKEN_KEY);
+        token = '';
+        setLocked(true);
+      }
+      if (!response.ok) throw new Error(data.detail || data.message || `HTTP ${response.status}`);
+      return data;
+    }
+
+    function showView(name) {
+      const documents = name === 'documents';
+      document.getElementById('documents-view').hidden = !documents;
+      document.getElementById('search-view').hidden = documents;
+      document.getElementById('nav-docs').classList.toggle('active', documents);
+      document.getElementById('nav-search').classList.toggle('active', !documents);
+      if (!documents) document.getElementById('query').focus();
+    }
+
+    function setScope(scope, button) {
+      activeScope = scope;
+      document.querySelectorAll('.scope-switch button').forEach(item => item.classList.toggle('active', item === button));
+      loadDocuments();
+    }
+
+    function setLocked(locked) {
+      document.getElementById('lock-screen').classList.toggle('show', locked);
+      if (locked) document.getElementById('unlock-token').focus();
+    }
+
+    function openCredentials() {
+      document.getElementById('service-token').value = token;
+      document.getElementById('credentials-dialog').showModal();
+      document.getElementById('service-token').focus();
+    }
+
+    function closeCredentials() {
+      document.getElementById('credentials-dialog').close();
+    }
+
+    async function connect(value) {
+      token = value.trim();
+      try {
+        await api('/api/v1/capabilities');
+        sessionStorage.setItem(TOKEN_KEY, token);
+        setLocked(false);
+        document.getElementById('credentials-error').textContent = '';
+        closeCredentials();
+        await refreshWorkspace();
+      } catch (error) {
+        token = '';
+        document.getElementById('credentials-error').textContent = `连接失败：${error.message}`;
+        document.getElementById('unlock-token').setCustomValidity('Token 无效或服务不可用');
+      }
+    }
+
+    async function refreshWorkspace() {
+      try {
+        const data = await api('/api/v1/capabilities');
+        const ready = Boolean(data.retrieval);
+        document.getElementById('connection-dot').classList.toggle('online', ready);
+        document.getElementById('connection-text').textContent = ready ? '服务已连接' : '引擎未就绪';
+        document.getElementById('engine-name').textContent = data.engine || '';
+        await loadDocuments();
+      } catch (error) {
+        setMessage('docs-message', error.message, true);
+      }
+    }
+
+    async function loadDocuments() {
+      const body = document.getElementById('docs-body');
+      const message = document.getElementById('docs-message');
+      message.textContent = '';
+      try {
+        const data = await api('/api/v1/documents');
+        const docs = (data.documents || []).filter(doc => activeScope === 'all' || doc.scope === activeScope);
+        const needle = document.getElementById('doc-filter').value.trim().toLocaleLowerCase();
+        const filtered = docs.filter(doc => String(doc.name || '').toLocaleLowerCase().includes(needle));
+        document.getElementById('doc-count').textContent = String(docs.length);
+        if (!filtered.length) {
+          body.innerHTML = `<tr><td colspan="4" class="empty">${docs.length ? '没有匹配的文件' : '当前范围还没有资料'}</td></tr>`;
+          return;
+        }
+        body.innerHTML = filtered.map(doc => {
+          const status = statusInfo(doc);
+          const extension = (String(doc.name || '').split('.').pop() || 'FILE').slice(0, 5);
+          return `<tr><td><div class="file-name"><span class="file-type">${escapeHtml(extension)}</span><span>${escapeHtml(doc.name || '未命名文件')}</span></div></td><td><span class="scope-label">${escapeHtml(scopeLabels[doc.scope] || doc.scope || '未分类')}</span></td><td>${doc.chunk_count == null ? '—' : escapeHtml(doc.chunk_count)}</td><td><span class="status-label ${status.className}"><span aria-hidden="true">${status.icon}</span>${status.label}</span></td></tr>`;
+        }).join('');
+      } catch (error) {
+        body.innerHTML = `<tr><td colspan="4" class="empty">${escapeHtml(error.message)}</td></tr>`;
+      }
+    }
+
+    function statusInfo(doc) {
+      const run = String(doc.run || '').toUpperCase();
+      if (run === '4' || run === 'FAIL' || run === 'FAILED') return { label: '解析失败', className: 'failed', icon: '!' };
+      if (run && !['3', 'DONE', 'COMPLETED'].includes(run)) return { label: '处理中', className: 'pending', icon: '…' };
+      return { label: '可检索', className: '', icon: '✓' };
+    }
+
+    async function runQuery(event) {
+      event.preventDefault();
+      const query = document.getElementById('query').value.trim();
+      const message = document.getElementById('query-message');
+      const results = document.getElementById('results');
+      const button = document.getElementById('search-button');
+      if (!query) return;
+      button.disabled = true;
+      message.className = 'message';
+      message.innerHTML = '<span class="spinner" aria-hidden="true"></span> 正在检索';
+      results.innerHTML = '';
+      document.getElementById('result-count').textContent = '查询中';
+      try {
+        const data = await api('/api/v1/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, scope: document.getElementById('query-scope').value, top_k: Number(document.getElementById('top-k').value) }),
+        });
+        const evidence = data.evidence || [];
+        document.getElementById('result-count').textContent = `${evidence.length} 条证据`;
+        message.textContent = evidence.length ? '以下为检索片段，最终业务判断应以原始资料和规则引擎为准。' : ((data.warnings || [])[0] || '未召回证据');
+        if (!evidence.length) {
+          results.innerHTML = '<div class="empty">没有召回相关证据。试试更具体的业务词，或确认该范围已导入资料。</div>';
+          return;
+        }
+        results.innerHTML = evidence.map(item => {
+          const score = item.score == null ? '—' : `${Math.round(Number(item.score) * 100)}%`;
+          const page = item.page == null ? '' : `第 ${escapeHtml(item.page)} 页`;
+          return `<article class="result"><div class="result-top"><div class="result-source"><span class="file-type">DOC</span><span>${escapeHtml(item.document_name || '未知来源')}</span></div><span class="relevance">相关度 ${escapeHtml(score)}</span></div><div class="result-content">${escapeHtml(item.content || '')}</div><div class="result-meta"><span>${escapeHtml(scopeLabels[item.metadata?.knowledge_scope] || item.scope || '')}</span>${page ? `<span>${page}</span>` : ''}</div></article>`;
+        }).join('');
+      } catch (error) {
+        message.className = 'message error';
+        message.textContent = `检索失败：${error.message}`;
+        document.getElementById('result-count').textContent = '失败';
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    async function uploadFiles(files) {
+      const queue = document.getElementById('upload-queue');
+      const chosen = Array.from(files || []);
+      if (!chosen.length) return;
+      queue.innerHTML = '';
+      for (const file of chosen) {
+        const row = document.createElement('div');
+        row.className = 'queue-item';
+        row.innerHTML = `<span>${escapeHtml(file.name)}</span><span><span class="spinner" aria-hidden="true"></span> 入库中</span>`;
+        queue.appendChild(row);
+        try {
+          const form = new FormData();
+          form.append('scope', activeScope === 'project_design' ? activeScope : 'business_rules');
+          form.append('file', file);
+          await api('/api/v1/documents', { method: 'POST', body: form });
+          row.className = 'queue-item done';
+          row.innerHTML = `<span>${escapeHtml(file.name)}</span><span>已入库</span>`;
+        } catch (error) {
+          row.className = 'queue-item error';
+          row.innerHTML = `<span>${escapeHtml(file.name)}</span><span>${escapeHtml(error.message)}</span>`;
+        }
+      }
+      document.getElementById('file-input').value = '';
+      await loadDocuments();
+    }
+
+    function setMessage(id, text, error = false) {
+      const element = document.getElementById(id);
+      element.textContent = text;
+      element.classList.toggle('error', error);
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+    }
+
+    document.getElementById('query-form').addEventListener('submit', runQuery);
+    document.getElementById('doc-filter').addEventListener('input', loadDocuments);
+    document.getElementById('file-input').addEventListener('change', event => uploadFiles(event.target.files));
+    document.getElementById('credentials-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      await connect(document.getElementById('service-token').value);
+    });
+    document.getElementById('unlock-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      await connect(document.getElementById('unlock-token').value);
+    });
+
+    const dropzone = document.getElementById('dropzone');
+    ['dragenter', 'dragover'].forEach(type => dropzone.addEventListener(type, event => { event.preventDefault(); dropzone.classList.add('drag'); }));
+    ['dragleave', 'drop'].forEach(type => dropzone.addEventListener(type, event => { event.preventDefault(); dropzone.classList.remove('drag'); }));
+    dropzone.addEventListener('drop', event => uploadFiles(event.dataTransfer.files));
+
+    if (token) refreshWorkspace();
+    else setLocked(true);
+  </script>
+</body>
+</html>

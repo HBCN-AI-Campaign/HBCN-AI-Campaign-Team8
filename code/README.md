@@ -1,5 +1,7 @@
 # 境外贷款单据智能审核平台
 
+全组协作入口：[架构接线总览](../docs/integration/README.md) · [详细接口与时序](../docs/integration/接口与时序.md) · [实名分工与验收](../docs/integration/分工与验收.md)。包含现状/目标区别，不能把规划接口当已上线能力。
+
 > HBCN AI Campaign · Team 8
 > 前后端一体 POC：**数据库 → 解析 Agent → 规则引擎 → 专项审核 Agent → API → 前端**
 
@@ -7,6 +9,8 @@
 审核人员触发核对：**规则引擎**完成可硬核对的确定性检查，**专项审核 Agent**
 承接需外部能力的检查（节假日、汇率、提单验真、制裁名单、法规检索等），
 最终给出通过 / 不通过 / 需人工处置的结论。
+
+自有前端已统一为 React；慧眼助手从顶栏或 `/assistant` 进入，直接使用 Ant Design X 聊天组件，通过 OpenCode runtime 调用汇丰模型 API。任务接入、SSE 契约、环境配置及联调结果见 [助手接入文档](../docs/ai-assistant/README.md) 和 [React 前端说明](frontend/README.md)。审核最终结论须由有权限人员确认。
 
 ---
 

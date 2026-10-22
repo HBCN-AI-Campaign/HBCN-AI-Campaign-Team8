@@ -1,0 +1,18 @@
+flowchart TB
+  USER["主站助手请求"] --> AUTH["主站 JWT / 会话 / 任务权限校验"]
+  AUTH --> LOCAL["授权任务字段与规则结果<br/>保留在主站，不上传共享知识库"]
+  AUTH --> CLIENT["RAGClient.retrieve<br/>服务端 Bearer / 300 秒客户端超时"]
+  CLIENT --> RAG["独立 RAG POST /api/v1/retrievals<br/>knowledge_base / reference<br/>规划、召回、有限补查；不生成最终答案<br/>混合检索按配置和回填状态启用"]
+  RAG --> VALID["主站校验 v1 响应<br/>原文与充分性必需字段 / 容忍新增字段"]
+  VALID --> DATA["原文证据 + 检索状态<br/>具体缺口、澄清问题、停止原因与来源状态"]
+  CLIENT -. "连接或响应异常" .-> LIMIT["保留本地证据 / 标明共享知识不可用"]
+  VALID -. "格式异常或充分但无原文" .-> LIMIT
+  DATA --> POLICY["检索状态作为数据传给模型<br/>不足需说明 / 需澄清则优先补问<br/>充分不等于本案适用或审批通过"]
+  LIMIT --> POLICY
+  DATA --> TOOL["read_authorized_evidence<br/>提供本次已授权原文"]
+  LOCAL --> TOOL
+  TOOL --> MODEL["既有 OpenCode runtime<br/>主站生成审核辅助答复"]
+  POLICY --> MODEL
+  POLICY --> TRACE["不足或异常时展示执行提示"]
+  MODEL --> UI["主站 SSE / 会话历史<br/>真实模型与云端全链路仍待验收"]
+  TRACE --> UI

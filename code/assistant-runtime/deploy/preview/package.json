@@ -1,0 +1,11 @@
+{
+  "name": "hbcn-assistant-preview-acceptance",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:live": "node browser-acceptance.mjs --live"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}

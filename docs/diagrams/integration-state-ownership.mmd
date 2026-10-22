@@ -1,0 +1,25 @@
+flowchart TB
+  subgraph TASK[主后端拥有：任务状态]
+    C[created] --> R[reviewing]
+    R -->|审核人退回| N[need_supplement]
+    N -->|经办人补件| S[supplemented]
+    S -->|审核人重新核对| R
+    R -->|终审门禁通过与人工确认| D[completed]
+  end
+  subgraph RUN[目标：独立run状态，尚未实现]
+    Q[queued] --> X[running]
+    X --> H[waiting_human]
+    H -->|有效处置| X
+    X --> OK[completed]
+    X --> F[failed]
+    X --> CANCEL[cancelled]
+    X --> OLD[stale]
+    H -->|材料或规则版本变化| OLD
+  end
+  subgraph CHAT[助手拥有：私有聊天]
+    M[消息与引用] --> A[解释与建议]
+  end
+  R -. 关联快照，不是同一状态 .-> Q
+  A -. 用户回任务页确认 .-> H
+  OK -. 不能自动批准贷款 .-> D
+  S -. 新快照使旧run失效 .-> OLD

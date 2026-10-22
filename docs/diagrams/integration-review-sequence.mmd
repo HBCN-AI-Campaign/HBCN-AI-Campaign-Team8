@@ -1,0 +1,50 @@
+sequenceDiagram
+  autonumber
+  actor O as 经办人
+  participant UI as React任务页
+  participant BE as 主后端编排
+  participant P as 解析OCR
+  participant D as 业务库与快照
+  participant R as 规则引擎
+  participant S as 专项及汇总Agent
+  participant AI as 共享AI适配
+  participant K as RAG与外部核验
+  participant RT as SDK runtime
+  actor H as 审核人
+  O->>UI: 上传材料
+  UI->>BE: parse（JWT）
+  BE->>P: 文件与授权资源引用
+  P-->>BE: 字段、质量、page/bbox
+  BE-->>UI: 字段预览
+  O->>UI: 复核并提交
+  UI->>BE: 创建任务
+  BE->>D: 保存任务快照v1
+  H->>UI: 启动核对与专项
+  UI->>BE: review-runs（幂等键）
+  BE->>D: 授权检查、保存run及快照
+  BE-->>UI: 202 run_id
+  BE->>R: 当前快照执行硬规则
+  R-->>BE: 原判与专项移交项
+  BE->>S: 仅移交项和获准事实
+  S->>AI: purpose=special_review
+  AI->>K: 按范围取证
+  K-->>AI: 原文证据或明确缺口
+  AI->>RT: 授权证据与受控模板
+  RT-->>AI: 研判输出
+  AI-->>S: 校验后的结构化建议
+  S-->>BE: 专项与汇总结果
+  BE->>D: 保存结果、待处置项、事件
+  BE-->>UI: SSE或轮询：waiting_human
+  H->>UI: 确认处置及意见
+  UI->>BE: resolutions（版本及幂等键）
+  BE->>D: 校验版本、记录人工处置
+  alt 需补件
+    BE-->>UI: 由审核人明确退回
+    O->>UI: 更正并重交
+    UI->>BE: supplement
+    BE->>D: 新快照v2，旧run标stale
+  else 满足完成条件
+    H->>UI: 终审确认
+    UI->>BE: complete
+    BE->>D: 校验阻断项后更新业务状态
+  end

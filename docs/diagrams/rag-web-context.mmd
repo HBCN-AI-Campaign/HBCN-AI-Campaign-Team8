@@ -1,0 +1,14 @@
+flowchart TD
+  CAPTURE["获授权调用方采集网页<br/>实际文本、URL、采集时间<br/>声明处理授权与选区/页面范围"] --> API["增强检索 / 引用问答 HTTP 接口<br/>显式 sources=web_context"]
+  API --> AUTH["独立 X-Web-Context-Key<br/>精确 scope / reader / 有效期<br/>域名白名单 / 快照时间窗口"]
+  AUTH --> SNAP["请求内不可变文本快照<br/>URL + 时间 + 内容 hash 标识版本<br/>不代抓任意网址，不进入长期知识库"]
+  KB["知识库向量 / 词法<br/>查询族 RRF"] --> POOL["有序多源结果归并<br/>保留真实分数类型"]
+  LAW["北大法宝只读适配<br/>独立授权与来源状态"] --> POOL
+  POOL --> MIX["有序候选 + 无序网页上下文<br/>网页不伪造检索排名或 RRF 票数<br/>合计最多 20 个父候选"]
+  SNAP --> MIX
+  MIX --> RERANK["复用专用重排适配器<br/>全候选共同精排<br/>未部署模型时明确 disabled"]
+  RERANK --> WINDOW["原文分窗 / 联合覆盖核对<br/>保留网页版本、字符位置和 hash"]
+  WINDOW --> GATE["用途与依据门禁<br/>网页真实性、完整性、法规效力未核实<br/>所选网页不能放行本案法规判断"]
+  GATE --> LIVE["模型调用前及最终返回前<br/>重新核对网页授权、有效期与原文绑定<br/>沿用本库质量和撤回复核"]
+  LIVE --> OUT["原文证据或经支持核验的答复<br/>网页来源与局限明确展示<br/>原链接可能已经变化"]
+  BOUNDARY["待接线：真实浏览器采集、主站用户/任务 ACL<br/>真实网页/模型/重排质量及云部署验收"] -.-> CAPTURE

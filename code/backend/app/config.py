@@ -31,6 +31,22 @@ class Settings(BaseSettings):
     APP_NAME: str = "境外贷款单据智能审核平台 · API"
     DEBUG: bool = True
 
+    # --- AI assistant runtime ---
+    # Provider credentials live only in the isolated OpenCode runtime.
+    AI_REQUEST_TIMEOUT: float = 45.0
+    # Internal Bun service hosting the OpenCode SDK. Keep this on the private network.
+    ASSISTANT_RUNTIME_URL: str = ""
+    ASSISTANT_RUNTIME_TOKEN: str = ""
+    # Assistant-owned transport budget for enhanced knowledge retrieval.
+    ASSISTANT_RAG_REQUEST_TIMEOUT: float = 300.0
+
+    # --- RAG 服务（独立 hbcn-rag-service，当前验收端口 8011）---
+    # 主项目通过 app/rag_service.py 适配层调用该独立知识库服务；未配置时助手回退本地证据。
+    RAG_BASE_URL: str = ""          # 例如 http://127.0.0.1:8011
+    RAG_SERVICE_TOKEN: str = ""     # 与 rag-service/.env 的 SERVICE_TOKEN 保持一致
+    # Enhanced RAG has a bounded 240s internal budget; allow transport headroom.
+    RAG_REQUEST_TIMEOUT: float = 300.0
+
     # --- OCR 服务 ---
     # 本地开发时在 .env 里设置为服务器地址；部署到同台服务器后默认值直接可用
     OCR_BASE_URL: str = "http://127.0.0.1:7888"

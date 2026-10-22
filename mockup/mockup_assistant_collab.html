@@ -1,0 +1,742 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f7fb">
+  <title>慧眼助手 · 多人审核协作原型</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d2b43;
+      --ink-2: #52627b;
+      --muted: #8a98ad;
+      --line: #e7ecf3;
+      --line-2: #dbe3ee;
+      --brand: #3568c9;
+      --brand-deep: #254e9b;
+      --brand-soft: #edf3ff;
+      --green: #1e9a70;
+      --green-soft: #e9f7f1;
+      --amber: #b87917;
+      --amber-soft: #fff6e6;
+      --surface: #fff;
+      --canvas: #f5f7fb;
+      --shadow: 0 8px 28px rgba(31, 55, 91, .07);
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; }
+    body { color: var(--ink); background: var(--canvas); font-size: 14px; }
+    button, input, textarea { font: inherit; }
+    button { color: inherit; }
+    .app { display: grid; grid-template-columns: 254px minmax(480px, 1fr) 344px; width: 100%; height: 100dvh; min-height: 680px; overflow: hidden; background: var(--surface); }
+    .sidebar { display: flex; min-width: 0; flex-direction: column; padding: 20px 14px 14px; background: #f8fafe; border-right: 1px solid var(--line); }
+    .brand { display: flex; align-items: center; gap: 11px; padding: 3px 5px 23px; }
+    .brand-mark { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 13px; color: #fff; background: linear-gradient(145deg, #5685e8, #2b55ae); box-shadow: 0 7px 18px rgba(53, 104, 201, .2); }
+    .brand-mark svg { width: 22px; height: 22px; }
+    .brand-name { font-size: 17px; font-weight: 750; letter-spacing: -.3px; }
+    .brand-caption { margin-top: 3px; color: var(--muted); font-size: 11px; }
+    .btn { display: inline-flex; min-height: 36px; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 9px; background: #fff; color: var(--ink-2); cursor: pointer; transition: .16s ease; white-space: nowrap; }
+    .btn:hover { border-color: #a7bee9; color: var(--brand); background: #fbfdff; }
+    .btn-primary { border-color: var(--brand); color: #fff; background: var(--brand); box-shadow: 0 3px 9px rgba(53, 104, 201, .16); }
+    .btn-primary:hover { border-color: var(--brand-deep); color: #fff; background: var(--brand-deep); }
+    .btn-quiet { border-color: transparent; background: transparent; }
+    .btn-quiet:hover { background: var(--brand-soft); }
+    .btn-small { min-height: 30px; padding: 0 9px; border-radius: 8px; font-size: 12px; }
+    .btn-block { width: 100%; min-height: 42px; font-weight: 650; }
+    .ico { display: inline-grid; width: 18px; height: 18px; flex: 0 0 auto; place-items: center; font-size: 17px; line-height: 1; }
+    .sidebar-section { margin-top: 24px; }
+    .section-label { display: flex; align-items: center; justify-content: space-between; padding: 0 9px 8px; color: #8997ab; font-size: 11px; font-weight: 700; letter-spacing: .5px; }
+    .section-label small { color: #a6b1c0; font-size: 10px; font-weight: 500; letter-spacing: 0; }
+    .nav-item { display: flex; align-items: center; gap: 10px; min-height: 37px; margin: 2px 0; padding: 0 10px; border-radius: 8px; color: #65758c; cursor: pointer; font-size: 12.5px; }
+    .nav-item:hover { background: #eef3fb; }
+    .nav-item.active { color: var(--brand-deep); background: #eaf1ff; font-weight: 650; }
+    .nav-count { margin-left: auto; color: #9aa7ba; font-size: 11px; }
+    .history { margin-top: 21px; overflow: auto; }
+    .history-item { display: flex; align-items: flex-start; gap: 9px; margin: 3px 0; padding: 10px 9px; border-radius: 9px; color: #66768d; cursor: pointer; }
+    .history-item:hover { background: #f0f4fa; }
+    .history-item.selected { color: var(--brand-deep); background: #eaf1ff; }
+    .history-dot { width: 8px; height: 8px; margin-top: 5px; flex: 0 0 auto; border: 2px solid #c4cfde; border-radius: 50%; }
+    .history-item.selected .history-dot { border-color: var(--brand); background: var(--brand); }
+    .history-title { overflow: hidden; font-size: 12px; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
+    .history-sub { margin-top: 4px; color: #9aa7b8; font-size: 10px; }
+    .sidebar-bottom { display: flex; align-items: center; gap: 9px; margin-top: auto; padding: 14px 5px 2px; border-top: 1px solid var(--line); }
+    .avatar { display: grid; width: 31px; height: 31px; flex: 0 0 auto; place-items: center; border: 1px solid #dce6f4; border-radius: 50%; color: #355b9b; background: #eaf1fc; font-size: 11px; font-weight: 700; }
+    .avatar-ai { border: 0; border-radius: 10px; color: #fff; background: linear-gradient(145deg, #5f8ce6, #2f5bb7); }
+    .avatar-expert { border-color: #f1dfc2; color: #8c651f; background: #fff4df; }
+    .avatar-green { border-color: #ccebdc; color: #247958; background: #e9f7f0; }
+    .user-meta { min-width: 0; }
+    .user-meta b { display: block; font-size: 11px; }
+    .user-meta small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
+    .demo-badge { margin-left: auto; padding: 4px 7px; border: 1px solid #dce5f2; border-radius: 20px; color: #73839b; background: #fff; font-size: 9px; }
+
+    .main { display: flex; min-width: 0; flex-direction: column; background: #fff; }
+    .topbar { display: flex; min-height: 70px; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 26px; border-bottom: 1px solid #edf0f5; }
+    .topbar-left { display: flex; min-width: 0; flex-direction: column; gap: 6px; }
+    .crumb { color: #95a1b2; font-size: 10px; }
+    .title-line { display: flex; min-width: 0; align-items: center; gap: 9px; }
+    .title-line h1 { overflow: hidden; margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -.2px; text-overflow: ellipsis; white-space: nowrap; }
+    .pill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border: 1px solid #dce7f8; border-radius: 30px; color: #5577b2; background: #f2f6ff; font-size: 10px; white-space: nowrap; }
+    .pill-green { border-color: #ceebdc; color: #25805e; background: #eff9f4; }
+    .pill-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    .topbar-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
+    .head-people { display: flex; align-items: center; margin-right: 4px; }
+    .head-people .avatar { width: 29px; height: 29px; margin-left: -7px; border: 2px solid #fff; }
+    .head-people .avatar:first-child { margin-left: 0; }
+    .header-member-count { color: #78879b; font-size: 11px; }
+    .task-banner { display: flex; align-items: center; gap: 12px; margin: 18px auto 2px; padding: 10px 13px; border: 1px solid #e7edf6; border-radius: 10px; background: #fbfcfe; color: #687993; font-size: 11px; }
+    .task-icon { display: grid; width: 27px; height: 27px; flex: 0 0 auto; place-items: center; border-radius: 8px; color: var(--brand); background: #edf3ff; }
+    .task-banner strong { color: #3c4e68; font-size: 11.5px; }
+    .task-divider { height: 18px; border-left: 1px solid var(--line-2); }
+    .task-meta { margin-left: auto; color: #929fb1; font-size: 10px; white-space: nowrap; }
+    .chat-scroll { min-height: 0; flex: 1; overflow: auto; padding: 0 28px 12px; scroll-behavior: smooth; }
+    .chat-content { width: min(100%, 890px); margin: 0 auto; }
+    .today { margin: 21px 0 17px; color: #a0aabc; font-size: 10px; text-align: center; }
+    .message { display: flex; align-items: flex-start; gap: 11px; margin: 19px 0; }
+    .message.user { flex-direction: row-reverse; }
+    .message .avatar { width: 30px; height: 30px; }
+    .message-body { min-width: 0; max-width: min(88%, 780px); }
+    .message.user .message-body { max-width: min(79%, 680px); }
+    .message-head { display: flex; align-items: center; gap: 7px; margin: 1px 2px 7px; color: #77879c; font-size: 10.5px; }
+    .message.user .message-head { justify-content: flex-end; }
+    .message-head strong { color: #53647c; font-size: 11px; }
+    .timestamp { color: #abb5c3; font-size: 9px; }
+    .bubble { padding: 13px 15px; border: 1px solid #e9edf3; border-radius: 5px 12px 12px 12px; color: #40516a; background: #fff; box-shadow: 0 2px 10px rgba(32, 56, 93, .035); font-size: 12.5px; line-height: 1.75; }
+    .message.user .bubble { border: 0; border-radius: 12px 5px 12px 12px; color: #385b91; background: #edf3fc; box-shadow: none; }
+    .bubble p { margin: 0 0 8px; }
+    .bubble p:last-child { margin-bottom: 0; }
+    .bubble strong { color: #334661; }
+    .ai-summary { margin: 10px 0 0; padding: 11px 12px; border: 1px solid #e7edf6; border-radius: 9px; background: #fbfcfe; }
+    .summary-top { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; }
+    .summary-top b { color: #475a75; font-size: 11px; }
+    .finding { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; border-top: 1px solid #eef1f6; color: #5b6c82; font-size: 11px; line-height: 1.6; }
+    .finding-mark { display: grid; width: 17px; height: 17px; flex: 0 0 auto; place-items: center; border-radius: 50%; color: #b67b20; background: #fff2d8; font-size: 10px; font-weight: 700; }
+    .finding-mark.ok { color: #21815e; background: #e6f6ee; }
+    .citations { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .citation { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px; border: 1px solid #e5eaf2; border-radius: 7px; color: #677890; background: #fff; font-size: 9.5px; }
+    .citation .file-mark { display: grid; width: 16px; height: 16px; place-items: center; border-radius: 4px; color: #4b76be; background: #edf3fd; font-size: 9px; }
+    details.trace { margin-top: 10px; overflow: hidden; border: 1px solid #e6ebf3; border-radius: 9px; background: #fafbfd; }
+    details.trace summary { display: flex; align-items: center; gap: 8px; padding: 9px 11px; color: #62728a; cursor: pointer; font-size: 10.5px; list-style: none; }
+    details.trace summary::-webkit-details-marker { display: none; }
+    .trace-icon { display: grid; width: 21px; height: 21px; place-items: center; border-radius: 7px; color: var(--brand); background: #eaf1fd; font-size: 11px; }
+    .trace-status { margin-left: auto; color: #8d9aae; font-size: 9px; }
+    .trace-list { padding: 0 12px 10px 22px; }
+    .trace-item { display: flex; align-items: flex-start; gap: 9px; padding: 6px 0; border-left: 1px solid #dce6f4; color: #67778e; font-size: 10px; }
+    .trace-check { width: 17px; height: 17px; margin-left: -9px; flex: 0 0 auto; border: 1px solid #d8eadf; border-radius: 50%; color: #218260; background: #eff9f3; text-align: center; line-height: 15px; }
+    .trace-item small { display: block; margin-top: 2px; color: #9aa6b6; font-size: 9px; }
+    .trace-note { padding-top: 6px; color: #a2adbc; font-size: 9px; }
+    .expert-suggestion { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding: 10px; border: 1px solid #dce8fb; border-radius: 9px; background: #f7faff; }
+    .expert-suggestion-copy { min-width: 0; flex: 1; }
+    .expert-suggestion-copy b { display: block; color: #435c83; font-size: 10.5px; }
+    .expert-suggestion-copy small { display: block; margin-top: 3px; color: #8392a8; font-size: 9.5px; line-height: 1.45; }
+    .system-note { display: flex; justify-content: center; margin: 14px 0; color: #8391a5; font-size: 10px; }
+    .system-note span { padding: 5px 10px; border: 1px solid #edf0f5; border-radius: 20px; background: #fbfcfe; }
+    .composer-wrap { padding: 10px 25px 15px; border-top: 1px solid #edf0f5; background: #fff; }
+    .composer { display: flex; align-items: flex-end; gap: 8px; width: min(100%, 890px); margin: 0 auto; padding: 9px 9px 9px 14px; border: 1px solid #dce4ef; border-radius: 15px; background: #fff; box-shadow: 0 5px 22px rgba(38, 65, 105, .06); }
+    .composer:focus-within { border-color: #a9c2ed; box-shadow: 0 0 0 3px #f1f5fc; }
+    .composer textarea { min-height: 31px; max-height: 112px; flex: 1; resize: none; padding: 5px 0; border: 0; outline: 0; color: #34465f; background: transparent; font-size: 12px; line-height: 1.6; }
+    .composer textarea::placeholder { color: #a6b0bf; }
+    .composer-tools { display: flex; align-items: center; gap: 5px; }
+    .tool-button { display: grid; width: 31px; height: 31px; place-items: center; border: 0; border-radius: 8px; color: #7889a1; background: transparent; cursor: pointer; font-size: 14px; }
+    .tool-button:hover { color: var(--brand); background: #eff4fc; }
+    .send-button { display: grid; width: 34px; height: 34px; place-items: center; border: 0; border-radius: 10px; color: #fff; background: var(--brand); cursor: pointer; font-size: 17px; }
+    .send-button:hover { background: var(--brand-deep); }
+    .composer-foot { display: flex; justify-content: space-between; gap: 10px; width: min(100%, 890px); margin: 7px auto 0; color: #9ca8b7; font-size: 9px; }
+    .speaker-control { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+    .speaker-control label { white-space: nowrap; }
+    .speaker-control select { max-width: 190px; height: 25px; padding: 0 20px 0 7px; border: 1px solid #e1e7f0; border-radius: 6px; color: #60718a; background: #fff; font-size: 9px; }
+
+    .context { display: flex; min-width: 0; flex-direction: column; border-left: 1px solid var(--line); background: #fbfcfe; }
+    .context-head { display: flex; align-items: center; justify-content: space-between; min-height: 64px; padding: 13px 15px; border-bottom: 1px solid var(--line); }
+    .context-head h2 { margin: 0; font-size: 13px; font-weight: 720; }
+    .context-head small { display: block; margin-top: 4px; color: #94a0b0; font-size: 9px; }
+    .icon-close { display: grid; width: 28px; height: 28px; place-items: center; border: 0; border-radius: 7px; color: #8d9aad; background: transparent; cursor: pointer; font-size: 17px; }
+    .icon-close:hover { background: #eef2f7; }
+    .tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; margin: 12px 13px 10px; padding: 3px; border: 1px solid #e9edf4; border-radius: 9px; background: #f3f6fa; }
+    .tab { min-height: 31px; border: 0; border-radius: 7px; color: #75849a; background: transparent; cursor: pointer; font-size: 10.5px; }
+    .tab.active { color: #355fa8; background: #fff; box-shadow: 0 1px 4px rgba(40, 60, 90, .08); font-weight: 680; }
+    .context-scroll { min-height: 0; flex: 1; overflow: auto; padding: 0 13px 14px; }
+    .search { display: flex; align-items: center; gap: 7px; margin-bottom: 11px; padding: 0 10px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; }
+    .search span { color: #9aa7b8; font-size: 14px; }
+    .search input { width: 100%; height: 34px; border: 0; outline: 0; color: #465771; background: transparent; font-size: 10.5px; }
+    .recommend { margin-bottom: 12px; padding: 11px; border: 1px solid #dbe7f7; border-radius: 10px; background: linear-gradient(145deg, #f4f8ff, #fbfdff); }
+    .recommend-label { display: flex; align-items: center; gap: 6px; color: #4b70b0; font-size: 9px; font-weight: 700; letter-spacing: .2px; }
+    .recommend h3 { margin: 8px 0 4px; color: #3c5274; font-size: 11.5px; }
+    .recommend p { margin: 0; color: #8190a6; font-size: 9.5px; line-height: 1.55; }
+    .expert-card { margin: 8px 0; padding: 11px; border: 1px solid #e7ebf2; border-radius: 10px; background: #fff; transition: .15s ease; }
+    .expert-card:hover { border-color: #d0def3; box-shadow: 0 4px 14px rgba(37, 69, 116, .05); }
+    .expert-top { display: flex; align-items: flex-start; gap: 9px; }
+    .expert-top .avatar { width: 34px; height: 34px; }
+    .expert-info { min-width: 0; flex: 1; }
+    .expert-name-row { display: flex; align-items: center; gap: 6px; }
+    .expert-name-row strong { color: #374b68; font-size: 11px; }
+    .available { display: inline-flex; align-items: center; gap: 4px; color: #338461; font-size: 8.5px; white-space: nowrap; }
+    .available i { width: 5px; height: 5px; border-radius: 50%; background: #3ca777; }
+    .expert-title { margin-top: 3px; color: #8290a4; font-size: 9px; line-height: 1.4; }
+    .expert-bio { margin: 9px 0 8px; color: #77869b; font-size: 9.5px; line-height: 1.55; }
+    .tag-row { display: flex; flex-wrap: wrap; gap: 5px; }
+    .mini-tag { padding: 3px 6px; border: 1px solid #e7edf6; border-radius: 5px; color: #7485a0; background: #f8faff; font-size: 8px; }
+    .expert-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; padding-top: 9px; border-top: 1px solid #f0f2f6; }
+    .expert-actions small { color: #a0aaba; font-size: 8.5px; }
+    .member-card { display: flex; align-items: center; gap: 9px; margin: 6px 0; padding: 10px; border: 1px solid #e8edf3; border-radius: 9px; background: #fff; }
+    .member-detail { min-width: 0; flex: 1; }
+    .member-detail strong { display: block; color: #465972; font-size: 10.5px; }
+    .member-detail small { display: block; margin-top: 3px; color: #95a1b1; font-size: 8.5px; }
+    .member-role { color: #7c8da4; font-size: 8.5px; }
+    .permission-note { margin-top: 14px; padding: 10px; border: 1px solid #e9edf3; border-radius: 8px; color: #8290a4; background: #f6f8fb; font-size: 9px; line-height: 1.55; }
+    .permission-note strong { color: #64758c; }
+    .skill-card { margin: 8px 0; padding: 11px; border: 1px solid #e8edf3; border-radius: 9px; background: #fff; }
+    .skill-card-top { display: flex; align-items: center; gap: 8px; }
+    .skill-icon { display: grid; width: 29px; height: 29px; place-items: center; border-radius: 8px; color: #5079be; background: #edf3fd; font-size: 13px; }
+    .skill-card-top strong { color: #445873; font-size: 10.5px; }
+    .skill-card p { margin: 8px 0; color: #8390a3; font-size: 9px; line-height: 1.5; }
+    .skill-meta { display: flex; justify-content: space-between; align-items: center; color: #9ba7b5; font-size: 8px; }
+    .skill-use { color: #5279ba; border: 0; background: none; cursor: pointer; font-size: 9px; }
+    .skill-use.selected { color: #23805e; font-weight: 700; }
+    .empty-state { padding: 28px 10px; color: #96a2b2; font-size: 10px; text-align: center; }
+
+    .modal-backdrop { position: fixed; z-index: 20; inset: 0; display: grid; place-items: center; padding: 18px; background: rgba(23, 39, 64, .34); backdrop-filter: blur(2px); }
+    .modal-backdrop[hidden] { display: none; }
+    .modal { width: min(470px, 100%); padding: 19px; border: 1px solid rgba(255,255,255,.7); border-radius: 14px; background: #fff; box-shadow: 0 22px 70px rgba(24, 42, 69, .2); }
+    .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .modal-head h3 { margin: 0; color: #253853; font-size: 15px; }
+    .modal-head p { margin: 5px 0 0; color: #8996a8; font-size: 10px; line-height: 1.5; }
+    .modal-body { margin-top: 15px; }
+    .invite-preview { display: flex; align-items: center; gap: 10px; padding: 11px; border: 1px solid #e8edf3; border-radius: 9px; background: #fbfcfe; }
+    .invite-preview b { display: block; color: #425570; font-size: 10.5px; }
+    .invite-preview small { display: block; margin-top: 3px; color: #8c99ab; font-size: 9px; }
+    .scope-box { margin-top: 11px; padding: 11px; border: 1px solid #e8edf3; border-radius: 9px; }
+    .scope-box strong { display: block; margin-bottom: 6px; color: #53647b; font-size: 10px; }
+    .scope-box p { margin: 0; color: #7f8da1; font-size: 9.5px; line-height: 1.65; }
+    .scope-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+    .scope-check { display: flex; align-items: flex-start; gap: 8px; margin-top: 11px; color: #718198; font-size: 9.5px; line-height: 1.5; }
+    .scope-check input { margin-top: 1px; accent-color: var(--brand); }
+    .modal-warning { margin-top: 11px; padding: 9px 10px; border: 1px solid #f3e5c8; border-radius: 8px; color: #8e6b34; background: #fffaf0; font-size: 9px; line-height: 1.5; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 17px; }
+    .toast { position: fixed; z-index: 30; bottom: 26px; left: 50%; padding: 10px 14px; transform: translate(-50%, 12px); border: 1px solid #dbe6f5; border-radius: 9px; color: #486385; background: #fff; box-shadow: var(--shadow); font-size: 11px; opacity: 0; pointer-events: none; transition: .2s; }
+    .toast.show { transform: translate(-50%, 0); opacity: 1; }
+
+    @media (max-width: 1240px) {
+      .app { grid-template-columns: 230px minmax(450px, 1fr) 315px; }
+      .topbar { padding-inline: 18px; }
+      .chat-scroll { padding-inline: 20px; }
+    }
+    @media (max-width: 1030px) {
+      .app { grid-template-columns: 225px minmax(0, 1fr); }
+      .context { position: fixed; z-index: 10; inset: 0 0 0 auto; width: min(360px, 92vw); transform: translateX(102%); box-shadow: -14px 0 40px rgba(30, 50, 80, .13); transition: transform .2s ease; }
+      .app.panel-open .context { transform: translateX(0); }
+      .mobile-panel-button { display: inline-flex !important; }
+    }
+    @media (max-width: 680px) {
+      .app { grid-template-columns: 1fr; min-height: 600px; }
+      .sidebar { display: none; }
+      .topbar { min-height: 62px; padding: 10px 12px; }
+      .topbar-actions { gap: 4px; }
+      .topbar-actions .btn { min-height: 32px; padding-inline: 8px; font-size: 10px; }
+      .header-member-count, .topbar-actions .snapshot-label { display: none; }
+      .title-line h1 { max-width: 44vw; font-size: 14px; }
+      .chat-scroll { padding: 0 12px 10px; }
+      .task-banner { margin-top: 12px; gap: 7px; padding: 8px; font-size: 9px; }
+      .task-meta { display: none; }
+      .message-body { max-width: 91%; }
+      .message.user .message-body { max-width: 86%; }
+      .bubble { padding: 11px; font-size: 11.5px; }
+      .composer-wrap { padding: 9px 10px 12px; }
+      .composer-foot { font-size: 8px; }
+      .composer-foot span:last-child { text-align: right; }
+      .speaker-control select { max-width: 125px; font-size: 8px; }
+      .desktop-snapshot { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <aside class="sidebar" aria-label="会话导航">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 2.8v4.1M12 17.1v4.1M2.8 12h4.1m10.2 0h4.1M5.5 5.5l2.9 2.9m7.2 7.2 2.9 2.9m0-13-2.9 2.9m-7.2 7.2-2.9 2.9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/></svg>
+        </div>
+        <div><div class="brand-name">慧眼助手</div><div class="brand-caption">审核协作空间</div></div>
+      </div>
+      <button class="btn btn-primary btn-block" id="newChat"><span class="ico">＋</span>新建审核会话</button>
+
+      <div class="sidebar-section">
+        <div class="section-label">会话空间</div>
+        <div class="nav-item active" data-filter="personal"><span class="ico">◉</span>个人会话 <span class="nav-count">3</span></div>
+        <div class="nav-item" data-filter="shared"><span class="ico">◌</span>协作会话 <span class="nav-count" id="sharedCount">0</span></div>
+      </div>
+
+      <div class="history sidebar-section">
+        <div class="section-label">最近审核 <small>查看全部</small></div>
+        <div class="history-item selected" data-title="发票与提单一致性复核">
+          <span class="history-dot"></span><div><div class="history-title">发票与提单一致性复核</div><div class="history-sub">HBCN-2026-0841 · 刚刚</div></div>
+        </div>
+        <div class="history-item" data-title="提款材料风险梳理">
+          <span class="history-dot"></span><div><div class="history-title">提款材料风险梳理</div><div class="history-sub">HBCN-2026-0834 · 1 小时前</div></div>
+        </div>
+        <div class="history-item" data-title="担保文件条款核对">
+          <span class="history-dot"></span><div><div class="history-title">担保文件条款核对</div><div class="history-sub">HBCN-2026-0829 · 昨天</div></div>
+        </div>
+      </div>
+
+      <div class="sidebar-bottom">
+        <div class="avatar">林</div>
+        <div class="user-meta"><b>林澄</b><small>审核人员</small></div>
+        <span class="demo-badge">界面原型</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-left">
+          <div class="crumb">慧眼助手　/　审核任务 HBCN-2026-0841</div>
+          <div class="title-line">
+            <h1 id="conversationTitle">发票与提单一致性复核</h1>
+            <span class="pill" id="sessionState"><i class="pill-dot"></i>个人会话</span>
+            <span class="pill">审核辅助</span>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <div class="head-people" id="headPeople" aria-label="会话参与者">
+            <div class="avatar" title="林澄 · 审核人">林</div>
+          </div>
+          <span class="header-member-count" id="memberCount">1 位审核人</span>
+          <button class="btn mobile-panel-button" id="openPanel" style="display:none"><span class="ico">☷</span>专家与技能</button>
+          <button class="btn desktop-snapshot" id="openSnapshot"><span class="ico">▤</span><span class="snapshot-label">生成只读快照</span></button>
+          <button class="btn btn-primary" id="openInvite"><span class="ico">＋</span>邀请专家</button>
+        </div>
+      </header>
+
+      <section class="chat-scroll" id="chatScroll" aria-label="审核对话">
+        <div class="chat-content" id="messages">
+          <div class="task-banner">
+            <div class="task-icon">▣</div>
+            <div><strong>境外贷款审核任务</strong><div style="margin-top:3px">任务 HBCN-2026-0841 · 借款主体：Meridian Trading（演示数据）</div></div>
+            <span class="task-divider"></span><span>材料 4 份</span><span class="task-divider"></span><span>规则结果 3 项</span>
+            <span class="task-meta">材料访问按任务权限控制</span>
+          </div>
+          <div class="today">今天 · 10:42</div>
+
+          <article class="message user">
+            <div class="avatar">林</div>
+            <div class="message-body">
+              <div class="message-head"><strong>林澄</strong><span class="pill">审核人</span><span class="timestamp">10:42</span></div>
+              <div class="bubble">请帮我核对这笔任务的商业发票和提单，重点看收货人、币种、金额和装运日期是否一致。只列出差异和依据，审核结论我来确认。</div>
+            </div>
+          </article>
+
+          <article class="message assistant">
+            <div class="avatar avatar-ai">✳</div>
+            <div class="message-body">
+              <div class="message-head"><strong>慧眼助手</strong><span class="timestamp">10:42</span></div>
+              <div class="bubble">
+                <p>我已对照当前任务中可访问的商业发票、提单和合同信息。币种、金额与装运日期目前一致；发现一处收货人名称格式差异，建议核对注册名称后再作判断。</p>
+                <div class="ai-summary">
+                  <div class="summary-top"><span class="pill" style="color:#9b6a16;border-color:#f1dfbb;background:#fff8ea">需人工核对</span><b>字段交叉核验 · 1 项待确认</b></div>
+                  <div class="finding"><span class="finding-mark">!</span><span><strong>收货人名称：</strong>发票写作 “Meridian Trading Pte. Ltd.”；提单写作 “Meridian Trading Pte Ltd”。标点格式不同，当前材料不足以证明法律主体名称完全一致。</span></div>
+                  <div class="finding"><span class="finding-mark ok">✓</span><span><strong>币种与金额：</strong>商业发票与提款指示均为 USD 1,250,000。</span></div>
+                  <div class="finding"><span class="finding-mark ok">✓</span><span><strong>装运日期：</strong>提单装船日期与合同约定的装运窗口相符。</span></div>
+                </div>
+                <div class="citations" aria-label="证据引用">
+                  <span class="citation"><span class="file-mark">文</span>商业发票 · 第 1 页</span>
+                  <span class="citation"><span class="file-mark">文</span>海运提单 · 第 1 页</span>
+                  <span class="citation"><span class="file-mark">规</span>收货主体核验要求</span>
+                </div>
+                <details class="trace">
+                  <summary><span class="trace-icon">✳</span><strong>执行轨迹</strong><span>4 步已完成</span><span class="trace-status">展开查看　⌄</span></summary>
+                  <div class="trace-list">
+                    <div class="trace-item"><span class="trace-check">✓</span><div>读取本任务已授权材料<small>商业发票、海运提单、合同、提款指示</small></div></div>
+                    <div class="trace-item"><span class="trace-check">✓</span><div>抽取并对齐关键字段<small>收货人、币种、金额、装运日期</small></div></div>
+                    <div class="trace-item"><span class="trace-check">✓</span><div>检索适用的内部核验要求<small>返回可供审核人复核的依据</small></div></div>
+                    <div class="trace-item"><span class="trace-check">✓</span><div>整理差异、引用和待核对项</div></div>
+                    <div class="trace-note">这里只展示业务执行步骤，不展示模型内部推理。</div>
+                  </div>
+                </details>
+                <div class="expert-suggestion">
+                  <div class="avatar avatar-expert">王</div>
+                  <div class="expert-suggestion-copy"><b>可邀请单证专家一起核验</b><small>王宁擅长提单与贸易单据一致性。邀请前可查看会话和任务材料的共享范围。</small></div>
+                  <button class="btn btn-small" data-invite="王宁">邀请</button>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="message user">
+            <div class="avatar">林</div>
+            <div class="message-body">
+              <div class="message-head"><strong>林澄</strong><span class="pill">审核人</span><span class="timestamp">10:44</span></div>
+              <div class="bubble">名称看起来只是标点差异，能直接认定一致吗？请说明还需要核实什么。</div>
+            </div>
+          </article>
+
+          <article class="message assistant">
+            <div class="avatar avatar-ai">✳</div>
+            <div class="message-body">
+              <div class="message-head"><strong>慧眼助手</strong><span class="timestamp">10:44</span></div>
+              <div class="bubble">
+                <p>仅凭标点差异，不能替代对法律主体名称的核实。可优先对照合同中的完整注册名称，以及任务材料中可验证的收货人信息；若仍无法确认，建议请熟悉贸易单据的审核专家复核。</p>
+                <div class="citations"><span class="citation"><span class="file-mark">文</span>合同 · 第 4 页</span><span class="citation"><span class="file-mark">规</span>主体信息核验规则 · 第 2 项</span></div>
+                <p style="margin-top:9px;color:#8794a7;font-size:10px">以上为审核辅助意见，不能替代有权限审核人员的判断。</p>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <footer class="composer-wrap">
+        <div class="composer">
+          <button class="tool-button" id="skillShortcut" title="打开技能库" aria-label="打开技能库">✧</button>
+          <textarea id="draft" rows="1" placeholder="继续询问当前审核任务，或 @ 提及已加入的专家…"></textarea>
+          <div class="composer-tools"><button class="tool-button" id="snapshotShortcut" title="生成只读快照" aria-label="生成只读快照">▤</button><button class="send-button" id="sendMessage" title="发送消息" aria-label="发送消息">↑</button></div>
+        </div>
+        <div class="composer-foot"><span id="composerHint">Enter 发送 · Shift + Enter 换行　·　演示原型，不连接后端</span><span class="speaker-control"><label for="chatSpeaker">模拟发言身份</label><select id="chatSpeaker" aria-label="模拟发言身份"><option value="林澄">林澄 · 审核人</option></select></span><span>审核结论须由有权限人员确认</span></div>
+      </footer>
+    </main>
+
+    <aside class="context" aria-label="专家与技能目录">
+      <div class="context-head">
+        <div><h2 id="panelTitle">专家与技能</h2><small id="panelSubtitle">协助审核人员组织专业协作</small></div>
+        <button class="icon-close" id="closePanel" aria-label="关闭侧栏">×</button>
+      </div>
+      <div class="tabs" role="tablist">
+        <button class="tab" data-tab="members" role="tab">成员 <span id="tabMemberCount">1</span></button>
+        <button class="tab active" data-tab="experts" role="tab">专家库</button>
+        <button class="tab" data-tab="skills" role="tab">技能库</button>
+      </div>
+      <div class="context-scroll">
+        <div class="search"><span>⌕</span><input id="directorySearch" type="search" placeholder="搜索专家专长或技能" aria-label="搜索专家专长或技能"></div>
+        <div id="directoryContent">
+          <div class="recommend">
+            <div class="recommend-label"><span>✳</span>慧眼助手建议</div>
+            <h3>单证一致性 · 建议邀请 1 位专家</h3>
+            <p>当前待核验项涉及收货主体名称。建议由具备提单和国际结算经验的同事协助判断。</p>
+          </div>
+
+          <article class="expert-card" data-search="王宁 国际贸易融资 提单 单证核验 国际结算">
+            <div class="expert-top">
+              <div class="avatar avatar-expert">王</div>
+              <div class="expert-info">
+                <div class="expert-name-row"><strong>王宁</strong><span class="available"><i></i>可参与</span></div>
+                <div class="expert-title">国际结算审核 · 贸易单证</div>
+              </div>
+            </div>
+            <p class="expert-bio">熟悉提单、商业发票与合同的交叉核验，可协助识别主体名称和运输条款差异。</p>
+            <div class="tag-row"><span class="mini-tag">提单核验</span><span class="mini-tag">国际结算</span><span class="mini-tag">贸易融资</span></div>
+            <div class="expert-actions"><small>任务权限需再次校验</small><button class="btn btn-small" data-invite="王宁">邀请入会</button></div>
+          </article>
+
+          <article class="expert-card" data-search="陈婧 跨境监管 资金用途 法规">
+            <div class="expert-top">
+              <div class="avatar avatar-green">陈</div>
+              <div class="expert-info">
+                <div class="expert-name-row"><strong>陈婧</strong><span class="available"><i></i>可参与</span></div>
+                <div class="expert-title">跨境业务合规 · 资金用途</div>
+              </div>
+            </div>
+            <p class="expert-bio">关注境外贷款用途、跨境支付材料及监管规则适用性，适合处理法规和用途疑点。</p>
+            <div class="tag-row"><span class="mini-tag">用途审核</span><span class="mini-tag">跨境监管</span><span class="mini-tag">规则检索</span></div>
+            <div class="expert-actions"><small>资料由内部目录维护</small><button class="btn btn-small" data-invite="陈婧">邀请入会</button></div>
+          </article>
+
+          <article class="expert-card" data-search="周珂 外汇 结算 日期 汇率">
+            <div class="expert-top">
+              <div class="avatar" style="border-color:#dcd7f5;color:#66549c;background:#f2effb">周</div>
+              <div class="expert-info">
+                <div class="expert-name-row"><strong>周珂</strong><span class="available"><i></i>可参与</span></div>
+                <div class="expert-title">外汇运营 · 日期与结算</div>
+              </div>
+            </div>
+            <p class="expert-bio">熟悉币种、付款日期与国际结算安排，可协助核对外汇和工作日历问题。</p>
+            <div class="tag-row"><span class="mini-tag">外汇</span><span class="mini-tag">结算日期</span><span class="mini-tag">工作日历</span></div>
+            <div class="expert-actions"><small>权限通过后方可查看材料</small><button class="btn btn-small" data-invite="周珂">邀请入会</button></div>
+          </article>
+          <div class="permission-note"><strong>权限说明</strong><br>目录只展示可搜索的专家资料。邀请成功前，系统会校验其任务访问权限；邀请不会授予贷款审批权限。</div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="modal-backdrop" id="inviteModal" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="inviteTitle">
+      <div class="modal-head">
+        <div><h3 id="inviteTitle">邀请专家加入审核会话</h3><p>专家将加入当前会话，与审核人员和慧眼助手继续讨论。</p></div>
+        <button class="icon-close" data-close-modal aria-label="关闭">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="invite-preview"><div class="avatar avatar-expert" id="inviteAvatar">王</div><div><b id="inviteName">王宁</b><small id="inviteSpecialty">国际结算审核 · 贸易单证</small></div><span class="pill" style="margin-left:auto">讨论成员</span></div>
+        <div class="scope-box">
+          <strong>本次邀请将共享</strong>
+          <p>当前会话历史（<span id="sharedMessageCount">4</span> 条消息）与该审核任务中受邀者有权限访问的材料引用。原始文件仍按任务权限控制。</p>
+          <div class="scope-list"><span class="mini-tag">当前审核对话</span><span class="mini-tag">商业发票引用</span><span class="mini-tag">提单引用</span><span class="mini-tag">规则结果</span></div>
+        </div>
+        <label class="scope-check"><input type="checkbox" id="confirmScope"><span>我已确认共享范围，可以邀请该专家查看当前会话上下文。</span></label>
+        <div class="modal-warning">专家加入后可以在此会话发言并向 AI 追问；系统会校验任务权限并记录成员变更。该操作不改变审核结论或审批权限。</div>
+      </div>
+      <div class="modal-actions"><button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="confirmInvite" disabled>确认并邀请</button></div>
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="snapshotModal" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="snapshotTitle">
+      <div class="modal-head">
+        <div><h3 id="snapshotTitle">生成只读审阅快照</h3><p>用于让他人阅读某一阶段的审核讨论，不加入当前协作。</p></div>
+        <button class="icon-close" data-close-modal aria-label="关闭">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="scope-box"><strong>快照与共享会话的区别</strong><p>快照接收者只能阅读发布时选定的内容，不能在原会话发言；如果另行“继续”，会生成独立副本。当前原会话不会被修改。</p></div>
+        <label class="scope-check"><input type="checkbox" checked id="includeCitations"><span>包含本轮可见的任务材料与规则引用（仅限接收者仍有权限访问的内容）</span></label>
+        <div class="modal-warning">演示原型不会创建真实链接。实际部署前需定义快照访问权限、有效期和撤销规则。</div>
+      </div>
+      <div class="modal-actions"><button class="btn" data-close-modal>取消</button><button class="btn btn-primary" id="confirmSnapshot">生成预览</button></div>
+    </section>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (function () {
+      const app = document.getElementById("app");
+      const inviteModal = document.getElementById("inviteModal");
+      const snapshotModal = document.getElementById("snapshotModal");
+      const toast = document.getElementById("toast");
+      const members = [{ name: "林澄", title: "审核人 · 会话创建者", initials: "林", kind: "reviewer" }];
+      const experts = {
+        "王宁": { initials: "王", specialty: "国际结算审核 · 贸易单证", kind: "expert" },
+        "陈婧": { initials: "陈", specialty: "跨境业务合规 · 资金用途", kind: "green" },
+        "周珂": { initials: "周", specialty: "外汇运营 · 日期与结算", kind: "purple" }
+      };
+      let selectedExpert = "王宁";
+      let selectedTab = "experts";
+      let toastTimer;
+
+      function showToast(message) {
+        toast.textContent = message;
+        toast.classList.add("show");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { toast.classList.remove("show"); }, 2600);
+      }
+      function openModal(node) { node.hidden = false; }
+      function closeModals() { inviteModal.hidden = true; snapshotModal.hidden = true; }
+      function initialsClass(kind) {
+        if (kind === "expert") return "avatar avatar-expert";
+        if (kind === "green") return "avatar avatar-green";
+        if (kind === "purple") return "avatar";
+        return "avatar";
+      }
+      function openInvite(name) {
+        document.getElementById("sharedMessageCount").textContent = document.querySelectorAll("#messages article.message").length;
+        selectedExpert = experts[name] ? name : "王宁";
+        const person = experts[selectedExpert];
+        document.getElementById("inviteName").textContent = selectedExpert;
+        document.getElementById("inviteSpecialty").textContent = person.specialty;
+        const avatar = document.getElementById("inviteAvatar");
+        avatar.textContent = person.initials;
+        avatar.className = initialsClass(person.kind);
+        document.getElementById("confirmScope").checked = false;
+        document.getElementById("confirmInvite").disabled = true;
+        openModal(inviteModal);
+      }
+      function renderMembers() {
+        document.getElementById("tabMemberCount").textContent = members.length;
+        const head = document.getElementById("headPeople");
+        head.innerHTML = "";
+        members.forEach(function (member) {
+          const avatar = document.createElement("div");
+          avatar.className = initialsClass(member.kind);
+          avatar.textContent = member.initials;
+          avatar.title = member.name + " · " + member.title;
+          head.appendChild(avatar);
+        });
+        document.getElementById("memberCount").textContent = members.length + " 位成员";
+        const speaker = document.getElementById("chatSpeaker");
+        const selectedSpeaker = speaker.value;
+        speaker.replaceChildren();
+        members.forEach(function (member) {
+          const option = document.createElement("option");
+          option.value = member.name;
+          option.textContent = member.name + (member.kind === "reviewer" ? " · 审核人" : " · 专家");
+          speaker.appendChild(option);
+        });
+        speaker.value = members.some(function (member) { return member.name === selectedSpeaker; }) ? selectedSpeaker : members[0].name;
+        const membersContent = document.getElementById("membersContent");
+        if (membersContent) {
+          membersContent.innerHTML = members.map(function (member) {
+            return '<div class="member-card"><div class="' + initialsClass(member.kind) + '">' + member.initials + '</div><div class="member-detail"><strong>' + member.name + '</strong><small>' + member.title + '</small></div><span class="member-role">' + (member.kind === "reviewer" ? "创建者" : "可讨论") + '</span></div>';
+          }).join("");
+        }
+      }
+      function switchTab(tab) {
+        selectedTab = tab;
+        document.querySelectorAll(".tab").forEach(function (button) { button.classList.toggle("active", button.dataset.tab === tab); });
+        const content = document.getElementById("directoryContent");
+        document.getElementById("directorySearch").value = "";
+        if (tab === "members") {
+          document.getElementById("panelTitle").textContent = "会话成员";
+          document.getElementById("panelSubtitle").textContent = "仅显示已加入当前审核会话的成员";
+          content.innerHTML = '<div id="membersContent"></div><div class="permission-note"><strong>协作权限</strong><br>会话成员可查看授权历史、发表讨论并向 AI 追问；任务访问权和贷款审批权仍由业务系统控制。</div>';
+          renderMembers();
+        } else if (tab === "skills") {
+          document.getElementById("panelTitle").textContent = "审核技能库";
+          document.getElementById("panelSubtitle").textContent = "选择本轮 AI 可使用的审核能力";
+          content.innerHTML =
+            '<article class="skill-card" data-search="单证交叉核验 发票 提单"><div class="skill-card-top"><span class="skill-icon">▤</span><strong>单证交叉核验</strong></div><p>对照合同、商业发票和运输单据，整理字段差异与证据位置。</p><div class="skill-meta"><span>审核版 1.2 · 已审核</span><button class="skill-use" data-skill="单证交叉核验">本轮使用</button></div></article>' +
+            '<article class="skill-card" data-search="规则解释 风险依据"><div class="skill-card-top"><span class="skill-icon">⌕</span><strong>规则依据解释</strong></div><p>解释当前规则结果，列出依据、适用范围和人工核对点。</p><div class="skill-meta"><span>审核版 1.0 · 已审核</span><button class="skill-use" data-skill="规则依据解释">本轮使用</button></div></article>' +
+            '<article class="skill-card" data-search="法规检索 知识库 跨境"><div class="skill-card-top"><span class="skill-icon">▥</span><strong>跨境规则检索</strong></div><p>检索获准知识库范围内的法规和内部规则，附带可复核来源。</p><div class="skill-meta"><span>审核版 1.1 · 已审核</span><button class="skill-use" data-skill="跨境规则检索">本轮使用</button></div></article>' +
+            '<div class="permission-note"><strong>受控能力</strong><br>Skill 是 AI 可用的业务能力，不是人员身份或审批授权；仅使用经过审核、版本可追踪的目录条目。</div>';
+        } else {
+          document.getElementById("panelTitle").textContent = "专家库";
+          document.getElementById("panelSubtitle").textContent = "搜索可参与本任务审核的内部专家";
+          content.innerHTML =
+            '<div class="recommend"><div class="recommend-label"><span>✳</span>慧眼助手建议</div><h3>单证一致性 · 建议邀请 1 位专家</h3><p>当前待核验项涉及收货主体名称。建议由具备提单和国际结算经验的同事协助判断。</p></div>' +
+            '<article class="expert-card" data-search="王宁 国际贸易融资 提单 单证核验 国际结算"><div class="expert-top"><div class="avatar avatar-expert">王</div><div class="expert-info"><div class="expert-name-row"><strong>王宁</strong><span class="available"><i></i>可参与</span></div><div class="expert-title">国际结算审核 · 贸易单证</div></div></div><p class="expert-bio">熟悉提单、商业发票与合同的交叉核验，可协助识别主体名称和运输条款差异。</p><div class="tag-row"><span class="mini-tag">提单核验</span><span class="mini-tag">国际结算</span><span class="mini-tag">贸易融资</span></div><div class="expert-actions"><small>任务权限需再次校验</small><button class="btn btn-small" data-invite="王宁">邀请入会</button></div></article>' +
+            '<article class="expert-card" data-search="陈婧 跨境监管 资金用途 法规"><div class="expert-top"><div class="avatar avatar-green">陈</div><div class="expert-info"><div class="expert-name-row"><strong>陈婧</strong><span class="available"><i></i>可参与</span></div><div class="expert-title">跨境业务合规 · 资金用途</div></div></div><p class="expert-bio">关注境外贷款用途、跨境支付材料及监管规则适用性。</p><div class="tag-row"><span class="mini-tag">用途审核</span><span class="mini-tag">跨境监管</span><span class="mini-tag">规则检索</span></div><div class="expert-actions"><small>资料由内部目录维护</small><button class="btn btn-small" data-invite="陈婧">邀请入会</button></div></article>' +
+            '<article class="expert-card" data-search="周珂 外汇 结算 日期 汇率"><div class="expert-top"><div class="avatar">周</div><div class="expert-info"><div class="expert-name-row"><strong>周珂</strong><span class="available"><i></i>可参与</span></div><div class="expert-title">外汇运营 · 日期与结算</div></div></div><p class="expert-bio">熟悉币种、付款日期与国际结算安排。</p><div class="tag-row"><span class="mini-tag">外汇</span><span class="mini-tag">结算日期</span></div><div class="expert-actions"><small>权限通过后方可查看材料</small><button class="btn btn-small" data-invite="周珂">邀请入会</button></div></article>' +
+            '<div class="permission-note"><strong>权限说明</strong><br>目录只展示可搜索的专家资料。邀请成功前，系统会校验其任务访问权限；邀请不会授予贷款审批权限。</div>';
+        }
+        applySearch();
+      }
+      function applySearch() {
+        const query = document.getElementById("directorySearch").value.trim().toLowerCase();
+        document.querySelectorAll("#directoryContent [data-search]").forEach(function (card) {
+          card.hidden = Boolean(query) && !card.dataset.search.toLowerCase().includes(query);
+        });
+      }
+      function addSystemNote(text) {
+        const wrapper = document.createElement("div");
+        wrapper.className = "system-note";
+        const span = document.createElement("span");
+        span.textContent = text;
+        wrapper.appendChild(span);
+        document.getElementById("messages").appendChild(wrapper);
+        document.getElementById("chatScroll").scrollTop = document.getElementById("chatScroll").scrollHeight;
+      }
+      function inviteSelected() {
+        if (!document.getElementById("confirmScope").checked) return;
+        if (members.some(function (member) { return member.name === selectedExpert; })) {
+          closeModals();
+          showToast(selectedExpert + " 已在当前会话中");
+          return;
+        }
+        const person = experts[selectedExpert];
+        members.push({ name: selectedExpert, title: person.specialty, initials: person.initials, kind: person.kind });
+        document.getElementById("sessionState").className = "pill pill-green";
+        document.getElementById("sessionState").innerHTML = '<i class="pill-dot"></i>协作会话';
+        document.getElementById("sharedCount").textContent = "1";
+        renderMembers();
+        closeModals();
+        addSystemNote("审核人林澄邀请 " + selectedExpert + " 加入会话 · 可查看已授权历史与证据");
+        showToast(selectedExpert + " 已加入当前审核会话");
+      }
+      function appendMessage(role, name, text, initials, kind) {
+        const article = document.createElement("article");
+        article.className = "message " + (role === "user" ? "user" : "assistant");
+        const avatar = document.createElement("div");
+        avatar.className = role === "user" ? initialsClass(kind) : "avatar avatar-ai";
+        avatar.textContent = initials || (role === "user" ? "林" : "✳");
+        const body = document.createElement("div");
+        body.className = "message-body";
+        const head = document.createElement("div");
+        head.className = "message-head";
+        const strong = document.createElement("strong");
+        strong.textContent = name;
+        const time = document.createElement("span");
+        time.className = "timestamp";
+        time.textContent = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+        head.appendChild(strong);
+        if (role === "user") {
+          const roleTag = document.createElement("span");
+          roleTag.className = "pill";
+          roleTag.textContent = kind === "reviewer" ? "审核人" : "专家";
+          head.appendChild(roleTag);
+        }
+        head.appendChild(time);
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        const p = document.createElement("p");
+        p.textContent = text;
+        bubble.appendChild(p);
+        if (role !== "user") {
+          const note = document.createElement("p");
+          note.style.cssText = "margin-top:9px;color:#8794a7;font-size:10px";
+          note.textContent = "演示交互：此页面不连接模型或审核服务。";
+          bubble.appendChild(note);
+        }
+        body.append(head, bubble);
+        article.append(avatar, body);
+        document.getElementById("messages").appendChild(article);
+        document.getElementById("chatScroll").scrollTop = document.getElementById("chatScroll").scrollHeight;
+      }
+      function sendDraft() {
+        const input = document.getElementById("draft");
+        const text = input.value.trim();
+        if (!text) return;
+        const member = members.find(function (item) { return item.name === document.getElementById("chatSpeaker").value; }) || members[0];
+        appendMessage("user", member.name, text, member.initials, member.kind);
+        input.value = "";
+        input.style.height = "31px";
+        const reply = text.indexOf("收货") >= 0
+          ? "我会把这项作为待核对差异保留。建议审核人对照合同约定的完整主体名称，并核验提单收货人与任务材料中的法律主体是否一致；若凭现有材料仍无法判断，可邀请单证专家共同复核。我不会替你作出放行结论。"
+          : "我会把讨论中的核对建议与材料证据分开整理。需要定位原文或规则条目时，可以继续指定字段；专家意见作为复核参考，最终审核结论仍须由有权限的审核人员确认。";
+        setTimeout(function () { appendMessage("assistant", "慧眼助手", reply, "✳"); }, 250);
+      }
+
+      document.getElementById("openInvite").addEventListener("click", function () { openInvite("王宁"); });
+      document.querySelectorAll("[data-invite]").forEach(function (button) { button.addEventListener("click", function () { openInvite(button.dataset.invite); }); });
+      document.getElementById("confirmScope").addEventListener("change", function (event) { document.getElementById("confirmInvite").disabled = !event.target.checked; });
+      document.getElementById("confirmInvite").addEventListener("click", inviteSelected);
+      document.querySelectorAll("[data-close-modal]").forEach(function (button) { button.addEventListener("click", closeModals); });
+      document.getElementById("openSnapshot").addEventListener("click", function () { openModal(snapshotModal); });
+      document.getElementById("snapshotShortcut").addEventListener("click", function () { openModal(snapshotModal); });
+      document.getElementById("confirmSnapshot").addEventListener("click", function () {
+        closeModals();
+        showToast("已生成只读快照预览（演示原型，不会创建真实链接）");
+      });
+      document.getElementById("sendMessage").addEventListener("click", sendDraft);
+      document.getElementById("draft").addEventListener("keydown", function (event) {
+        if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendDraft(); }
+      });
+      document.getElementById("draft").addEventListener("input", function (event) {
+        event.target.style.height = "31px";
+        event.target.style.height = Math.min(event.target.scrollHeight, 112) + "px";
+      });
+      document.querySelectorAll(".tab").forEach(function (button) { button.addEventListener("click", function () { switchTab(button.dataset.tab); }); });
+      document.getElementById("directorySearch").addEventListener("input", applySearch);
+      document.getElementById("skillShortcut").addEventListener("click", function () { switchTab("skills"); document.getElementById("app").classList.add("panel-open"); });
+      document.getElementById("openPanel").addEventListener("click", function () { app.classList.add("panel-open"); });
+      document.getElementById("closePanel").addEventListener("click", function () { app.classList.remove("panel-open"); });
+      document.getElementById("newChat").addEventListener("click", function () { showToast("已新建审核会话（演示原型）"); });
+      document.querySelectorAll(".nav-item").forEach(function (item) {
+        item.addEventListener("click", function () {
+          document.querySelectorAll(".nav-item").forEach(function (node) { node.classList.remove("active"); });
+          item.classList.add("active");
+          if (item.dataset.filter === "shared" && members.length === 1) showToast("邀请专家后，会话会出现在协作会话列表");
+        });
+      });
+      document.querySelectorAll(".history-item").forEach(function (item) {
+        item.addEventListener("click", function () {
+          document.querySelectorAll(".history-item").forEach(function (node) { node.classList.remove("selected"); });
+          item.classList.add("selected");
+          document.getElementById("conversationTitle").textContent = item.dataset.title;
+        });
+      });
+      document.getElementById("directoryContent").addEventListener("click", function (event) {
+        const button = event.target.closest("[data-skill]");
+        if (!button) return;
+        document.querySelectorAll(".skill-use").forEach(function (node) { node.classList.remove("selected"); node.textContent = "本轮使用"; });
+        button.classList.add("selected");
+        button.textContent = "已选择";
+        document.getElementById("draft").placeholder = "本轮技能：" + button.dataset.skill + " · 输入审核问题…";
+        showToast("已选择技能：" + button.dataset.skill + "（下一轮生效）");
+      });
+      document.getElementById("directoryContent").addEventListener("click", function (event) {
+        const button = event.target.closest("[data-invite]");
+        if (button) openInvite(button.dataset.invite);
+      });
+      document.getElementById("inviteModal").addEventListener("click", function (event) { if (event.target === inviteModal) closeModals(); });
+      document.getElementById("snapshotModal").addEventListener("click", function (event) { if (event.target === snapshotModal) closeModals(); });
+      document.addEventListener("keydown", function (event) { if (event.key === "Escape") { closeModals(); app.classList.remove("panel-open"); } });
+    })();
+  </script>
+</body>
+</html>

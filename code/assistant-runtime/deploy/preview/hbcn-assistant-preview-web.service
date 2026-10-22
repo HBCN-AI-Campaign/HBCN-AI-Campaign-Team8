@@ -1,0 +1,28 @@
+[Unit]
+Description=Huiyan isolated preview static web and API proxy
+After=network-online.target hbcn-assistant-preview-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hbcn-assistant-preview
+Group=hbcn-assistant-preview
+WorkingDirectory=/opt/hbcn-assistant-preview/current
+ExecStart=/opt/hbcn-assistant-preview/tooling/nginx-root/usr/sbin/nginx -p /tmp/ -c /etc/hbcn-assistant-preview/nginx.conf -g "daemon off;"
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/hbcn-assistant-preview/nginx-client /var/lib/hbcn-assistant-preview/nginx-proxy /var/lib/hbcn-assistant-preview/nginx-fastcgi /var/lib/hbcn-assistant-preview/nginx-uwsgi /var/lib/hbcn-assistant-preview/nginx-scgi
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target
