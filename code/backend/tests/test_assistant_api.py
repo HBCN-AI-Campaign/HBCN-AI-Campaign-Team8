@@ -223,7 +223,8 @@ class AssistantApiTests(unittest.TestCase):
                 )
             if request.url.path == "/api/v1/ready":
                 self.assertEqual(request.headers.get("Authorization"), "Bearer rag-token")
-                return httpx.Response(200, json={"status": "ready", "service": "hbcn-rag-service"})
+                return httpx.Response(200, json={"status": "ready", "service": "hbcn-rag-service"},
+                                      headers={"X-RAG-Contract-Version": "1.2.0"})
             return httpx.Response(404)
 
         real_async_client = httpx.AsyncClient

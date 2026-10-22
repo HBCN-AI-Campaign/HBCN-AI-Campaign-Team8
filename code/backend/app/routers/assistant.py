@@ -118,7 +118,12 @@ async def capabilities(user: models.User = Depends(get_current_user)):
     elif not runtime_available:
         message = runtime_problem(runtime_info['code'])
     elif settings.RAG_BASE_URL and not rag_available:
-        message = "助手可用；知识库尚未通过鉴权就绪检查，检索结果可能受限"
+        if rag_info.get('code') == 'contract_mismatch':
+            message = "助手可用；知识库 API 版本不兼容，需使用 RAG 契约 1.2.0 或更新的 1.x 版本"
+        elif rag_info.get('code') == 'contract_missing':
+            message = "助手可用；知识库未返回受支持的 API 契约版本，检索结果可能受限"
+        else:
+            message = "助手可用；知识库尚未通过鉴权就绪检查，检索结果可能受限"
     elif rag_available:
         message = "助手内部服务鉴权与模型配置就绪；知识库在线，实际问答以调用结果为准"
     else:

@@ -9,6 +9,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
 from .assistant_contract import ASSISTANT_RAG_QUERY_MAX_CHARS
+from .assistant_readiness import rag_contract_version_status
 from .config import settings
 
 RAG_QUERY_LIMIT_WARNING = (
@@ -78,6 +79,9 @@ def query_business_knowledge(query: str, *, top_k: int = 6) -> dict:
         timeout=settings.ASSISTANT_RAG_REQUEST_TIMEOUT,
     )
     response.raise_for_status()
+    _, version_problem = rag_contract_version_status(response.headers)
+    if version_problem:
+        raise ValueError('Knowledge service contract version is missing or unsupported')
     payload = _RetrievalResponse.model_validate(response.json())
     for item in payload.sources:
         source_scope = item.metadata.get('scope')

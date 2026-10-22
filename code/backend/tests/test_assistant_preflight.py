@@ -11,7 +11,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 
 from app.assistant_preflight import check_database, preflight
-from app.assistant_readiness import ASSISTANT_PROTOCOL, runtime_readiness
+from app.assistant_readiness import ASSISTANT_PROTOCOL, rag_readiness, runtime_readiness
 from app.config import settings
 from app import models
 from app.database import Base
@@ -99,7 +99,8 @@ class AssistantPreflightTests(unittest.TestCase):
         requests = []
         def handler(request):
             requests.append((request.method, request.url.path, request.headers.get('Authorization')))
-            return httpx.Response(200, json={'status': 'ready', 'configured': True, 'model': 'test-model', 'assistant_protocol': ASSISTANT_PROTOCOL})
+            headers = {'X-RAG-Contract-Version': '1.2.0'} if request.url.path == '/api/v1/ready' else {}
+            return httpx.Response(200, json={'status': 'ready', 'configured': True, 'model': 'test-model', 'assistant_protocol': ASSISTANT_PROTOCOL}, headers=headers)
         with patch.object(settings, 'DATABASE_URL', self.url), patch.object(settings, 'ASSISTANT_RUNTIME_URL', 'http://runtime'), patch.object(
             settings, 'ASSISTANT_RUNTIME_TOKEN', 'private-runtime-token'
         ), patch.object(settings, 'RAG_BASE_URL', 'http://rag'), patch.object(settings, 'RAG_SERVICE_TOKEN', 'private-rag-token'):
@@ -180,3 +181,31 @@ class AssistantRuntimeReadinessTests(unittest.TestCase):
                 self.assertFalse(report['ready'])
                 self.assertEqual(report['code'], code)
                 self.assertNotIn('private', json.dumps(report))
+
+
+class AssistantRagReadinessTests(unittest.TestCase):
+    def probe(self, version, *, status=200, readiness='ready'):
+        headers = {'X-RAG-Contract-Version': version} if version is not None else {}
+        async def run():
+            async with httpx.AsyncClient(transport=httpx.MockTransport(
+                lambda _: httpx.Response(status, json={'status': readiness}, headers=headers)
+            )) as client:
+                return await rag_readiness(client, 'http://rag', 'rag-token')
+        return asyncio.run(run())
+
+    def test_requires_supported_v1_2_contract_and_accepts_compatible_v1_updates(self):
+        for version in (None, '', 'invalid', '1.1.9', '2.0.0'):
+            with self.subTest(version=version):
+                report = self.probe(version)
+                self.assertFalse(report['ready'])
+                self.assertEqual(report['code'], 'contract_missing' if version in (None, '', 'invalid') else 'contract_mismatch')
+        for version in ('1.2.0', '1.2.5', '1.3.0'):
+            with self.subTest(version=version):
+                report = self.probe(version)
+                self.assertTrue(report['ready'])
+                self.assertEqual(report['contract_version'], version)
+
+    def test_compatible_but_degraded_rag_is_not_ready(self):
+        report = self.probe('1.2.0', status=503, readiness='degraded')
+        self.assertFalse(report['ready'])
+        self.assertEqual(report['code'], 'not_ready')

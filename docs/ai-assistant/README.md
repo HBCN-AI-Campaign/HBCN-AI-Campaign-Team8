@@ -130,7 +130,7 @@ RAG 按现有接口检索共享资料；任务概要、字段/规则结果先经
 
 ## 5. 同学如何调用
 
-审核知识检索策略：助手侧 `assistant_knowledge.py` 按 RAG v1.2 调用 `POST /api/v1/retrievals`，仅启用 `business_rules` + `knowledge_base` + `reference`，消费原始来源片段及 sufficient/insufficient/clarification 结果；项目设计、外部法律、任务文档均不混入。检索缺口保留为用户可见限制，主站授权任务材料独立进入回答。助手消息上限为 8,000 字符，RAG 查询上限为 4,000；超过检索上限时不截断或错误重试，而是明确提示并保留已加载的授权任务证据。只改助手专属适配器，不覆盖 RAG 实现或共享 `rag_service.py`。当前隔离云端尚未配置 RAG，真实响应/引用联合链路仍待两模块部署后验收。
+审核知识检索策略：助手侧 `assistant_knowledge.py` 按 RAG v1.2 调用 `POST /api/v1/retrievals`，仅请求 `scope=business_rules`、`sources=knowledge_base`、`purpose=reference`，消费原始来源片段及 sufficient/insufficient/clarification 结果；项目设计、外部法律、任务文档均不混入。助手就绪探针和每次检索都检查 `X-RAG-Contract-Version`：要求 1.2.0 起的兼容 1.x；缺失、旧版本或新主版本均视为未就绪/拒绝证据。检索缺口保留为用户可见限制，主站授权任务材料独立进入回答。助手消息上限为 8,000 字符，RAG 查询上限为 4,000；超过检索上限时不截断或错误重试，而是明确提示并保留已加载的授权任务证据。只改助手专属适配器，不覆盖 RAG 实现或共享 `rag_service.py`。当前隔离云端尚未配置 RAG，真实响应/引用联合链路仍待两模块部署后验收。
 
 页面入口：/assistant?task_code=任务编号，或 /assistant?session_id=会话ID。ID 不授予访问权。所有 API 均要求 Authorization: Bearer 业务JWT。
 
@@ -204,6 +204,8 @@ code/backend:           python -m alembic -c assistant-alembic.ini upgrade head
 此前 PostgreSQL 部署回归：本机 WSL/Linux **PostgreSQL 18.3** 在 **Asia/Shanghai** 会话时区下通过首次/重复迁移、合成业务数据/结构保留、4 连接同键并发、双 JWT 协作/结果恢复/撤权；后端综合回归 **90 项**，已核实验收 schema 为零，临时 PG 已停止且文件已删除。该环境的模型为 mock、业务 API 为 ASGI，不是汇丰云端联合验收。运行方法见[部署验收](../../code/assistant-runtime/deploy/README.md)。
 
 第 27 轮本机验证：助手 CI 对应后端 **87 项**、独立 SDK **8 项**、React **30 项**通过，前端 TypeScript 检查和 Vite 生产构建通过（主站入口仍有约 1.82 MB 警告）；OpenCode runtime 在 Bun **1.4.3** 下冻结安装通过、**3 项 / 52 断言**通过、类型检查和构建通过；工作流 YAML 解析通过。当前 GitHub 远端尚无此工作流，因此 Actions 仍未运行；目标运行器结果和必需检查设置待发布后确认。
+
+第 28 轮本机验证：助手后端 **91 项**通过，新增 RAG 版本兼容性测试覆盖 1.2 最低版本、兼容 v1 次版本、缺失/无效/旧版/新主版本拒绝，以及版本合规但依赖降级仍不报 ready。RAG 契约来自队友当前 `API_CONTRACT.md` 工作区；未请求或修改其服务。真实云端版本头/检索结果仍须联测。
 
 另以临时 SQLite/ASGI + 汇丰真实 **qwen3.8-flash** 约 **10.1 秒**通过任务字段/引用、单人转共享同次运行、相同历史/事件、幂等、保存游标恢复和撤权；与上述 PG 验收分开。前轮 React **30 项分批通过**及 TypeScript/Vite 构建通过，本轮未改前端。契约仍为 **1.2.0**，OpenAPI **18 路径 / 23 操作**。
 

@@ -5,9 +5,30 @@ Never include an upstream exception, URL, response body or token in the result.
 """
 from __future__ import annotations
 
+import re
+
 import httpx
 
 ASSISTANT_PROTOCOL = 2
+RAG_CONTRACT_MINIMUM = (1, 2, 0)
+_RAG_CONTRACT_VERSION = re.compile(r'^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$')
+
+
+def rag_contract_version_status(headers) -> tuple[str | None, str | None]:
+    """Require the RAG v1.2 evidence contract before readiness or use.
+
+    The RAG service publishes its contract in X-RAG-Contract-Version. The
+    assistant depends on the v1.2 retrieval semantics and accepts compatible
+    v1 minor/patch releases, but must stop on missing, older, or new-major APIs.
+    """
+    version = (headers.get('X-RAG-Contract-Version') or '').strip()
+    match = _RAG_CONTRACT_VERSION.fullmatch(version)
+    if not match:
+        return None, 'contract_missing'
+    parsed = tuple(int(part) for part in match.groups())
+    if parsed[0] != 1 or parsed < RAG_CONTRACT_MINIMUM:
+        return version, 'contract_mismatch'
+    return version, None
 
 
 def runtime_problem(code: str) -> str:
@@ -42,7 +63,7 @@ async def runtime_readiness(client: httpx.AsyncClient, base_url: str, token: str
 
 
 async def rag_readiness(client: httpx.AsyncClient, base_url: str, token: str) -> dict:
-    """Use the RAG module's existing authenticated readiness contract."""
+    """Require authenticated readiness and a compatible RAG evidence contract."""
     if not base_url or not token:
         return {"ready": False, "code": "unconfigured"}
     try:
@@ -50,8 +71,12 @@ async def rag_readiness(client: httpx.AsyncClient, base_url: str, token: str) ->
                                     headers={"Authorization": f"Bearer {token}"})
         if response.status_code in (401, 403):
             return {"ready": False, "code": "token_rejected", "http_status": response.status_code}
+        version, version_problem = rag_contract_version_status(response.headers)
+        if version_problem:
+            return {"ready": False, "code": version_problem, "http_status": response.status_code}
         info = response.json()
         ready = response.is_success and isinstance(info, dict) and info.get('status') == 'ready'
-        return {"ready": ready, "code": "ready" if ready else "not_ready", "http_status": response.status_code}
+        return {"ready": ready, "code": "ready" if ready else "not_ready",
+                "http_status": response.status_code, "contract_version": version}
     except (httpx.HTTPError, ValueError):
         return {"ready": False, "code": "unreachable_or_invalid"}

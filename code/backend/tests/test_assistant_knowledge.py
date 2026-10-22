@@ -26,10 +26,11 @@ class AssistantKnowledgeTests(unittest.TestCase):
             'metadata': {'scope': 'business_rules'},
         }], 'warnings': [], 'missing': [], 'source_status': {'knowledge_base': 'ready'}, **updates}
 
-    def invoke(self, payload, *, status=200, top_k=6, query='currency question'):
+    def invoke(self, payload, *, status=200, top_k=6, query='currency question', version='1.2.0'):
         def handler(request):
             self.request = request
-            return httpx.Response(status, json=payload)
+            headers = {'X-RAG-Contract-Version': version} if version is not None else {}
+            return httpx.Response(status, json=payload, headers=headers)
         with httpx.Client(transport=httpx.MockTransport(handler)) as http:
             with patch('app.assistant_knowledge.httpx.post', side_effect=http.post):
                 return query_business_knowledge(query, top_k=top_k)
@@ -80,6 +81,16 @@ class AssistantKnowledgeTests(unittest.TestCase):
         result = self.invoke(self.payload(), query='  汇款币种核对  ')
         self.assertEqual(json.loads(self.request.content)['query'], '汇款币种核对')
         self.assertTrue(result['evidence'])
+
+    def test_rejects_missing_older_and_new_major_rag_contracts(self):
+        for version in (None, 'unknown', '1.1.9', '2.0.0'):
+            with self.subTest(version=version), self.assertRaises(ValueError):
+                self.invoke(self.payload(), version=version)
+
+    def test_accepts_compatible_future_minor_and_patch_contracts(self):
+        for version in ('1.2.0', '1.2.7', '1.3.0'):
+            with self.subTest(version=version):
+                self.assertTrue(self.invoke(self.payload(), version=version)['evidence'])
 
     def test_preserves_source_coverage_and_reranker_limitations(self):
         result = self.invoke(self.payload(
@@ -135,7 +146,8 @@ class AssistantKnowledgeTests(unittest.TestCase):
         context = {'task': {'task_code': 'TASK-1'}, 'documents': [], 'results': []}
         notices = []
         with httpx.Client(transport=httpx.MockTransport(
-            lambda _: httpx.Response(200, json=self.payload(scope='project_design'))
+            lambda _: httpx.Response(200, json=self.payload(scope='project_design'),
+                                     headers={'X-RAG-Contract-Version': '1.2.0'})
         )) as http, patch('app.assistant_knowledge.httpx.post', side_effect=http.post):
             hits = _rag_search(context, '核对业务', notices)
         self.assertEqual([row['type'] for row in hits], ['task'])
