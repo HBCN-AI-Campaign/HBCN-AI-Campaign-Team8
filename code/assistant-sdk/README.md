@@ -2,6 +2,8 @@
 
 网站其他业务模块用这个 HTTP 适配包，不依赖助手数据库、FastAPI、OpenCode 或模型 key。服务端由项目助手模块提供；不能仅安装客户端就启动助手服务。
 
+首次接入看[模块接入清单](../../docs/ai-assistant/模块接入.md)。可运行示例 [examples/workflow.py](examples/workflow.py) 分别提供 `create / ask / resume`，只依赖已安装的本 SDK；会话创建不自动重试，提问使用调用方保存的请求标识，先返回运行 ID 再等待结果。
+
 仓库根目录安装：
 
 ```bash
