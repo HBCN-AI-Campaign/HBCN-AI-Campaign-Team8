@@ -6,6 +6,7 @@ on:
       - ".github/workflows/assistant-ci.yml"
       - "code/backend/**"
       - "code/assistant-sdk/**"
+      - "code/assistant-runtime/**"
       - "code/frontend/**"
       - "code/rag-service/API_CONTRACT.md"
   pull_request:
@@ -13,6 +14,7 @@ on:
       - ".github/workflows/assistant-ci.yml"
       - "code/backend/**"
       - "code/assistant-sdk/**"
+      - "code/assistant-runtime/**"
       - "code/frontend/**"
       - "code/rag-service/API_CONTRACT.md"
   workflow_dispatch:
@@ -84,3 +86,24 @@ jobs:
       - name: Build frontend
         run: npm run build
         working-directory: code/frontend
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: "1.4.3"
+
+      - name: Install OpenCode runtime dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+        working-directory: code/assistant-runtime
+
+      - name: Test OpenCode runtime
+        run: bun test
+        working-directory: code/assistant-runtime
+
+      - name: Type-check OpenCode runtime
+        run: bun run typecheck
+        working-directory: code/assistant-runtime
+
+      - name: Build OpenCode runtime
+        run: bun run build
+        working-directory: code/assistant-runtime

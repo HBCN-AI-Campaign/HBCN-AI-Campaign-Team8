@@ -158,9 +158,24 @@ RAG 按现有接口检索共享资料；任务概要、字段/规则结果先经
 
 ### 提交与部署的最小检查
 
-助手相关代码变化会触发 [Assistant checks](../../.github/workflows/assistant-ci.yml)：安装锁定的后端依赖，运行助手后端回归、独立 SDK 测试、React 测试与生产构建。2026-10-22 本机验证结果为后端 87 项、SDK 8 项、前端 30 项全部通过，构建通过。GitHub Actions 工作流本身不会自动启用分支保护；仓库管理员需把 `assistant` job 设为合并必需检查，红灯提交才会被真正挡住。
+助手后端、SDK、runtime、前端及工作流契约变化会触发 [Assistant checks](../../.github/workflows/assistant-ci.yml)：运行助手后端回归、独立 SDK 测试、React 测试/生产构建，以及 OpenCode runtime 的冻结安装、测试、类型检查和构建（Bun 1.4.3）。工作流已固定 setup-bun 官方 v2.2.0 commit。GitHub Actions 工作流本身不会自动启用分支保护；仓库管理员需把 `assistant` job 设为合并必需检查，红灯提交才会被真正挡住。
 
-检查通过后，同学不必重复跑完整开发测试。统一部署者仍需在目标环境做一次短冒烟，确认迁移、登录/权限与真实汇丰模型；若本次演示依赖 RAG，还需检查授权 ready、真实检索及引用。本机通过和 CI 通过都不能替代尚未配置的真实 RAG 联测。
+团队交付时看提交对应的 GitHub Actions 必需检查：全部绿灯后，无需每位同学重复跑完整回归；统一部署者只做目标环境短冒烟，确认迁移、登录/权限、汇丰模型与当次演示所需的 RAG 检索/引用。CI 未运行、未设为必需或未通过时，不按“可直接部署”处理。本机通过和 CI 通过都不能替代环境配置及真实 RAG 联测。
+
+```mermaid
+flowchart LR
+  A[本地开发与回归] --> B[提交并推送]
+  B --> C[Actions 自动跑后端 / SDK / runtime / React]
+  C -->|失败| D[修复后重新提交]
+  C -->|全部通过且为必需检查| E[统一部署]
+  E --> F[目标环境短冒烟：登录 / 权限 / 汇丰模型]
+  F --> G{演示需要 RAG?}
+  G -->|是| H[确认 RAG ready、检索与引用]
+  G -->|否| I[演示验收]
+  H --> I
+```
+
+截至 2026-10-22，本地 `lfc` 已有该工作流，但 `origin/lfc` 与 GitHub 默认分支均未包含它；GitHub 返回 workflow not found，因此远端 CI 还没有实际运行。此轮补齐 runtime 门禁后，仍需把审核通过的助手提交发布到仓库、确认 Actions 绿灯，并由仓库管理员设置必需检查，才能按上图交付。
 
 1. 团队授权渠道提供配置。后端按 .env.example 设置 runtime/RAG 地址及 token；runtime 按模板设置 AI_BASE_URL / AI_API_KEY / AI_MODEL。真实 key 不入仓库/浏览器。
 2. code/backend：安装 requirements-assistant.txt（包含原 requirements），首次按主站流程初始化业务数据库，再执行下方 Alembic 命令。只增加助手表；旧库缺业务字段时先按业务模块要求升级，不删除/重建业务库。
@@ -186,7 +201,9 @@ code/backend:           python -m alembic -c assistant-alembic.ini upgrade head
 
 测试覆盖权限、撤权、幂等、并发拒绝、取消/超时、作者、旧消息、技能和 React 邀请/轨迹/异常；mock 不代替真实链路。本机另用汇丰 qwen3.8-flash 完成真实问答（约 11.6 / 16 秒），以及隔离双 JWT 账号的真实模型协作验收（约 12.9 秒）。后端显式执行 python -m tests.live_assistant_acceptance --live 可重做后一项：仅用临时库与合成数据，直接调用真实 ASGI 路由，模型走真实 HTTP；不等于双浏览器/反向代理验收。结果与待办见[当前修改规划](持续优化实施规划.md)。
 
-最新一轮：后端 **90 项**、独立 SDK **8 项**通过。本机 WSL/Linux **PostgreSQL 18.3** 在 **Asia/Shanghai** 会话时区下通过首次/重复迁移、合成业务数据/结构保留、4 连接同键并发、双 JWT 协作/结果恢复/撤权。已核实验收 schema 为零，临时 PG 已停止且文件已删除。修复同键准入竞态及时间偏移；PG 验收模型为 mock、业务 API 为 ASGI，不是汇丰云端联合验收。临时库主应用启动和 /docs 检查也通过。运行方法见[部署验收](../../code/assistant-runtime/deploy/README.md)。
+此前 PostgreSQL 部署回归：本机 WSL/Linux **PostgreSQL 18.3** 在 **Asia/Shanghai** 会话时区下通过首次/重复迁移、合成业务数据/结构保留、4 连接同键并发、双 JWT 协作/结果恢复/撤权；后端综合回归 **90 项**，已核实验收 schema 为零，临时 PG 已停止且文件已删除。该环境的模型为 mock、业务 API 为 ASGI，不是汇丰云端联合验收。运行方法见[部署验收](../../code/assistant-runtime/deploy/README.md)。
+
+第 27 轮本机验证：助手 CI 对应后端 **87 项**、独立 SDK **8 项**、React **30 项**通过，前端 TypeScript 检查和 Vite 生产构建通过（主站入口仍有约 1.82 MB 警告）；工作流 YAML 解析通过。实际 OpenCode runtime 测试/类型检查/构建未在本机执行：本机没有 Bun，官方 Windows 二进制下载未完成。当前 GitHub 远端尚无此工作流，因此这些 runtime 检查必须等助手提交发布后由 Actions 实跑，不能记为已通过。
 
 另以临时 SQLite/ASGI + 汇丰真实 **qwen3.8-flash** 约 **10.1 秒**通过任务字段/引用、单人转共享同次运行、相同历史/事件、幂等、保存游标恢复和撤权；与上述 PG 验收分开。前轮 React **30 项分批通过**及 TypeScript/Vite 构建通过，本轮未改前端。契约仍为 **1.2.0**，OpenAPI **18 路径 / 23 操作**。
 
