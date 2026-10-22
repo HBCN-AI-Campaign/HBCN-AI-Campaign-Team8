@@ -1,4 +1,4 @@
-# 慧眼助手 Python SDK · 1.0.0
+# 慧眼助手 Python SDK · 1.1.0
 
 网站其他业务模块用这个 HTTP 适配包，不依赖助手数据库、FastAPI、OpenCode 或模型 key。服务端由项目助手模块提供；不能仅安装客户端就启动助手服务。
 
@@ -24,8 +24,10 @@ async def explain(site_url, reviewer_jwt, task_code, request_id):
         return await assistant.wait(room['id'], run['id'])
 ```
 
+其他页面或进程稍后取结果：`snapshot = await assistant.run(session_id, run_id)`；返回 `status` 与完成后的 `message`。已保存事件游标时可 `wait(session_id, run_id, after_id=cursor)`，SDK 会在需要时读取持久结果，不重跑模型。此结果查询功能要求服务端契约至少 1.1.0；V1 入口保持不变。
+
 `site_url` 是网站根地址（可带站点反代前缀），不含 `/api/assistant/v1`。JWT 必须属于当前有效审核人员。SDK 不申请账号、不保存模型凭证，也不产生审批决定。
 
-可用方法：`contract/capabilities`、`create_session/sessions/session`、`start_run/events/wait/ask/cancel`、`discuss/experts/members/invite/revoke`、`skills/skill_library`。更多治理/删除接口可按 V1 OpenAPI 直接调用。
+可用方法：`contract/capabilities`、`create_session/sessions/session`、`start_run/run/events/wait/ask/cancel`、`discuss/experts/members/invite/revoke`、`skills/skill_library`。更多治理/删除接口可按 V1 OpenAPI 直接调用。
 
 完整[对外契约与时序](../../docs/ai-assistant/对外接口V1.md) · [OpenAPI](../../docs/ai-assistant/contracts/assistant-v1.openapi.json)。`httpx.HTTPStatusError` 保留 HTTP 状态；`AssistantRunError` 提供 `run_id/status`；`TimeoutError` 仅表示客户端停止等待，详见契约。

@@ -61,10 +61,29 @@ class AssistantClient:
         return await self._json('GET', f'sessions/{session_id}/events',
                                 params={"after_id": after_id, **({"run_id": run_id} if run_id else {})})
 
+    async def run(self, session_id: int, run_id: str) -> dict:
+        """Read status and the persisted final message without starting AI."""
+        return await self._json('GET', f'sessions/{session_id}/runs/{run_id}')
+
+    async def _finished_message(self, session_id: int, run_id: str) -> dict | None:
+        snapshot = await self.run(session_id, run_id)
+        if snapshot['status'] == 'completed':
+            if snapshot.get('message') is None:
+                raise AssistantRunError(run_id, 'result_unavailable')
+            return snapshot['message']
+        if snapshot['status'] in ('error', 'cancelled'):
+            raise AssistantRunError(run_id, snapshot['status'])
+        return None
+
     async def wait(self, session_id: int, run_id: str, *, after_id=0, timeout=280) -> dict:
         """Read an existing run only. Timeout/disconnect does not cancel it."""
         cursor = after_id
         async with asyncio.timeout(timeout):
+            # A saved cursor may already be beyond message_end or run_end.
+            if after_id:
+                final = await self._finished_message(session_id, run_id)
+                if final is not None:
+                    return final
             while True:
                 page = await self.events(session_id, cursor, run_id)
                 cursor = page['cursor']
@@ -74,6 +93,10 @@ class AssistantClient:
                     if event['event'] == 'message_end':
                         return event['message']
                     if event['event'] == 'run_end':
+                        if event.get('status') == 'completed':
+                            final = await self._finished_message(session_id, run_id)
+                            if final is not None:
+                                return final
                         raise AssistantRunError(run_id, event.get('status', 'error'))
                 if not page['has_more']:
                     await asyncio.sleep(.7)

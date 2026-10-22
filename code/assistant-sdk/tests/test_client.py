@@ -61,3 +61,36 @@ class ClientTests(unittest.IsolatedAsyncioTestCase):
         )) as client:
             with self.assertRaises(RuntimeError):
                 await client.contract()
+
+    async def test_saved_cursor_fetches_completed_result_without_replaying_or_posting(self):
+        requests = []
+        def handler(request):
+            requests.append(request)
+            return httpx.Response(200, json={'id': 'run-1', 'status': 'completed', 'message': {'content': 'saved result'}})
+        async with AssistantClient('https://site.example', 'jwt', transport=httpx.MockTransport(handler)) as client:
+            result = await client.wait(7, 'run-1', after_id=900)
+        self.assertEqual(result['content'], 'saved result')
+        self.assertEqual([(r.method, r.url.path) for r in requests], [('GET', '/api/assistant/v1/sessions/7/runs/run-1')])
+
+    async def test_completion_event_after_saved_message_fetches_canonical_result(self):
+        fetches = []
+        def handler(request):
+            fetches.append(request)
+            if request.url.path.endswith('/events'):
+                return httpx.Response(200, json={'cursor': 9, 'has_more': False, 'events': [
+                    {'event': 'run_end', 'run_id': 'run-1', 'status': 'completed'},
+                ]})
+            return httpx.Response(200, json={'status': 'completed', 'message': {'content': 'canonical result'}})
+        async with AssistantClient('https://site.example', 'jwt', transport=httpx.MockTransport(handler)) as client:
+            result = await client.wait(7, 'run-1')
+        self.assertEqual(result['content'], 'canonical result')
+        self.assertEqual(len(fetches), 2)
+        self.assertTrue(all(request.method == 'GET' for request in fetches))
+
+    async def test_inconsistent_completed_snapshot_is_not_reported_as_success(self):
+        async with AssistantClient('https://site.example', 'jwt', transport=httpx.MockTransport(
+            lambda _: httpx.Response(200, json={'status': 'completed', 'message': None})
+        )) as client:
+            with self.assertRaises(AssistantRunError) as failed:
+                await client.wait(7, 'run-1', after_id=900)
+            self.assertEqual(failed.exception.status, 'result_unavailable')
