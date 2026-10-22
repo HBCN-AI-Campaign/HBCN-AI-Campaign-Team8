@@ -11,6 +11,7 @@ export interface Run { id: string; status: string; user_id: number; session_id: 
 export interface RoomEvent extends AssistantStreamEvent { id: number; run_id?: string; user_message?: AssistantMessage; status?: string }
 export interface EventPage { events: RoomEvent[]; cursor: number; has_more: boolean; active_run: Run | null }
 export interface LibrarySkill extends AssistantSkill { source: string; installed: boolean; update_available: boolean }
+export interface ExpertProfile { specialty: string; bio: string; tags: string[] }
 
 // Aborting a reader (navigation/unmount) must not cancel a durable model run.
 export const STOP_ASSISTANT_RUN = 'stop-assistant-run'
@@ -44,7 +45,8 @@ export const collaborationApi = {
   members: (id: number) => request<Member[]>(`/sessions/${id}/members`),
   invite: (id: number, userId: number) => request(`/sessions/${id}/members`, 'POST', { user_id: userId }),
   revoke: (id: number, userId: number) => request(`/sessions/${id}/members/${userId}`, 'DELETE'),
-  profile: (profile: { specialty: string; bio: string; tags: string[] }) => request('/experts/me', 'PUT', profile),
+  myProfile: () => request<ExpertProfile>('/experts/me'),
+  profile: (profile: ExpertProfile) => request('/experts/me', 'PUT', profile),
   discuss: (id: number, content: string) => request<AssistantMessage>(`/sessions/${id}/messages`, 'POST', { content }),
   events: (id: number, cursor: number, runId?: string) => request<EventPage>(`/sessions/${id}/events?after_id=${cursor}${runId ? `&run_id=${encodeURIComponent(runId)}` : ''}`),
   cancel: (id: number, runId: string) => request(`/sessions/${id}/runs/${runId}/cancel`, 'POST'),
