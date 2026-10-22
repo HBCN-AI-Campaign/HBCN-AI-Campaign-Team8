@@ -124,6 +124,71 @@ print(resp.json())
 | GET | `/health` | 健康检查 |
 | GET | `/docs` | Swagger 交互文档 |
 
+---
+
+## 二、字段提取接口（授信单据）
+
+从 OCR 文本中按关键词规则提取授信相关单据的结构化字段，供审核使用。
+
+### `GET /ocr/types`
+
+列出支持的单据类型。
+
+```bash
+curl http://127.0.0.1:8000/ocr/types
+```
+
+### `POST /ocr/extract`
+
+上传文档 + 单据类型，返回提取出的字段值。
+
+**请求**（multipart/form-data）：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `type_code` | string | 是 | 单据类型，见 `/ocr/types` |
+| `file` | file | 是 | 待识别的文档 |
+
+**支持的单据类型**：
+
+| type_code | 单据 |
+|-----------|------|
+| `DRAWDOWN_CN` | 授信使用申请书（中文） |
+| `DRAWDOWN_EN` | 授信使用申请书（英文） |
+| `DRAWDOWN_INSTRUCTION` | 提款指令 |
+| `PAYMENT_INSTRUCTION` | 支付指令 |
+
+**请求示例**：
+
+```bash
+curl -X POST http://127.0.0.1:8000/ocr/extract \
+  -F "type_code=DRAWDOWN_CN" \
+  -F "file=@授信使用申请书.pdf"
+```
+
+**返回示例**：
+
+```json
+{
+  "type_code": "DRAWDOWN_CN",
+  "type_label": "授信使用申请书（中文）",
+  "filename": "授信使用申请书.pdf",
+  "via_ocr": true,
+  "fields": [
+    { "key": "date", "label": "日期", "value": "2026/10/12", "confidence": 0.9, "found": true },
+    { "key": "currency", "label": "提款币种", "value": "CNY", "confidence": 0.9, "found": true },
+    { "key": "amount", "label": "提款金额", "value": "12,000,000.00", "confidence": 0.9, "found": true }
+  ],
+  "found_count": 12,
+  "total_count": 15
+}
+```
+
+> **说明**：字段提取用「关键词定位 + 就近取值」的纯规则方式（本地、零成本、秒回）。
+> 对**金额、日期、币种、利息期、到期日**等规整字段准确率高；对**分支行、授信段、
+> 承诺内容**等版式复杂/含大量勾选项的字段，纯规则提取有局限，`confidence` 较低或
+> `found=false` 时建议经办人复核。需要更高准确率可考虑接入 LLM 兜底。
+
 ### `/ocr/path` 请求示例
 
 ```bash

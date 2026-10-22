@@ -7,6 +7,8 @@
 
 接口：
     POST /ocr/analyze   上传文档 + 业务 id，返回 JSON（文本 + 坐标）★ 主接口
+    POST /ocr/extract   上传文档 + 单据类型，提取字段值返回 JSON ★ 字段提取
+    GET  /ocr/types     列出支持的单据类型与字段
     POST /ocr/file   上传文件（multipart/form-data），返回识别文本（本地）
     POST /ocr/path   按服务器本地路径识别（JSON）（本地）
     POST /ocr/file/detailed   上传文件，返回带坐标的明细（本地）
@@ -32,6 +34,8 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from ocr_service import config
+from ocr_service import fields_config
+from ocr_service.field_extractor import extract_fields
 from ocr_service.parser import parse_file
 
 app = FastAPI(
@@ -91,6 +95,58 @@ async def ocr_analyze(
         "text": res["text"],
         "blocks": res.get("blocks", []),
         "chars": len(res["text"]),
+    }
+
+
+@app.get("/ocr/types")
+def ocr_types():
+    """列出支持的单据类型及其字段定义。"""
+    return {"doc_types": fields_config.list_doc_types(), "detail": fields_config.DOC_TYPES}
+
+
+@app.post("/ocr/extract")
+async def ocr_extract(
+    type_code: str = Form(..., description="单据类型，见 /ocr/types"),
+    file: UploadFile = File(..., description="待识别的文档文件"),
+):
+    """上传文档 + 单据类型，OCR 识别后提取字段值返回 JSON。"""
+    cfg = fields_config.get_doc_type(type_code)
+    if cfg is None:
+        valid = ", ".join(fields_config.DOC_TYPES.keys())
+        raise HTTPException(status_code=400, detail=f"未知单据类型：{type_code}（可选：{valid}）")
+
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in config.SUPPORTED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件类型：{suffix}",
+        )
+
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(await file.read())
+        tmp_path = Path(tmp.name)
+
+    try:
+        res = parse_file(tmp_path, detailed=True)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    if res["error"]:
+        return JSONResponse(
+            status_code=500,
+            content={"type_code": type_code, "filename": file.filename, "error": res["error"]},
+        )
+
+    extracted = extract_fields(type_code, res["text"])
+
+    return {
+        "type_code": type_code,
+        "type_label": extracted["type_label"],
+        "filename": file.filename,
+        "via_ocr": res["via_ocr"],
+        "fields": extracted["fields"],
+        "found_count": sum(1 for f in extracted["fields"] if f["found"]),
+        "total_count": len(extracted["fields"]),
     }
 
 
