@@ -26,13 +26,17 @@ from ..assistant_readiness import rag_readiness, runtime_readiness, runtime_prob
 from ..assistant_skills import get_skill, list_skills
 from ..config import settings
 from ..database import get_db
-from ..security import get_current_user
+from ..security import get_current_user, require_role
 from ..assistant_collaboration import (admit_run, author_out, expire_runs, is_shared, public_event,
     session_for_user, visible_sessions, run_out)
 from ..assistant_models import AssistantAudit, AssistantEvent, AssistantMember, AssistantMessageAuthor, AssistantRun
 from .assistant_collaboration import router as collaboration_router
 
-router = APIRouter(prefix="/api/assistant", tags=["assistant"])
+router = APIRouter(
+    prefix="/api/assistant",
+    tags=["assistant"],
+    dependencies=[Depends(require_role(models.Role.REVIEWER))],
+)
 logger = logging.getLogger(__name__)
 router.include_router(collaboration_router)
 

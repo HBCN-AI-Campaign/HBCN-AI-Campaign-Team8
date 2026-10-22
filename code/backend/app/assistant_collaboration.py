@@ -28,7 +28,7 @@ workers: dict[str, asyncio.Task] = {}
 def session_for_user(db: Session, session_id: int, user: models.User) -> models.AssistantSession:
     db.refresh(user)
     session = db.get(models.AssistantSession, session_id)
-    if not user.is_active or not session:
+    if not user.is_active or user.role != models.Role.REVIEWER or not session:
         raise HTTPException(404, "助手会话不存在或无权访问")
     if session.user_id != user.id:
         member = db.query(AssistantMember).populate_existing().filter_by(session_id=session_id, user_id=user.id).first()

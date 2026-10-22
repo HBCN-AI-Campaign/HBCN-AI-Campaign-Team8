@@ -109,6 +109,36 @@ class AssistantPreflightTests(unittest.TestCase):
         self.assertEqual(requests, [('GET', '/readyz', 'Bearer private-runtime-token'), ('GET', '/api/v1/ready', 'Bearer private-rag-token')])
         self.assertNotIn('private-', json.dumps(report))
 
+    def test_production_mode_rejects_default_jwt_and_debug_but_development_mode_reports_without_blocking(self):
+        self.migrate()
+        def handler(request):
+            return httpx.Response(200, json={'status': 'ready', 'configured': True,
+                                             'model': 'test-model', 'assistant_protocol': ASSISTANT_PROTOCOL})
+        common = {
+            'DATABASE_URL': self.url, 'ASSISTANT_RUNTIME_URL': 'http://runtime',
+            'ASSISTANT_RUNTIME_TOKEN': 'runtime-token',
+        }
+        with patch.multiple(settings, **common), patch.object(settings, 'JWT_SECRET', 'change-me-in-production-please'), patch.object(settings, 'DEBUG', True):
+            development = asyncio.run(preflight(transport=httpx.MockTransport(handler)))
+            production = asyncio.run(preflight(require_production=True, transport=httpx.MockTransport(handler)))
+        self.assertTrue(development['ready'])
+        self.assertFalse(development['security']['production_ready'])
+        self.assertFalse(production['ready'])
+        self.assertEqual(production['security']['issues'], ['jwt_secret_weak_or_default', 'debug_enabled'])
+        self.assertNotIn('change-me-in-production-please', json.dumps(production))
+
+    def test_production_mode_accepts_strong_jwt_when_debug_is_disabled(self):
+        self.migrate()
+        def handler(request):
+            return httpx.Response(200, json={'status': 'ready', 'configured': True,
+                                             'model': 'test-model', 'assistant_protocol': ASSISTANT_PROTOCOL})
+        with patch.object(settings, 'DATABASE_URL', self.url), patch.object(settings, 'ASSISTANT_RUNTIME_URL', 'http://runtime'), patch.object(
+            settings, 'ASSISTANT_RUNTIME_TOKEN', 'runtime-token'
+        ), patch.object(settings, 'JWT_SECRET', 'a-secure-random-secret-with-at-least-32-characters'), patch.object(settings, 'DEBUG', False):
+            report = asyncio.run(preflight(require_production=True, transport=httpx.MockTransport(handler)))
+        self.assertTrue(report['ready'])
+        self.assertEqual(report['security'], {'required': True, 'production_ready': True, 'issues': []})
+
     def test_failed_dependency_is_redacted_and_does_not_claim_ready(self):
         self.migrate()
         def handler(request):

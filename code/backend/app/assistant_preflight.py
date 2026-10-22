@@ -20,6 +20,23 @@ from .assistant_readiness import rag_readiness, runtime_readiness
 from .config import settings
 from .database import Base
 
+_KNOWN_WEAK_JWT_SECRETS = {
+    "change-me-in-production-please",
+    "replace-with-a-long-random-secret",
+    "secret",
+    "changeme",
+}
+
+
+def production_security_status(jwt_secret: str, debug: bool) -> dict:
+    """Report production auth settings without exposing the configured secret."""
+    issues = []
+    if len(jwt_secret) < 32 or jwt_secret.strip().casefold() in _KNOWN_WEAK_JWT_SECRETS:
+        issues.append("jwt_secret_weak_or_default")
+    if debug:
+        issues.append("debug_enabled")
+    return {"production_ready": not issues, "issues": issues}
+
 
 def database_status(connection) -> dict:
     """Inspect schema/constraints, never user or task contents."""
@@ -77,23 +94,27 @@ def check_database(database_url: str) -> dict:
             engine.dispose()
 
 
-async def preflight(*, require_rag: bool = False, transport=None) -> dict:
+async def preflight(*, require_rag: bool = False, require_production: bool = False, transport=None) -> dict:
     database = await asyncio.to_thread(check_database, settings.DATABASE_URL)
     async with httpx.AsyncClient(timeout=httpx.Timeout(6, connect=3), transport=transport, follow_redirects=False) as client:
         runtime = await runtime_readiness(client, settings.ASSISTANT_RUNTIME_URL, settings.ASSISTANT_RUNTIME_TOKEN)
         rag = {"required": require_rag, "ready": False, "code": "not_checked"}
         if require_rag:
             rag.update(await rag_readiness(client, settings.RAG_BASE_URL, settings.RAG_SERVICE_TOKEN))
-    return {"ready": database['ready'] and runtime['ready'] and (rag['ready'] or not require_rag),
-            "database": database, "runtime": runtime, "rag": rag,
+    security = {"required": require_production, **production_security_status(settings.JWT_SECRET, settings.DEBUG)}
+    ready = (database['ready'] and runtime['ready'] and (rag['ready'] or not require_rag)
+             and (security['production_ready'] or not require_production))
+    return {"ready": ready,
+            "database": database, "runtime": runtime, "rag": rag, "security": security,
             "model_call_verified": False, "deployment_mode": "single_api_worker"}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--require-rag', action='store_true', help='also require the existing authenticated RAG readiness API')
+    parser.add_argument('--production', action='store_true', help='fail unless JWT secret is strong and DEBUG is disabled')
     args = parser.parse_args()
-    report = asyncio.run(preflight(require_rag=args.require_rag))
+    report = asyncio.run(preflight(require_rag=args.require_rag, require_production=args.production))
     print(json.dumps(report, ensure_ascii=False))
     return 0 if report['ready'] else 1
 

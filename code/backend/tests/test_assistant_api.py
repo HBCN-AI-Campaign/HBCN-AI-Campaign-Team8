@@ -93,15 +93,16 @@ class AssistantApiTests(unittest.TestCase):
             f"/api/assistant/sessions/{session_id}",
             headers=self.operator_headers,
         )
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 403)
 
-    def test_operator_cannot_attach_another_users_task(self):
-        response = self.client.post(
-            "/api/assistant/sessions",
-            headers=self.operator_headers,
-            json={"title": "forbidden", "task_code": "REVIEWER-ONLY"},
-        )
-        self.assertEqual(response.status_code, 404)
+    def test_operator_cannot_access_reviewer_assistant_capabilities_sessions_or_skills(self):
+        requests = [
+            self.client.get("/api/assistant/capabilities", headers=self.operator_headers),
+            self.client.get("/api/assistant/sessions", headers=self.operator_headers),
+            self.client.get("/api/assistant/skills", headers=self.operator_headers),
+            self.client.post("/api/assistant/sessions", headers=self.operator_headers, json={"title": "forbidden"}),
+        ]
+        self.assertEqual([response.status_code for response in requests], [403, 403, 403, 403])
 
     def test_strip_tool_echo_removes_model_tool_echo(self):
         # 网关模型会在调用工具前把参数 JSON 当文本回显，需从正文剔除。

@@ -59,6 +59,23 @@ class CollaborationTests(unittest.TestCase):
         result = self.client.post(self.base + '/members', headers=self.reviewer_headers, json={"user_id": self.operator_id})
         self.assertEqual(result.status_code, 404)
 
+    def test_operator_cannot_call_collaboration_or_model_routes(self):
+        operations = [
+            ('GET', '/api/assistant/skill-library', None),
+            ('PUT', '/api/assistant/skill-library/risk-review', None),
+            ('GET', self.base + '/members', None),
+            ('GET', self.base + '/events', None),
+            ('POST', self.base + '/messages', {'content': '经办人讨论'}),
+            ('POST', self.base + '/runs', {'content': '经办人提问'}),
+            ('POST', self.base + '/messages/stream', {'content': '经办人提问'}),
+        ]
+        with patch('app.assistant_service.run_agent_events') as model:
+            for method, path, payload in operations:
+                with self.subTest(method=method, path=path):
+                    result = self.client.request(method, path, headers=self.operator_headers, json=payload)
+                    self.assertEqual(result.status_code, 403)
+            model.assert_not_called()
+
     def test_discussion_keeps_author_and_never_calls_model(self):
         self.invite()
         with patch('app.assistant_service.run_agent_events') as model:
@@ -151,6 +168,22 @@ class CollaborationTests(unittest.TestCase):
         self.assertEqual([row['role'] for row in history['messages']], ['user'])
         self.assertIsNone(history['active_run'])
 
+    def test_private_run_cannot_publish_answer_after_actor_loses_reviewer_role(self):
+        async def downgraded_before_final(*args, **kwargs):
+            with self.session_factory() as db:
+                user = db.get(models.User, self.reviewer_id)
+                user.role = models.Role.OPERATOR
+                db.commit()
+            yield {'event': 'assistant_result', 'answer': '权限撤销后不可见的答复', 'citations': []}
+        with patch('app.assistant_service.run_agent_events', downgraded_before_final):
+            response = self.client.post(self.base + '/messages/stream', headers=self.reviewer_headers,
+                                        json={'content': '生成期间取消审核角色'})
+        self.assertNotIn('权限撤销后不可见的答复', response.text)
+        self.assertNotIn('event: message_end', response.text)
+        with self.session_factory() as db:
+            self.assertEqual(db.query(models.AssistantMessage).filter_by(session_id=self.room, role='assistant').count(), 0)
+            self.assertIsNone(db.query(AssistantRun).filter_by(active_session_id=self.room).first())
+
     def test_inactive_invited_user_loses_access(self):
         self.invite()
         with self.session_factory() as db:
@@ -215,9 +248,9 @@ class CollaborationTests(unittest.TestCase):
             owner = db.get(models.User, self.reviewer_id)
             owner.role = models.Role.OPERATOR
             db.commit()
-        self.assertEqual(self.client.get(self.base, headers=self.reviewer_headers).status_code, 404)
-        listed = self.client.get('/api/assistant/sessions', headers=self.reviewer_headers).json()
-        self.assertNotIn(self.room, [row['id'] for row in listed])
+        self.assertEqual(self.client.get(self.base, headers=self.reviewer_headers).status_code, 403)
+        listed = self.client.get('/api/assistant/sessions', headers=self.reviewer_headers)
+        self.assertEqual(listed.status_code, 403)
 
     def test_legacy_rows_have_owner_attribution_and_shared_delete_cleans_tables(self):
         with self.session_factory() as db:
