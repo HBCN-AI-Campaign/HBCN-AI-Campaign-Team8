@@ -1,4 +1,4 @@
-# 慧眼助手 Python SDK · 1.1.0
+# 慧眼助手 Python SDK · 1.1.1
 
 网站其他业务模块用这个 HTTP 适配包，不依赖助手数据库、FastAPI、OpenCode 或模型 key。服务端由项目助手模块提供；不能仅安装客户端就启动助手服务。
 
@@ -31,3 +31,13 @@ async def explain(site_url, reviewer_jwt, task_code, request_id):
 可用方法：`contract/capabilities`、`create_session/sessions/session`、`start_run/run/events/wait/ask/cancel`、`discuss/experts/members/invite/revoke`、`skills/skill_library`。更多治理/删除接口可按 V1 OpenAPI 直接调用。
 
 完整[对外契约与时序](../../docs/ai-assistant/对外接口V1.md) · [OpenAPI](../../docs/ai-assistant/contracts/assistant-v1.openapi.json)。`httpx.HTTPStatusError` 保留 HTTP 状态；`AssistantRunError` 提供 `run_id/status`；`TimeoutError` 仅表示客户端停止等待，详见契约。
+
+部署验收命令（SDK 1.1.1 新增）：
+
+```bash
+python -m hbcn_assistant.verify --site https://演示站点 --task 已授权演示任务编号 --expert-id 第二位审核人员ID --live --require-rag
+```
+
+执行前通过环境变量 `HBCN_VERIFY_OWNER_JWT`、`HBCN_VERIFY_EXPERT_JWT` 提供两个不同审核账号的 JWT，不把令牌写进命令行参数/仓库。`expert-id` 必须属于第二个 JWT。工具对现有演示任务创建一个临时助手会话、邀请/讨论、调用一次模型、验证引用/历史/幂等/恢复/撤权后删除该会话；不创建用户、不修改任务或专家资料。`--require-rag` 在知识库未就绪时于模型调用前失败；不带它的结果会单独标记 rag_available，不表示检索已成功。不要对真实敏感业务任务进行验收。
+
+成功返回 JSON（`passed/cleanup_complete=true`）；失败退出码 1，只打印安全的阶段名与清理状态，不输出答案、JWT、URL 或上游错误正文。`cleanup_complete=false` 时由创建者检查本次 `[验收临时会话]`，先停止活跃运行再删除。该命令验证 HTTP API，不替代浏览器、真实检索质量、云端生产预检或性能验收。

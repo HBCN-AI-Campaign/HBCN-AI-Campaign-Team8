@@ -2,4 +2,4 @@
 from .client import AssistantClient, AssistantRunError
 
 __all__ = ["AssistantClient", "AssistantRunError"]
-__version__ = "1.1.0"
+__version__ = "1.1.1"
