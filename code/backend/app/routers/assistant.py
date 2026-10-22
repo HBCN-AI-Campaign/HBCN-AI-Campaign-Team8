@@ -8,6 +8,7 @@ import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
+from fastapi.openapi.utils import get_openapi
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy import func
 
@@ -30,15 +31,22 @@ from ..security import get_current_user, require_role
 from ..assistant_collaboration import (admit_run, author_out, expire_runs, is_shared, public_event,
     session_for_user, visible_sessions, run_out)
 from ..assistant_models import AssistantAudit, AssistantEvent, AssistantMember, AssistantMessageAuthor, AssistantRun
+from ..assistant_contract import CONTRACT_VERSION, AssistantContractOut, AssistantHTTPError, contract_info
 from .assistant_collaboration import router as collaboration_router
 
 router = APIRouter(
-    prefix="/api/assistant",
     tags=["assistant"],
     dependencies=[Depends(require_role(models.Role.REVIEWER))],
+    responses={code: {"model": AssistantHTTPError} for code in (401, 403, 404, 409)},
 )
 logger = logging.getLogger(__name__)
 router.include_router(collaboration_router)
+
+
+@router.get("/contract", response_model=AssistantContractOut)
+def contract(user: models.User = Depends(get_current_user)):
+    del user
+    return contract_info()
 
 
 def _session_for_user(db: Session, session_id: int, user: models.User) -> models.AssistantSession:
@@ -239,4 +247,19 @@ async def stream_message(
         event_stream(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
+    )
+
+
+# One implementation, two mounts. New consumers never call the runtime API.
+_implementation = router
+router = APIRouter(prefix="/api/assistant")
+router.include_router(_implementation)
+router.include_router(_implementation, prefix="/v1")
+
+
+def public_openapi() -> dict:
+    """Export only V1, with no app settings or credentials."""
+    return get_openapi(
+        title="Huiyan Assistant API", version=CONTRACT_VERSION,
+        routes=[route for route in router.routes if route.path.startswith("/api/assistant/v1/")],
     )

@@ -58,7 +58,7 @@ async def verify():
         owner, expert, outsider = [await login(name) for name in
                                    ('acceptance-owner', 'acceptance-expert', 'acceptance-outsider')]
         async def call(method, path, headers=owner, body=None):
-            response = await client.request(method, '/api/assistant' + path, headers=headers,
+            response = await client.request(method, '/api/assistant/v1' + path, headers=headers,
                                             **({'json': body} if body is not None else {}))
             response.raise_for_status()
             return response.json()
@@ -67,8 +67,8 @@ async def verify():
         assert capability['configured'], 'Configure a real HSBC OpenCode runtime before this check'
         room = await call('POST', '/sessions', body={'title': '隔离协作验收', 'task_code': 'SYNTHETIC-COLLAB-1'})
         path = f"/sessions/{room['id']}"
-        assert (await client.get('/api/assistant' + path, headers=expert)).status_code == 404
-        assert (await client.get('/api/assistant' + path, headers=outsider)).status_code == 404
+        assert (await client.get('/api/assistant/v1' + path, headers=expert)).status_code == 404
+        assert (await client.get('/api/assistant/v1' + path, headers=outsider)).status_code == 404
 
         payload = {'content': '这是合成验收数据。先读取授权证据，准确说明本任务的币种（保留代码）和金额（使用数字），标注本轮证据编号 [E编号]，说明下一步核对重点，明确结论必须由有权限的审核人员确认。不要查询外部法规。',
                    'client_message_id': 'live-collaboration-001'}
@@ -109,14 +109,21 @@ async def verify():
         assert [row['author_id'] for row in owner_history['messages'] if row['role'] == 'user'] == [room['owner_id'], expert_id]
         expert_events = await call('GET', path + f"/events?run_id={run['id']}", headers=expert)
         assert expert_events['events'] == received
+        from hbcn_assistant import AssistantClient
+        async with AssistantClient('http://acceptance', owner['Authorization'].removeprefix('Bearer '),
+                                   transport=httpx.ASGITransport(app=app)) as sdk:
+            assert (await sdk.contract())['contract_version'] == '1.0.0'
+            replayed = await sdk.ask(room['id'], payload['content'], client_message_id=payload['client_message_id'])
+            assert replayed == final[0]['message'], 'V1 SDK must replay the same canonical answer'
         await call('DELETE', path + f'/members/{expert_id}')
         for suffix in ('', '/events', '/members'):
-            assert (await client.get('/api/assistant' + path + suffix, headers=expert)).status_code == 404
+            assert (await client.get('/api/assistant/v1' + path + suffix, headers=expert)).status_code == 404
         audit = await call('GET', path + '/audit')
         assert {row['action'] for row in audit} >= {'member_invited', 'member_revoked'}
         print(json.dumps({'passed': True, 'model': capability['model'], 'seconds': round(time.monotonic() - started, 2),
                           'same_history': True, 'same_events': True, 'idempotent_retry': True,
                           'private_run_reopened': True, 'private_to_shared_same_run': True,
+                          'versioned_sdk_replay': True,
                           'revocation_blocks_access': True, 'real_model': True, 'synthetic_disposable_db': True,
                           'authorized_task_fields_answered': True, 'source_ids_resolved': True}))
     engine.dispose()
