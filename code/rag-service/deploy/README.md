@@ -2,13 +2,13 @@
 
 这是供同事部署/联调的模块版本，不表示已经迁移到汇丰 ECS 或通过完整业务质量验收。模块只通过 HTTP 与主站、模型 runtime、Embedding、reranker、法宝连接；调用方接口见 [API_CONTRACT.md](../API_CONTRACT.md)，不需要随内部模型或数据库实现改代码。
 
-## 获取协作版本
+## 获取已合并版本
 
-协作分支为 `codex/rag-module-v0.3.0`（当前源码版本 0.5.0）；在独立干净 checkout 获取该分支，部署时固定审核过的 commit，避免直接覆盖同事正在修改的工作区。它是仓库内的协作版本，尚未合入 main。交接范围为 `code/rag-service` 及对应 RAG 规划/验证文档，不包含个人凭证、已建索引或真实资料。
+首版已通过 PR #4 合入 `main`，合并提交为 `32d08431108b06fdd2d67ac0f9d4b52f6cc0d5b3`，源码版本 0.5.0。部署时固定审核过的 commit，避免直接覆盖同事正在修改的工作区；交接范围为 `code/rag-service` 及对应 RAG 规划/验证文档，不包含个人凭证、已建索引或真实资料。
 
 ```bash
-git fetch origin codex/rag-module-v0.3.0
-git switch --track origin/codex/rag-module-v0.3.0
+git fetch origin main
+git switch --detach 32d08431108b06fdd2d67ac0f9d4b52f6cc0d5b3
 cd code/rag-service
 ```
 
