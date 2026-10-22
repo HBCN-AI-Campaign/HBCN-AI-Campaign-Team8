@@ -75,7 +75,7 @@ sudo journalctl -u hbcn-assistant-runtime --since '-5 minutes'
 | code/backend | `python -m alembic -c assistant-alembic.ini upgrade head`，`python -m app.assistant_preflight`，`python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1` | 主业务 API 8000 |
 | code/frontend | `npm ci`，`npm run dev` | 浏览器 5173/assistant（需登录） |
 
-Windows 在 `code/backend` 下用 `.venv\Scripts\Activate.ps1`，Linux 用 `source .venv/bin/activate` 激活环境。端口不同则对应调整 backend 的 `ASSISTANT_RUNTIME_URL` 及 frontend 的 `.env.local` 中 `HBCN_API_TARGET`；它们都是服务地址，不是 API key。RAG 使用其模块的部署流程与默认 8010，不能当作主业务 API。
+Windows 在 `code/backend` 下用 `.venv\Scripts\Activate.ps1`，Linux 用 `source .venv/bin/activate` 激活环境。端口不同则对应调整 backend 的 `ASSISTANT_RUNTIME_URL` 及 frontend 的 `.env.local` 中 `HBCN_API_TARGET`；它们都是服务地址，不是 API key。当前 RAG 验收地址为 8011；旧 8010 实例不代表本轮 RAG 版本，RAG 本身仍由其模块流程部署，不能当作主业务 API。
 
 ```mermaid
 flowchart LR
@@ -83,7 +83,7 @@ flowchart LR
   Front -->|业务 JWT · /api 代理| API[FastAPI · 8000]
   API -->|内网 token · 协议 2| RT[OpenCode runtime · 8090]
   RT -->|HSBC key 仅服务端| HSBC[HSBC Model API]
-  API -->|服务间 token| RAG[RAG · 默认 8010]
+  API -->|服务间 token| RAG[RAG · 当前验收端口 8011]
 ```
 
 `preflight --require-rag` 还要求 RAG 授权就绪接口通过。网页和每次 AI 调用都会核对 runtime 的版本；显示“协议版本不一致”时应部署同一 release 并重启 runtime。正确 token 和协议也不等于 HSBC 请求一定成功，仍须实际合成任务问答及引用验收。生产网站无需 Vite，沿用主站静态站点与 API 代理。
@@ -94,10 +94,10 @@ flowchart LR
 
 ```bash
 python -m alembic -c assistant-alembic.ini upgrade head
-python -m app.assistant_preflight --require-rag
+python -m app.assistant_preflight --require-rag --production
 ```
 
-预检退出码 0 表示数据库结构/迁移/运行唯一约束、runtime 鉴权与本地配置、RAG 既有授权就绪接口通过；不写库、不发模型请求、不打印连接串或凭证。省略 --require-rag 可检查普通问答依赖，但结果会明确标注 RAG 未检查。不要将预检通过称为模型质量或外部 API 授权验收。
+预检退出码 0 表示数据库结构/迁移/运行唯一约束、runtime 鉴权与协议、RAG 既有授权就绪接口，以及生产 JWT/DEBUG 配置通过；不写库、不发模型请求、不打印连接串或凭证。目标云端验收使用 `--require-rag --production`；本机开发可省略 `--production`，报告仍会显示生产配置是否安全。不要将预检通过称为模型质量或外部 API 授权验收。
 
 随后用团队两个审核账号，从现有网站入口完成邀请、历史、具名讨论、AI 问答、引用、停止/刷新恢复和撤权测试。主后端当前只支持单实例单 worker；同学拉取后必须通过团队渠道取得授权配置。
 

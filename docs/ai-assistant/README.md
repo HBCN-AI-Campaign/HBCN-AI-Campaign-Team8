@@ -2,7 +2,7 @@
 
 跨模块协作请先看[全组接线总览](../integration/README.md)与[详细接口/时序](../integration/接口与时序.md)：区分业务专项审核与独立助手，明确RAG证据、SDK能力、任务状态和人工处置的边界；新增接口为草案，不代表本模块已实现。
 
-> 当前实现：审核人员与 AI 先讨论，需要时邀请有任务权限的同事进入同一会话，阅读历史、共同讨论或继续问 AI。助手只提供辅助意见，审核结论必须由有权限人员确认。
+> 当前实现：审核人员与 AI 先讨论，需要时邀请有任务权限的审核同事进入同一会话，阅读历史、共同讨论或继续问 AI。慧眼助手页面与全部助手 API 仅供审核人员；经办人负责提交材料，不进入助手审核会话。助手只提供辅助意见，审核结论必须由有权限人员确认。
 
 ## 1. 当前做到哪里
 
@@ -29,7 +29,7 @@ flowchart LR
   E[受邀同事] --> UI
   W[业务工作流 / Agent] -->|AssistantClient + 业务 JWT| API
   UI -->|JWT · JSON / SSE / 事件游标| API[FastAPI 助手 API]
-  API --> ACL[成员身份 AND 现有任务权限]
+  API --> ACL[审核角色 AND 成员身份 AND 现有任务权限]
   ACL --> DB[(会话 / 作者 / 运行 / 事件 / 审计)]
   API --> TASK[获准的任务字段 / 规则结果]
   API --> RAG[RAGClient · 现有知识库接口]
@@ -80,11 +80,13 @@ sequenceDiagram
 ~~~
 
 - 创建者管理成员；成员可讨论/问 AI；创建者和运行发起者可停止 AI。未受邀、停用、撤权或失去任务权限的用户不能继续读取。
+- 助手路由统一检查数据库中的审核角色，非审核人员返回 403；进行中的私有/共享运行也复核角色，角色撤销后不发布或保存完整答复。历史经办人会话保留数据，但不再授权访问。
 - 会话任务固定；切换任务须新建会话。任务授权仍沿用主站角色规则，助手没有擅自实现全平台细粒度任务 ACL。
 - 每会话最多一个 AI 运行；期间仍可发讨论，新消息在后续 AI 轮次纳入上下文。
 - 相同 client_message_id + 相同内容返回同一运行；同键不同内容返回 409。调用方重试须复用原键，显式重新提问用新键。
 - 协作发送者约 0.7 秒读取本轮事件，旁观成员约 1.8 秒同步，目录约 5 秒刷新；隐藏标签页暂停后台同步。这不是 WebSocket/presence。
 - 刷新可重建正在运行的公开轨迹；协作运行独立于事件读取连接。进程崩溃后，过期运行明确失败，不自动再次调用模型。
+- 助手 API 的 401 表示业务登录 JWT 无效或过期；前端清除该登录态并跳回登录。它与 HSBC 模型 API key、runtime token 是不同凭证，重新登录后再发送；不要将模型凭证填入网页。
 
 ## 4. 数据与回答边界
 
@@ -132,7 +134,7 @@ RAG 按现有接口检索共享资料；任务概要、字段/规则结果先经
 
 事件：message_start / step / tool / delta / citations / message_end / error；协作增加 discussion / members_changed / run_end。持久事件带 id、run_id；message_end 的落库消息为权威正文，run_end.status 为最终运行状态。字段及调试见后端 /docs。
 
-业务工作流用 app.assistant_client.AssistantClient(base_url, user_jwt) 的 create_session / ask / events / cancel；ask 的 client_message_id 使用业务请求唯一键。无需 HSBC key 或 runtime token，不绕过任务权限；自主后台服务身份需另外设计授权。
+业务工作流用 app.assistant_client.AssistantClient(base_url, user_jwt) 的 create_session / ask / events / cancel；委托 JWT 必须属于当前有效审核人员，ask 的 client_message_id 使用业务请求唯一键。无需 HSBC key 或 runtime token，不绕过任务权限；自主后台服务身份需另外设计授权。
 
 ## 6. 拉取与部署
 
@@ -144,7 +146,7 @@ RAG 按现有接口检索共享资料；任务概要、字段/规则结果先经
 
 用户指定继续使用已有汇丰云主站。2026-10-22 SSH 只读核对：Ubuntu 24.04，80 是直接运行的 Vite 开发进程且当前前端源码不含助手，8000 为没有助手路由的 FastAPI 登录会话进程；没有部署助手 runtime/表。后端无 `.env` 或 DB/JWT 配置变量，数据库只有业务表，现有 Python 环境缺助手新增依赖。云端细项见[部署交付](../../code/assistant-runtime/deploy/README.md)。现有网站在线不能据此算助手已上线。没有改动云端运行文件或业务库。
 
-预检 `python -m app.assistant_preflight --require-rag` 检查现有表/迁移/运行唯一约束及内部服务鉴权，不改库、不消耗模型请求。首次迁移可从只有业务表的环境创建所有助手表，也兼容已有单人助手数据。runtime 带 token 的 `/readyz` 和每轮请求采用 `assistant_protocol: 2`；capabilities 与实际 AI 运行都会检查该协议，旧进程不能冒充当前就绪。升级后端时需同时发布此版 runtime。RAG 仍使用其既有 `/api/v1/ready`，不拿公开存活接口代替授权就绪。
+云端预检使用 `python -m app.assistant_preflight --require-rag --production`，只读检查助手表/迁移/运行约束、runtime 鉴权与协议、RAG 授权就绪接口，并确认 JWT 密钥不是弱默认值且 `DEBUG=false`；不改库、不消耗模型请求、不输出凭证。普通本机预检可省略 `--production`，但报告仍会列出生产安全状态。首次迁移可从只有业务表的环境创建所有助手表，也兼容已有单人助手数据。runtime 带 token 的 `/readyz` 和每轮请求采用 `assistant_protocol: 2`；capabilities 与实际 AI 运行都会检查该协议，旧进程不能冒充当前就绪。升级后端时需同时发布此版 runtime。RAG 仍使用其既有 `/api/v1/ready`，不拿公开存活接口代替授权就绪。
 
 没有汇丰授权配置的电脑不能直接请求模型；拉取可部署不等于把私密 key 随仓库分发。RAG/OCR/业务审核部署由对应模块负责。
 
@@ -159,6 +161,6 @@ code/backend:           python -m alembic -c assistant-alembic.ini upgrade head
 
 测试覆盖权限、撤权、幂等、并发拒绝、取消/超时、作者、旧消息、技能和 React 邀请/轨迹/异常；mock 不代替真实链路。本机另用汇丰 qwen3.8-flash 完成真实问答（约 11.6 / 16 秒），以及隔离双 JWT 账号的真实模型协作验收（约 12.9 秒）。后端显式执行 python -m tests.live_assistant_acceptance --live 可重做后一项：仅用临时库与合成数据，直接调用真实 ASGI 路由，模型走真实 HTTP；不等于双浏览器/反向代理验收。结果与待办见[当前修改规划](持续优化实施规划.md)。
 
-最新回归：本轮后端 **56 项**通过，包含仅业务库首次迁移、协议/鉴权与引用校验；前端本轮生产构建通过、上一轮 **20 项分批回归**通过；runtime 在 Windows 与本机 Ubuntu/Linux 各 **3 项 / 52 断言**通过，包含无项目 node_modules 的独立发布包，类型检查/构建通过。最新真实汇丰多人 API 与任务事实/引用复测约 **21.7 秒**通过。Linux systemd 模板已离线校验，未安装服务。本机双登录页面已通过真实 HTTP/汇丰模型的邀请、历史共享、具名讨论、共同问答及撤权清屏，可用 --browser-fixture 重做；仍不等于 Docker、云端助手、真实 PostgreSQL 或两台团队电脑验收。
+最新回归：后端助手 **60 项**与 RAG 客户端 **9 项**合计 **69 项**通过，包含首次迁移、角色与成员权限、生成中角色撤销、协议/鉴权、引用校验及生产预检。前端生产构建及 React/Ant Design X 交互 **21 项**通过。此前 runtime 在 Windows 与本机 Ubuntu/Linux 各 **3 项 / 52 断言**、独立发布包、类型检查和构建通过；此前真实汇丰多人 API/任务事实/引用复测约 **21.7 秒**通过。本轮角色修正使用合成测试，不重报为新真实模型验收。Linux systemd 模板已离线校验，未安装服务。本机双登录页面此前通过邀请、共享历史、具名讨论、共同问答与撤权清屏，可用 --browser-fixture 重做；仍不等于 Docker、云端助手、真实 PostgreSQL 或两台团队电脑验收。
 
 维护三层：[本文](README.md)说当前是什么；[修改规划](持续优化实施规划.md)记录本轮实现和验证；[决策记录](决策记录.md)解释长期取舍。接口/行为落地时同步，不按日期复制。[早期调研](多人协作AI对话调研与优化方案.md)与[旧交接](开发记录与交接.md)是历史，遇冲突以当前代码和本文为准。
