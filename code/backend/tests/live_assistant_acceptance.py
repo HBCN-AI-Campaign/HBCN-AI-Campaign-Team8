@@ -72,7 +72,7 @@ async def verify():
         await call('POST', path + '/messages', headers=expert, body={'content': '建议先核对合同币种与提款申请是否一致。'})
         assert (await client.get('/api/assistant' + path, headers=outsider)).status_code == 404
 
-        payload = {'content': '这是合成验收数据。根据同事刚才的建议，用两句话说明下一步核对重点，明确结论必须由有权限的审核人员确认。不要查询外部法规。',
+        payload = {'content': '这是合成验收数据。先读取授权证据，准确说明本任务的币种（保留代码）和金额（使用数字），标注本轮证据编号 [E编号]，再结合同事建议说明下一步核对重点，明确结论必须由有权限的审核人员确认。不要查询外部法规。',
                    'client_message_id': 'live-collaboration-001'}
         started = time.monotonic()
         run = await call('POST', path + '/runs', headers=expert, body=payload)
@@ -88,6 +88,11 @@ async def verify():
         final = [event for event in received if event['event'] == 'message_end']
         assert len(final) == 1 and received[-1]['status'] == 'completed', 'Real model run did not finish'
         assert final[0]['message']['content'].strip()
+        answer = final[0]['message']['content']
+        cited = final[0]['message']['citations']
+        assert 'USD' in answer and '100' in answer, 'Authorized task fields did not reach the answer'
+        assert cited and all('[' + row['reference_id'] + ']' in answer for row in cited), 'Source attribution is missing'
+        assert any(row['source_id'] == 'SYNTHETIC-COLLAB-1' for row in cited), 'Task overview was not cited'
         assert not any(event['event'] == 'reasoning' for event in received)
         duplicate = await call('POST', path + '/runs', headers=expert, body=payload)
         assert duplicate['id'] == run['id']
@@ -104,7 +109,8 @@ async def verify():
         assert {row['action'] for row in audit} >= {'member_invited', 'member_revoked'}
         print(json.dumps({'passed': True, 'model': capability['model'], 'seconds': round(time.monotonic() - started, 2),
                           'same_history': True, 'same_events': True, 'idempotent_retry': True,
-                          'revocation_blocks_access': True, 'real_model': True, 'synthetic_disposable_db': True}))
+                          'revocation_blocks_access': True, 'real_model': True, 'synthetic_disposable_db': True,
+                          'authorized_task_fields_answered': True, 'source_ids_resolved': True}))
     engine.dispose()
 
 

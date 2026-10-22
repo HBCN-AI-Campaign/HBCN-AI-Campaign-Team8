@@ -16,6 +16,7 @@ from typing import Any
 
 from . import models
 from .assistant_models import AssistantExpertProfile, AssistantMessageAuthor, AssistantRun
+from .assistant_evidence import cited_sources, prepare_evidence
 from .assistant_skills import get_skill
 from .config import settings
 
@@ -23,6 +24,8 @@ ASSISTANT_INSTRUCTIONS = (
     "你是境外贷款单据审核辅助助手。只能解释证据、检索知识、整理风险和起草人工复核意见。"
     "不得直接批准、拒绝或改变贷款审核结论；结论必须交给有权限的审核人员。"
     "回答要引用任务材料或规则结果，证据不足时明确说需要人工确认。"
+    "引用具体任务事实或知识时，先读取授权证据工具，在相关句后标注工具给出的编号，例如 [E1]；只能使用本轮 reference_id，不得沿用历史编号或自编来源。"
+    "寒暄、能力说明及一般建议不必强行引用；专家目录只用于推荐协作人员，不是审核证据。"
     "不得输出内部思维链、草稿推理或工具参数，只给用户可见的结论、依据和简洁的执行摘要。"
     "如建议邀请专家，只能引用本轮授权专家目录中的人员和其本人填写的专业资料；没有匹配资料时请审核人员自行搜索，不得编造人物或资历。"
 )
@@ -110,23 +113,31 @@ def search_evidence(context: dict[str, Any], query: str) -> list[dict[str, Any]]
     hits: list[dict[str, Any]] = []
     for item in context.get("results", []):
         haystack = json.dumps(item, ensure_ascii=False).lower()
-        if not terms or any(term in haystack for term in terms):
-            hits.append({
-                "type": "rule",
-                "id": item["rule_id"],
-                "text": f'{item["rule_name"]}：{item["why"]}',
-                "source": "规则审核结果",
-            })
+        hits.append({
+            "type": "rule",
+            "id": item["rule_id"],
+            "text": json.dumps(item, ensure_ascii=False),
+            "source": "规则审核结果",
+            "matched": not terms or any(term in haystack for term in terms),
+        })
     for item in context.get("documents", []):
         haystack = json.dumps(item, ensure_ascii=False).lower()
-        if not terms or any(term in haystack for term in terms):
-            hits.append({
-                "type": "document",
-                "id": item["doc_code"],
-                "text": json.dumps(item["fields"], ensure_ascii=False),
-                "source": item["doc_code"],
-            })
-    return hits[:8]
+        hits.append({
+            "type": "document",
+            "id": item["doc_code"],
+            "text": json.dumps(item["fields"], ensure_ascii=False),
+            "source": item["doc_code"],
+            "matched": not terms or any(term in haystack for term in terms),
+        })
+    # Natural Chinese questions rarely share a whitespace token with JSON field
+    # keys. Rank matches, but always retain authorized context when none match.
+    hits.sort(key=lambda item: not item['matched'])
+    for item in hits:
+        item.pop('matched')
+    task = context.get('task')
+    overview = [{"type": "task", "id": task['task_code'], "source": "授权任务概要",
+                 "text": json.dumps(task, ensure_ascii=False)}] if task else []
+    return (overview + hits)[:8]
 
 
 def _rag_search(
@@ -173,7 +184,7 @@ def _rag_search(
     for index, item in enumerate(result.get("evidence", []), start=1):
         hits.append({
             "type": "knowledge",
-            "id": str(item.get("document_id") or item.get("id") or item.get("chunk_id") or f"kb-{index}"),
+            "id": str(item.get("chunk_id") or item.get("id") or item.get("document_id") or f"kb-{index}"),
             "text": str(item.get("content") or item.get("text") or item.get("chunk") or ""),
             "source": str(item.get("document_name") or item.get("source_name") or item.get("title") or "知识库"),
             "page": item.get("page"),
@@ -254,11 +265,17 @@ async def run_agent_events(
         yield {"event": "warning", "message": "OpenCode runtime 或汇丰模型 API 配置未完成"}
         yield {"event": "assistant_result", "answer": None, "citations": []}
         return
-    # 证据在后台静默整理（供模型按需调用 read_authorized_evidence 时读取），
-    # 不再作为强制步骤前置展示；检索告警也不单独暴露给用户。
+    # Retrieval warnings are public evidence limits, never internal reasoning.
     retrieval_warnings: list[str] = []
     retrieved = await asyncio.to_thread(_rag_search, context, message, retrieval_warnings)
-    retrieved.extend(context.get("expert_candidates", []))
+    evidence = prepare_evidence(retrieved, context.get("expert_candidates", []))
+    if (len(context.get('documents', [])) + len(context.get('results', [])) > 7
+            or len(evidence) < len(retrieved) + len(context.get('expert_candidates', []))
+            or any(len(str(item.get('text') or '')) > 4000 for item in retrieved)):
+        retrieval_warnings.append("本轮只提供部分授权材料片段；未覆盖全部单据与规则，请缩小问题范围或人工复核遗漏项。")
+    for index, warning in enumerate(retrieval_warnings):
+        yield {"event": "step", "step": {"key": f"retrieval-warning-{index}",
+               "label": "知识库检索提示", "detail": warning, "status": "error"}}
     try:
         timeout = httpx.Timeout(settings.AI_REQUEST_TIMEOUT, connect=5.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -273,16 +290,7 @@ async def run_agent_events(
                         {"role": item["role"], "content": item["content"][:4_000]}
                         for item in context.get("conversation", [])[-12:]
                     ],
-                    "evidence": [
-                        {
-                            "type": str(item.get("type") or "evidence")[:40],
-                            "id": str(item.get("id") or "")[:160],
-                            "text": str(item.get("text") or "")[:4_000],
-                            "source": str(item.get("source") or "")[:500],
-                            "page": item.get("page"),
-                        }
-                        for item in retrieved[:20]
-                    ],
+                    "evidence": evidence,
                 },
             ) as response:
                 response.raise_for_status()
@@ -299,13 +307,21 @@ async def run_agent_events(
                     if event.get("event") == "assistant_result":
                         result_seen = True
                         answer = _safe_final_answer(str(event.get("answer") or ""))
+                        citations, valid = cited_sources(answer or '', evidence, tool_used=tool_used)
+                        if not valid:
+                            answer = None
+                            yield {"event": "step", "step": {"key": "citation-warning-invalid",
+                                   "label": "依据校验未通过", "detail": "答复引用了本轮未读取或不存在的证据，已拦截，请重新提问。", "status": "error"}}
+                        elif tool_used and any(item.get('reference_id') for item in evidence) and not citations:
+                            yield {"event": "step", "step": {"key": "citation-warning-missing",
+                                   "label": "答复依据提示", "detail": "本轮已读取材料，但答复未标明具体引用；请人工核实，不将候选材料视为已核实依据。", "status": "error"}}
                         if answer:
                             for index in range(0, len(answer), 80):
                                 yield {"event": "delta", "delta": answer[index:index + 80]}
                         yield {
                             "event": "assistant_result",
                             "answer": answer,
-                            "citations": retrieved if tool_used else [],
+                            "citations": citations,
                         }
                     elif event.get("event") == "tool":
                         status = event.get("tool", {}).get("status")
@@ -316,7 +332,7 @@ async def run_agent_events(
                             "tool": {
                                 "name": "read_authorized_evidence",
                                 "status": status if status in {"running", "completed", "error"} else "error",
-                                "result_count": len(retrieved),
+                                "result_count": sum(bool(item.get('reference_id')) for item in evidence),
                             },
                         }
                     elif event.get("event") == "step" and isinstance(event.get("step"), dict):
@@ -324,11 +340,11 @@ async def run_agent_events(
                     elif event.get("event") == "warning":
                         yield {"event": "warning", "message": "OpenCode 助手运行未完成，请稍后重试。"}
                 if not result_seen:
-                    yield {"event": "assistant_result", "answer": None, "citations": retrieved if tool_used else []}
+                    yield {"event": "assistant_result", "answer": None, "citations": []}
     except Exception:
         logger.exception("OpenCode assistant runtime request failed")
         yield {"event": "warning", "message": "OpenCode 助手运行未完成，请稍后重试。"}
-        yield {"event": "assistant_result", "answer": None, "citations": retrieved}
+        yield {"event": "assistant_result", "answer": None, "citations": []}
 
 
 async def stream_assistant(
@@ -342,7 +358,7 @@ async def stream_assistant(
 ) -> AsyncIterator[dict[str, Any]]:
     task = task_for_user(db, user, task_code or session.task_code)
     context = task_context(task)
-    citations = context.get("citations", [])[:8]
+    citations: list[dict[str, Any]] = []
     conversation = []
     for item in session.messages[-12:]:
         identity = db.get(AssistantMessageAuthor, item.id)
@@ -390,7 +406,6 @@ async def stream_assistant(
                          "status": "completed", "steps": [], "citations": []},
     }
     answer: str | None = None
-    rag_citations: list[dict[str, Any]] = []
     # One entry per business operation; later events update its persisted state.
     runtime_steps: dict[str, dict[str, Any]] = {}
     tool_steps: dict[str, dict[str, Any]] = {}
@@ -406,7 +421,7 @@ async def stream_assistant(
     async for event in run_agent_events(message, context, instructions):
         if event.get("event") == "assistant_result":
             answer = event.get("answer")
-            rag_citations = event.get("citations", [])
+            citations = event.get("citations", [])
         elif event.get("event") == "step" and event.get("step"):
             runtime_steps[event["step"]["key"]] = event["step"]
             yield event
@@ -453,14 +468,6 @@ async def stream_assistant(
     if disclaimer not in answer and not confirms_authority:
         answer += disclaimer
         yield {"event": "delta", "delta": disclaimer}
-    if rag_citations:
-        citations.extend({
-            "id": item["id"],
-            "label": item["source"],
-            "source": item["source"],
-            "detail": item["text"][:180],
-            "page": item.get("page"),
-        } for item in rag_citations)
     if citations:
         yield {"event": "citations", "citations": citations}
     if run_id:

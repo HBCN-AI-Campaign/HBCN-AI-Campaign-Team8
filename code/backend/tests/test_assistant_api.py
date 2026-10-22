@@ -193,8 +193,9 @@ class AssistantApiTests(unittest.TestCase):
             agentic=True,
             include_external_law=False,
         )
-        self.assertEqual(hits[0]["type"], "knowledge")
-        self.assertEqual(hits[0]["source"], "审核规则")
+        self.assertEqual(hits[0]["type"], "task")
+        self.assertEqual(hits[-1]["type"], "knowledge")
+        self.assertEqual(hits[-1]["source"], "审核规则")
 
     def test_rag_failure_is_reported_while_local_evidence_remains(self):
         from app.rag_service import RAGClient
@@ -210,7 +211,7 @@ class AssistantApiTests(unittest.TestCase):
         ):
             hits = _rag_search(context, "currency", warnings)
 
-        self.assertEqual([hit["type"] for hit in hits], ["document"])
+        self.assertEqual([hit["type"] for hit in hits], ["task", "document"])
         self.assertEqual(len(warnings), 1)
         self.assertNotIn("private connection detail", warnings[0])
 
