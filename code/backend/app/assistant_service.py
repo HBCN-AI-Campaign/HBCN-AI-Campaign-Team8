@@ -144,15 +144,12 @@ def _rag_search(
     try:
         from .rag_service import RAGClient
 
-        # The current RAG service indexes shared business/project knowledge only.
-        # Task documents are already permission-filtered and supplied as local evidence.
-        result = RAGClient().query(
+        # Task documents remain in the caller's already-authorized local context.
+        # Shared knowledge uses Agentic RAG's evidence-only endpoint; the main
+        # assistant remains the sole final-answer generator.
+        result = RAGClient().retrieve(
             query=query,
-            scope="knowledge_base",
-            task_code=(context.get("task") or {}).get("task_code"),
             top_k=6,
-            agentic=True,
-            include_external_law=False,
         )
     except Exception as exc:
         # 网关或 RAG 服务异常时保留本地证据，不阻断助手。
@@ -255,6 +252,23 @@ async def run_agent_events(
     # 不再作为强制步骤前置展示；检索告警也不单独暴露给用户。
     retrieval_warnings: list[str] = []
     retrieved = await asyncio.to_thread(_rag_search, context, message, retrieval_warnings)
+    runtime_instructions = instructions
+    if retrieval_warnings:
+        # Retrieval state is trusted adapter metadata; keep it separate from
+        # source text and make the model preserve the evidence limitation.
+        runtime_instructions += (
+            "\n\n知识库检索状态：本轮增强检索未能确认依据充分。"
+            "不得将候选片段表述为已核实结论；明确说明缺口，必要时向用户澄清。"
+        )
+        yield {
+            "event": "step",
+            "step": {
+                "key": "retrieval-evidence-status",
+                "label": "知识库证据需要谨慎使用",
+                "detail": "增强检索未确认依据充分；答复将说明依据缺口或请求澄清。",
+                "status": "error",
+            },
+        }
     try:
         timeout = httpx.Timeout(settings.AI_REQUEST_TIMEOUT, connect=5.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -264,7 +278,7 @@ async def run_agent_events(
                 headers={"Authorization": f"Bearer {settings.ASSISTANT_RUNTIME_TOKEN}"},
                 json={
                     "message": message,
-                    "instructions": instructions,
+                    "instructions": runtime_instructions,
                     "conversation": [
                         {"role": item["role"], "content": item["content"][:4_000]}
                         for item in context.get("conversation", [])[-12:]

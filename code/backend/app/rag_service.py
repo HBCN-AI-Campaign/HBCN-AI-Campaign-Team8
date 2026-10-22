@@ -121,6 +121,54 @@ class RAGClient:
                 evidence.append(item)
         return {"evidence": evidence, "warnings": warnings}
 
+    def retrieve(
+        self,
+        *,
+        query: str,
+        top_k: int = 6,
+    ) -> dict[str, Any]:
+        """Use the enhanced evidence-only endpoint for Agent and assistant callers."""
+        self._require_configured()
+        payload = self._post(
+            "/api/v1/retrievals",
+            {
+                "query": query,
+                "scope": "all",
+                "top_k": min(max(top_k, 1), 8),
+                "sources": ["knowledge_base"],
+                "purpose": "reference",
+            },
+        )
+        warnings = list(payload.get("warnings") or [])
+        status = payload.get("evidence_status")
+        if status in {"insufficient", "clarification"}:
+            warning = "增强检索未确认充分依据；回答须说明缺口或请求澄清，不得把候选片段当作已核实结论。"
+            if warning not in warnings:
+                warnings.append(warning)
+        evidence = []
+        for item in payload.get("sources") or []:
+            if not isinstance(item, dict):
+                continue
+            evidence.append({
+                "content": item.get("content", ""),
+                "document_id": item.get("document_id"),
+                "document_name": item.get("document_name"),
+                "page": item.get("page"),
+                "score": item.get("score"),
+                "chunk_id": item.get("chunk_id"),
+                "source_url": item.get("source_url"),
+                "reader_url": item.get("reader_url"),
+                "metadata": item.get("metadata", {}),
+            })
+        return {
+            "evidence": evidence,
+            "warnings": warnings,
+            "evidence_status": status,
+            "missing": payload.get("missing") or [],
+            "stop_reason": payload.get("stop_reason"),
+            "retrieval_rounds": payload.get("retrieval_rounds", 0),
+        }
+
     def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         try:
             response = httpx.post(

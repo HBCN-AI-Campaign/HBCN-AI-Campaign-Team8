@@ -42,7 +42,8 @@ class Settings(BaseSettings):
     # 主项目通过 app/rag_service.py 适配层调用该独立知识库服务；未配置时助手回退本地证据。
     RAG_BASE_URL: str = ""          # 例如 http://127.0.0.1:8010
     RAG_SERVICE_TOKEN: str = ""     # 与 rag-service/.env 的 SERVICE_TOKEN 保持一致
-    RAG_REQUEST_TIMEOUT: float = 15.0
+    # Enhanced RAG has a 240s total budget; leave transport/proxy headroom.
+    RAG_REQUEST_TIMEOUT: float = 300.0
 
 
 settings = Settings()

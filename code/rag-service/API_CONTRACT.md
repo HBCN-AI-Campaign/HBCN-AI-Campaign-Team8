@@ -17,7 +17,7 @@ v1 保持路径、已有字段含义/类型、scope 和鉴权约定。新增可�
 | `POST /api/v1/query` | 保留已有主站适配器的单次检索，不调用规划/答复 LLM | `evidence[]`、`warnings[]` |
 | `POST /api/v1/retrievals` | 新调用方的增强证据检索；问题规划、有限补查、证据覆盖与法规门禁，**不生成最终答复** | `sources[]`、充分性、缺口、停止原因和来源状态 |
 
-助手或专项 Agent 已负责最终回答时，调用 `/retrievals` 并消费原文证据，避免 RAG 再生成一次答案。独立问答 UI 才使用 `/answers` 或 `/answers/stream`。现有主站 `code/backend/app/rag_service.py` 仍调用 `/query`，本版本保留兼容；升级增强入口由主站负责人按新响应映射接线，本模块不覆盖其适配层。
+助手或专项 Agent 已负责最终回答时，调用 `/retrievals` 并消费原文证据，避免 RAG 再生成一次答案。独立问答 UI 才使用 `/answers` 或 `/answers/stream`。主站 `code/backend/app/rag_service.py` 保留旧 `query()` 兼容方法，并新增 `retrieve()` 适配 `/retrievals` 原文证据及充分性字段；主站助手只选择 `knowledge_base`，任务资料仍由主站按任务权限提供。调用方必须保留 `evidence_status`、`missing`、`stop_reason` 等限制，不能把 HTTP 200 或候选片段当作已核实结论。
 
 增强检索的最小 JSON：
 

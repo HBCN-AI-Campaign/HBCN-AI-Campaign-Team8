@@ -52,6 +52,32 @@ class RAGClientTests(unittest.TestCase):
         self.assertEqual(result["evidence"][0]["document_name"], "rules.xlsx")
         self.assertEqual(result["warnings"], ["w1"])
 
+    def test_enhanced_retrieval_maps_original_sources_and_preserves_gaps(self):
+        payloads = []
+
+        def fake_post(path, payload):
+            payloads.append((path, payload))
+            return {
+                "sources": [{
+                    "content": "原文片段", "document_id": "doc-1", "document_name": "规则.pdf",
+                    "page": 2, "score": None, "chunk_id": "chunk-1", "metadata": {"scope": "law"},
+                }],
+                "warnings": [], "evidence_status": "insufficient", "missing": ["业务日期"],
+                "stop_reason": "round_budget", "retrieval_rounds": 2,
+            }
+
+        with patch.object(RAGClient, "_post", side_effect=fake_post):
+            result = RAGClient().retrieve(query="金额不一致", top_k=9)
+
+        self.assertEqual(payloads[0][0], "/api/v1/retrievals")
+        self.assertEqual(payloads[0][1]["sources"], ["knowledge_base"])
+        self.assertEqual(payloads[0][1]["top_k"], 8)
+        self.assertEqual(result["evidence"][0]["content"], "原文片段")
+        self.assertEqual(result["evidence"][0]["metadata"]["scope"], "law")
+        self.assertEqual(result["evidence_status"], "insufficient")
+        self.assertEqual(result["missing"], ["业务日期"])
+        self.assertTrue(result["warnings"])
+
     def test_duplicate_evidence_deduped_across_scopes(self):
         shared = {"content": "同一片段", "document_id": "doc-1", "document_name": "x"}
 
@@ -104,7 +130,7 @@ class RagSearchMergeTests(unittest.TestCase):
             "documents": [],
         }
         with patch(
-            "app.rag_service.RAGClient.query",
+            "app.rag_service.RAGClient.retrieve",
             return_value={
                 "evidence": [{"content": "规则片段", "document_id": "doc-1", "document_name": "rules.xlsx", "page": 3}],
                 "warnings": [],
@@ -125,7 +151,7 @@ class RagSearchMergeTests(unittest.TestCase):
             "results": [{"rule_id": "R04", "rule_name": "币种", "status": "fail", "why": "币种不符", "suggestion": ""}],
             "documents": [],
         }
-        with patch("app.rag_service.RAGClient.query", side_effect=RuntimeError("down")):
+        with patch("app.rag_service.RAGClient.retrieve", side_effect=RuntimeError("down")):
             hits = _rag_search(context, "币种")
         self.assertEqual([h["type"] for h in hits], ["rule"])
 
