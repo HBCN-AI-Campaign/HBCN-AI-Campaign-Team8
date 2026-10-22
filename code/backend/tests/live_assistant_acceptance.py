@@ -112,7 +112,7 @@ async def verify():
         from hbcn_assistant import AssistantClient
         async with AssistantClient('http://acceptance', owner['Authorization'].removeprefix('Bearer '),
                                    transport=httpx.ASGITransport(app=app)) as sdk:
-            assert (await sdk.contract())['contract_version'] == '1.1.0'
+            assert (await sdk.contract())['contract_version'] == '1.2.0'
             replayed = await sdk.ask(room['id'], payload['content'], client_message_id=payload['client_message_id'])
             assert replayed == final[0]['message'], 'V1 SDK must replay the same canonical answer'
             snapshot = await sdk.run(room['id'], run['id'])

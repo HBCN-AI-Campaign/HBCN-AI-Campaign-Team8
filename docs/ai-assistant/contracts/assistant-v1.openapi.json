@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Huiyan Assistant API",
-    "version": "1.1.0"
+    "version": "1.2.0"
   },
   "paths": {
     "/api/assistant/v1/skill-library": {
@@ -244,6 +244,70 @@
       }
     },
     "/api/assistant/v1/experts/me": {
+      "get": {
+        "tags": [
+          "assistant"
+        ],
+        "summary": "My Profile",
+        "operationId": "my_profile_api_assistant_v1_experts_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileIn"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantHTTPError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantHTTPError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantHTTPError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantHTTPError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
       "put": {
         "tags": [
           "assistant"

@@ -75,6 +75,14 @@ class ProfileIn(BaseModel):
     tags: list[str] = Field(default_factory=list, max_length=8)
 
 
+@router.get("/experts/me", response_model=ProfileIn)
+def my_profile(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    if user.role != models.Role.REVIEWER:
+        raise HTTPException(403, "专家目录仅面向审核人员")
+    row = db.get(AssistantExpertProfile, user.id)
+    return {"specialty": row.specialty, "bio": row.bio, "tags": row.tags} if row else ProfileIn()
+
+
 @router.put("/experts/me")
 def update_profile(payload: ProfileIn, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
     if user.role != models.Role.REVIEWER:

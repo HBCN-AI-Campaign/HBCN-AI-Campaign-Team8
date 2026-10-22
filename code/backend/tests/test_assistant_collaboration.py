@@ -62,6 +62,7 @@ class CollaborationTests(unittest.TestCase):
     def test_operator_cannot_call_collaboration_or_model_routes(self):
         operations = [
             ('GET', '/api/assistant/skill-library', None),
+            ('GET', '/api/assistant/experts/me', None),
             ('PUT', '/api/assistant/skill-library/risk-review', None),
             ('GET', self.base + '/members', None),
             ('GET', self.base + '/events', None),
@@ -75,6 +76,38 @@ class CollaborationTests(unittest.TestCase):
                     result = self.client.request(method, path, headers=self.operator_headers, json=payload)
                     self.assertEqual(result.status_code, 403)
             model.assert_not_called()
+
+    def test_self_profile_is_independent_of_directory_limit_and_current_search(self):
+        from app.assistant_models import AssistantExpertProfile
+        with self.session_factory() as db:
+            db.add_all([models.User(username=f'directory-{index}', display_name=f'同事{index}',
+                                   hashed_password='unused', role=models.Role.REVIEWER) for index in range(55)])
+            target = models.User(username='last-specialist', display_name='目录末尾专家',
+                                 hashed_password='unused', role=models.Role.REVIEWER)
+            db.add(target); db.flush()
+            db.add(AssistantExpertProfile(user_id=target.id, specialty='航运单证', bio='真实本人资料', tags=['海运复核']))
+            db.commit()
+        jwt = {'Authorization': 'Bearer ' + create_access_token('last-specialist', 'reviewer')}
+        prefix = '/api/assistant/v1'
+        self.assertEqual(self.client.get(prefix + '/experts/me').status_code, 401)
+        empty = self.client.get(prefix + '/experts/me', headers=self.expert_headers)
+        self.assertEqual(empty.json(), {'specialty': '', 'bio': '', 'tags': []})
+        directory = self.client.get(prefix + '/experts', headers=jwt).json()
+        self.assertEqual(len(directory), 50)
+        self.assertFalse(any(row['is_self'] for row in directory))
+        found = self.client.get(prefix + '/experts', params={'session_id': self.room, 'q': '海运复核'},
+                                headers=self.reviewer_headers).json()
+        self.assertEqual([row['name'] for row in found], ['目录末尾专家'])
+        own = self.client.get(prefix + '/experts/me', headers=jwt)
+        self.assertEqual(own.json(), {'specialty': '航运单证', 'bio': '真实本人资料', 'tags': ['海运复核']})
+        self.client.put(prefix + '/experts/me', headers=self.expert_headers,
+                        json={'specialty': '别人的方向', 'bio': '别人的资料', 'tags': []})
+        self.assertEqual(self.client.get(prefix + '/experts/me', headers=jwt).json(), own.json())
+        with self.session_factory() as db:
+            person = db.query(models.User).filter_by(username='last-specialist').one()
+            person.role = models.Role.OPERATOR
+            db.commit()
+        self.assertEqual(self.client.get(prefix + '/experts/me', headers=jwt).status_code, 403)
 
     def test_discussion_keeps_author_and_never_calls_model(self):
         self.invite()
