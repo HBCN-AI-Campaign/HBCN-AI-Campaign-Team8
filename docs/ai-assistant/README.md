@@ -207,6 +207,8 @@ code/backend:           python -m alembic -c assistant-alembic.ini upgrade head
 
 第 28 轮本机验证：助手后端 **91 项**通过，新增 RAG 版本兼容性测试覆盖 1.2 最低版本、兼容 v1 次版本、缺失/无效/旧版/新主版本拒绝，以及版本合规但依赖降级仍不报 ready。RAG 契约来自队友当前 `API_CONTRACT.md` 工作区；未请求或修改其服务。真实云端版本头/检索结果仍须联测。
 
+同轮只读执行默认环境 `python -m app.assistant_preflight --require-rag`，退出码 **1**：数据库/助手迁移通过，当前默认 runtime 返回 `contract_missing`，RAG 地址返回 **404**，生产安全项报告默认 JWT/DEBUG 未就绪；未发起检索或模型调用。该命令读取仓库默认运行配置，不覆盖此前单独启动进程使用的临时端口，故不能推翻或替代对应实例验收；默认配置目前仍不能直接用于正式部署。
+
 另以临时 SQLite/ASGI + 汇丰真实 **qwen3.8-flash** 约 **10.1 秒**通过任务字段/引用、单人转共享同次运行、相同历史/事件、幂等、保存游标恢复和撤权；与上述 PG 验收分开。前轮 React **30 项分批通过**及 TypeScript/Vite 构建通过，本轮未改前端。契约仍为 **1.2.0**，OpenAPI **18 路径 / 23 操作**。
 
 SDK **1.1.2** 提供[双账号 HTTP 部署验收命令](../../code/assistant-sdk/README.md)，显式 contract 检查要求 API 至少 1.1.0，接受同主版本增量。此前临时合成库 + 真实 TCP API + 汇丰模型约 **12.6 秒**通过，临时服务已停止；实际 CLI 的 `--require-rag` 未就绪阻断、退出码、无凭证输出均已验证。
