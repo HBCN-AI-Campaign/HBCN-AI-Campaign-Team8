@@ -1,0 +1,18 @@
+[project]
+name = "ocr-service"
+version = "0.1.0"
+description = "轻量 OCR 文档识别服务（PaddleOCR + 轻量文档解析）"
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "paddlepaddle==3.2.1",
+    "paddleocr>=3.7",
+    "python-docx>=1.1",
+    "openpyxl>=3.1",
+    "pdfplumber>=0.11",
+    # chardet 7.x 的 mypyc 编译 DLL 会被部分 Windows 应用程序控制策略拦截，
+    # 导致 paddleocr import 失败，故固定为纯 Python 的 4.x 版本。
+    "chardet<5.0",
+]
+
+[project.optional-dependencies]
+samples = ["reportlab>=4.0"]
