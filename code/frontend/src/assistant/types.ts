@@ -25,6 +25,8 @@ export interface AssistantCitation {
   detail?: string
   page?: number | null
   status?: 'pass' | 'fail' | 'warn'
+  reference_id?: string
+  source_id?: string
 }
 
 export interface AssistantMessage {

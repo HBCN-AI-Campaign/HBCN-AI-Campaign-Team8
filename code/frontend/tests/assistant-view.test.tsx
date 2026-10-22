@@ -18,7 +18,7 @@ const session = { id: 7, title: '风险讨论', message_count: 2, updated_at: '2
 const final: AssistantMessage = {
   id: 12, role: 'assistant', content: '**可以协助梳理材料。**\n审核结论必须由有权限人员确认。', status: 'completed',
   steps: [{ key: 'evidence', label: '读取授权证据', detail: '已检索 2 条证据', status: 'completed' }],
-  citations: [{ id: 'source-1', source: '任务材料', label: '授信函', page: 2, detail: '仅适用于人民币提款' }],
+  citations: [{ id: 'E1', reference_id: 'E1', source_id: 'source-1', source: '任务材料', label: '授信函', page: 2, detail: '仅适用于人民币提款' }],
 }
 
 beforeEach(() => {
@@ -77,7 +77,20 @@ describe('React assistant user flows with real Ant Design X components', () => {
     fireEvent.click(screen.getByRole('button', { name: /参考依据/ }))
     await screen.findByText('授信函')
     expect(screen.getByText('第 2 页')).toBeTruthy()
+    expect(screen.getByText('[E1]')).toBeTruthy()
     expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('')
+  })
+
+  it('keeps persisted evidence limits visible when completed execution is collapsed', async () => {
+    vi.mocked(assistantApi.sessions).mockResolvedValue([session])
+    vi.mocked(assistantApi.session).mockResolvedValue({ ...session, messages: [{ ...final, steps: [
+      ...final.steps,
+      { key: 'retrieval-warning-0', label: '知识库检索提示', detail: '本轮仅提供部分材料，请人工核实遗漏项。', status: 'error' },
+    ] }] })
+    mount('/assistant?session_id=7')
+    await screen.findByText('本轮依据存在限制')
+    expect(screen.getByRole('alert').textContent).toContain('本轮仅提供部分材料，请人工核实遗漏项。')
+    expect(screen.getByRole('button', { name: /执行完成/ }).getAttribute('aria-expanded')).toBe('false')
   })
 
   it('stops receiving and re-enables sending', async () => {

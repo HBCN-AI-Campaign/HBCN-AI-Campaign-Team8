@@ -22,6 +22,7 @@ function AssistantReply({ message }: { message: AssistantMessage }) {
   const [expanded, setExpanded] = useState(Boolean(message.streaming))
   useEffect(() => { setExpanded(Boolean(message.streaming)) }, [message.streaming])
   const failed = message.status === 'error' || message.status === 'stopped'
+  const evidenceWarnings = message.steps.filter((step) => /^(retrieval-warning-|citation-warning-)/.test(step.key))
   return (
     <div className="hy-reply">
       {message.steps.length > 0 && <Collapse
@@ -41,9 +42,14 @@ function AssistantReply({ message }: { message: AssistantMessage }) {
         : <span className="hy-muted">{message.streaming ? '正在准备答复…' : failed ? '本轮未获得完整答复，请重新发送。' : '暂无答复内容'}</span>}
       {message.status === 'stopped' && <p className="hy-muted">已停止接收，此答复可能不完整。</p>}
       {message.status === 'error' && <p className="hy-error">本轮未完成，请查看下方错误提示后重试。</p>}
+      {evidenceWarnings.length > 0 && <Alert type="warning" showIcon
+        message="本轮依据存在限制"
+        description={evidenceWarnings.map((step) => <p key={step.key}>{step.detail || step.label}</p>)}
+      />}
       {message.citations.length > 0 && <Collapse className="hy-sources" size="small" ghost items={[{
         key: 'sources', label: `参考依据 · ${message.citations.length} 条`,
         children: <ol>{message.citations.map((citation, index) => <li key={`${citation.id}:${index}`}>
+          {citation.reference_id && <Tag>{`[${citation.reference_id}]`}</Tag>}
           <strong>{citation.label || citation.source}</strong>
           {citation.page != null && <Tag>第 {citation.page} 页</Tag>}
           {citation.detail && <p>{citation.detail}</p>}
