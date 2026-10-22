@@ -4,6 +4,8 @@
 
 > 当前实现：审核人员与 AI 先讨论，需要时邀请有任务权限的审核同事进入同一会话，阅读历史、共同讨论或继续问 AI。慧眼助手页面与全部助手 API 仅供审核人员；经办人负责提交材料，不进入助手审核会话。助手只提供辅助意见，审核结论必须由有权限人员确认。
 
+**其他模块接入：** 使用[对外接口 V1](对外接口V1.md)与[独立 Python SDK](../../code/assistant-sdk/README.md)。固定前缀 `/api/assistant/v1`，OpenAPI 基线随仓库交付；内部模型/检索实现可继续升级，调用方不直接依赖内部代码。目标云站尚须发布此版本。
+
 ## 1. 当前做到哪里
 
 云端事实（2026-10-22 只读 SSH）：已运行网站不是助手已部署。Ubuntu 24.04 上 80 为 Vite 开发服务器，前端无助手页面/Ant Design X；8000 为无助手路由的 FastAPI 登录会话进程。无 runtime、助手表和 backend `.env`；DB/JWT 环境变量未提供，后端 Python 依赖 Alembic/HTTPX 缺失。详见[环境核对与发布路径](../../code/assistant-runtime/deploy/README.md)。未改远端文件、配置、进程或数据。
@@ -17,7 +19,7 @@
 | 可恢复的 AI 运行及公开事件 | 单人/多人页面统一 runs/events；幂等请求、单会话运行槽、数据库游标 |
 | 任务证据、RAG 适配、引用、折叠轨迹 | 中文提问也保留授权任务概要；来源编号绑定本轮送入模型的证据，只有正文引用的来源显示在引用面板；RAG 由另一模块负责，编号可追溯不等于事实已核验 |
 | 技能库：目录、加入/移除、版本更新提示 | 仅仓库审核发布的指引；不执行任意远程技能或上传脚本 |
-| 工作流调用适配器 AssistantClient | 委托的业务 JWT；独立机器身份尚未实现 |
+| 独立可安装 Python SDK / 助手 V1 契约 | 只依赖 HTTPX；委托的审核 JWT；不依赖后端源码，独立机器身份尚未实现 |
 
 **尚未验收：** 汇丰 ECS/真实 PostgreSQL、多实例协调与压力测试；正文尚非模型 token 实时流。不能据此宣称生产级，或给出未经用户测试的高分。
 
@@ -45,6 +47,7 @@ flowchart LR
 |---|---|---|
 | 界面 | React 18、Ant Design 5、Ant Design X 1.6.1；AssistantView.tsx | 上游 Sender/Bubble/Conversations/ThoughtChain；成员管理用 Ant Design Drawer/List/Modal |
 | 页面适配 | useAssistant.ts、collaboration.ts | JWT 请求、状态、断线回放和目录同步；不做权限决策 |
+| 对外边界 | assistant_contract.py、assistant-sdk/hbcn_assistant | V1 版本声明、独立 HTTP SDK、OpenAPI 契约回归；旧路径兼容 |
 | 业务边界 | routers/assistant*.py、assistant_collaboration.py | 会话/任务鉴权、运行调度、持久事件、审计 |
 | 证据与回答 | assistant_service.py、既有 rag_service.py | 任务证据、知识检索、专家候选和答复校验；不修改审核状态 |
 | Agent 执行 | code/assistant-runtime、OpenCode SDK 2.0.32 | 仅本轮只读工具；不直接读业务库或任意业务文件 |
@@ -118,8 +121,9 @@ RAG 按现有接口检索共享资料；任务概要、字段/规则结果先经
 
 页面入口：/assistant?task_code=任务编号，或 /assistant?session_id=会话ID。ID 不授予访问权。所有 API 均要求 Authorization: Bearer 业务JWT。
 
-| API（前缀 /api/assistant） | 用途 |
+| API（前缀 /api/assistant/v1；原路径兼容） | 用途 |
 |---|---|
+| GET /contract | V1 契约、限制与兼容声明 |
 | GET /capabilities；GET/POST /sessions | 就绪状态、本人及受邀会话、新建 |
 | GET/DELETE /sessions/{id} | 授权历史 / 创建者删除（运行中拒绝） |
 | GET /experts?session_id=&q=；PUT /experts/me | 搜索真实人员 / 本人专业资料 |
@@ -134,7 +138,7 @@ RAG 按现有接口检索共享资料；任务概要、字段/规则结果先经
 
 事件：message_start / step / tool / delta / citations / message_end / error；协作增加 discussion / members_changed / run_end。持久事件带 id、run_id；message_end 的落库消息为权威正文，run_end.status 为最终运行状态。字段及调试见后端 /docs。
 
-业务工作流用 app.assistant_client.AssistantClient(base_url, user_jwt) 的 create_session / ask / events / cancel；委托 JWT 必须属于当前有效审核人员，ask 的 client_message_id 使用业务请求唯一键。无需 HSBC key 或 runtime token，不绕过任务权限；自主后台服务身份需另外设计授权。
+业务工作流安装 `code/assistant-sdk` 后用 `hbcn_assistant.AssistantClient(base_url, user_jwt)`；旧 `app.assistant_client` 仅重新导出该包。委托 JWT 必须属于当前有效审核人员，`client_message_id` 使用调用方保存的业务请求唯一键；提供 start_run/wait 分离与 ask 快捷方法。无需 HSBC key 或 runtime token，不绕过任务权限；自主后台服务身份需另外设计授权。调用及兼容约定以[对外接口 V1](对外接口V1.md)为准。
 
 ## 6. 拉取与部署
 
@@ -153,7 +157,8 @@ RAG 按现有接口检索共享资料；任务概要、字段/规则结果先经
 ## 7. 验证与文档维护
 
 ~~~text
-code/backend:           python -m unittest tests.test_assistant_api tests.test_assistant_collaboration tests.test_assistant_evidence tests.test_assistant_preflight
+code/backend:           python -m unittest tests.test_assistant_api tests.test_assistant_collaboration tests.test_assistant_evidence tests.test_assistant_preflight tests.test_assistant_contract tests.test_rag_service
+code/backend:           python -m unittest discover -s ../assistant-sdk/tests
 code/frontend:          npm test && npm run build
 code/assistant-runtime: bun test && bun run typecheck
 code/backend:           python -m alembic -c assistant-alembic.ini upgrade head
@@ -161,6 +166,6 @@ code/backend:           python -m alembic -c assistant-alembic.ini upgrade head
 
 测试覆盖权限、撤权、幂等、并发拒绝、取消/超时、作者、旧消息、技能和 React 邀请/轨迹/异常；mock 不代替真实链路。本机另用汇丰 qwen3.8-flash 完成真实问答（约 11.6 / 16 秒），以及隔离双 JWT 账号的真实模型协作验收（约 12.9 秒）。后端显式执行 python -m tests.live_assistant_acceptance --live 可重做后一项：仅用临时库与合成数据，直接调用真实 ASGI 路由，模型走真实 HTTP；不等于双浏览器/反向代理验收。结果与待办见[当前修改规划](持续优化实施规划.md)。
 
-最新一轮：前端 **26 项**测试及生产构建通过，后端协作 **20 项**回归通过；汇丰真实模型 **qwen3.8-flash** 隔离验收约 **21.1 秒**，验证单人提问后不读取事件、重新打开原运行、邀请专家后保持同次运行、同历史/事件、幂等、字段/引用及撤权。模型走真实 HTTP，业务 API 使用 ASGITransport；不代替浏览器刷新或云端反向代理验收。上一轮完整后端 **69 项**与 Windows/Linux runtime 各 **3 项 / 52 断言**通过；本轮未改后端运行实现或 runtime。Linux systemd 模板已离线校验，未安装服务。本机双登录页面此前通过邀请、共享历史、具名讨论、共同问答与撤权清屏；仍不等于 Docker、云端助手、真实 PostgreSQL 或两台团队电脑验收。
+最新一轮：后端 **73 项**、独立 SDK **4 项**、前端 **26 项**及生产构建通过；SDK wheel 在干净虚拟环境安装/导入成功，不依赖后端。汇丰 **qwen3.8-flash** 经 V1 及独立 SDK 回放的隔离验收约 **25.2 秒**，同历史/事件、幂等、字段/引用与撤权通过。模型走真实 HTTP，业务 API 使用 ASGITransport；不代替浏览器刷新或云端反向代理验收。此前 Windows/Linux runtime 各 **3 项 / 52 断言**通过；本轮未改 runtime。Linux systemd 模板已离线校验，未安装服务。本机双登录页面此前通过邀请、共享历史、具名讨论、共同问答与撤权清屏；仍不等于 Docker、云端助手、真实 PostgreSQL 或两台团队电脑验收。
 
 维护三层：[本文](README.md)说当前是什么；[修改规划](持续优化实施规划.md)记录本轮实现和验证；[决策记录](决策记录.md)解释长期取舍。接口/行为落地时同步，不按日期复制。[早期调研](多人协作AI对话调研与优化方案.md)与[旧交接](开发记录与交接.md)是历史，遇冲突以当前代码和本文为准。

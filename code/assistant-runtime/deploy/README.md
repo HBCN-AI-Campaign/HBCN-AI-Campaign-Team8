@@ -2,6 +2,8 @@
 
 本目录只交付 OpenCode runtime，主站与 RAG 沿用各自发布流程。[总设计与接口](../../../docs/ai-assistant/README.md) · [当前验收](../../../docs/ai-assistant/持续优化实施规划.md)。模板未在比赛 ECS 安装，不表示已上线。
 
+对外接入统一走[助手 V1](../../../docs/ai-assistant/对外接口V1.md)，不直接开放本 runtime。主后端 release 须包含同仓库 `code/assistant-sdk`；在 backend 安装 `requirements-assistant.txt` 会安装该包，旧 `app.assistant_client` 转为兼容导入。其他调用模块可单独安装 SDK，不需要部署主后端源码。
+
 ## 0. 现有比赛云环境（2026-10-22 只读核对）
 
 | 已核对事实 | 助手发布需要做什么 |
