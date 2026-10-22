@@ -15,6 +15,7 @@ def build_bundle(documents: list) -> DocBundle:
         type_code = d.type_code.value if hasattr(d.type_code, "value") else str(d.type_code)
         by_type[type_code].append(d.fields or {})
         meta_by_type[type_code].append({
+            "doc_id": getattr(d, "id", None),
             "doc_code": getattr(d, "doc_code", None),
             "pdf_file": getattr(d, "pdf_file", None),
             "field_sources": getattr(d, "field_sources", None) or {},

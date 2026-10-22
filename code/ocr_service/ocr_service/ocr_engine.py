@@ -60,19 +60,50 @@ class OcrEngine:
     def recognize_image_detailed(
         self, image_path: Path, min_score: float = 0.3
     ) -> list[dict]:
-        """识别单张图片，返回带置信度与坐标的明细列表。"""
+        """识别单张图片，返回带置信度与坐标的明细列表。
+
+        每条记录结构：
+            {
+                "text": 识别文本,
+                "score": 置信度(0~1),
+                "box":   [x1, y1, x2, y2]  水平外接框（左上角 + 右下角，像素）
+                "poly":  [[x1,y1],[x2,y2],[x3,y3],[x4,y4]]  四点多边形，可贴合倾斜文字
+            }
+        坐标单位：像素，相对原图（无需额外缩放映射）。
+        """
         ocr = self._ensure()
         result = ocr.predict(str(image_path))
         items: list[dict] = []
         for res in result:
-            texts = res.get("rec_texts", []) or []
-            scores = res.get("rec_scores", []) or []
-            boxes = res.get("rec_boxes", []) or []
+            texts = res.get("rec_texts")
+            scores = res.get("rec_scores")
+            boxes = res.get("rec_boxes")
+            polys = res.get("rec_polys")
+            if texts is None:
+                texts = []
+            if scores is None:
+                scores = []
+            if boxes is None:
+                boxes = []
+            if polys is None:
+                polys = []
+            # rec_boxes / rec_polys 可能是 numpy 数组，先转成 list 再取下标
+            boxes_list = [b.tolist() if hasattr(b, "tolist") else b for b in boxes]
+            polys_list = [p.tolist() if hasattr(p, "tolist") else p for p in polys]
             for i, (text, score) in enumerate(zip(texts, scores)):
-                if score < min_score:
+                score_val = float(score)
+                if score_val < min_score:
                     continue
-                box = boxes[i].tolist() if i < len(boxes) else None
-                items.append({"text": text, "score": float(score), "box": box})
+                box = boxes_list[i] if i < len(boxes_list) else None
+                poly = polys_list[i] if i < len(polys_list) else None
+                items.append(
+                    {
+                        "text": text,
+                        "score": score_val,
+                        "box": box,
+                        "poly": poly,
+                    }
+                )
         return items
 
 
@@ -91,3 +122,10 @@ def get_engine(lang: str = "ch", device: str = "cpu") -> OcrEngine:
 def recognize_image(image_path: Path, min_score: float = 0.3) -> str:
     """便捷函数：识别单张图片，返回纯文本。"""
     return get_engine().recognize_image(image_path, min_score=min_score)
+
+
+def recognize_image_detailed(
+    image_path: Path, min_score: float = 0.3
+) -> list[dict]:
+    """便捷函数：识别单张图片，返回带置信度与坐标的明细列表。"""
+    return get_engine().recognize_image_detailed(image_path, min_score=min_score)

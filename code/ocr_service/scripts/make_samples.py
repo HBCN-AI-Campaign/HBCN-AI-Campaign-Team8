@@ -2,14 +2,14 @@
 # -*- coding: utf-8 -*-
 """生成示例测试文档。
 
-覆盖 5 类输入，用于验证 OCR Demo 的全链路：
+覆盖 5 类输入，用于验证 OCR 服务 的全链路：
   1. demo.docx            传统 Word（有文本层）
   2. demo.xlsx            Excel 表格（多 Sheet）
   3. demo_text.pdf        带文本层的 PDF（直接抽取）
   4. demo_scan.pdf        扫描件 PDF（整页只有图片，必须走 OCR）
   5. demo_scan.png        图片（走 OCR）
 
-运行方式（uv 临时环境，不污染 Demo 主虚拟环境）：
+运行方式（uv 临时环境，不污染项目主虚拟环境）：
     uv run --with python-docx --with openpyxl --with reportlab --with pillow scripts/make_samples.py
 """
 
@@ -72,7 +72,7 @@ def make_docx(path: Path) -> None:
     )
 
     p = doc.add_paragraph()
-    run = p.add_run("备注：本文件为 OCR Demo 自动生成的测试样例，不代表真实业务。")
+    run = p.add_run("备注：本文件为 OCR 服务 自动生成的测试样例，不代表真实业务。")
     run.font.size = Pt(9)
     run.italic = True
 
@@ -181,7 +181,7 @@ def make_text_pdf(path: Path) -> None:
         c.drawString(60, y, line)
         y -= 22
     c.setFont("CJK", 9)
-    c.drawString(60, 60, "注：本文件为 OCR Demo 自动生成的测试样例，不代表真实业务。")
+    c.drawString(60, 60, "注：本文件为 OCR 服务 自动生成的测试样例，不代表真实业务。")
     c.showPage()
     c.save()
 
@@ -249,7 +249,7 @@ def render_scan_image() -> "Image.Image":  # noqa: F821
 
     draw.text(
         (95, H - 120),
-        "本文件为 OCR Demo 自动生成的扫描件模拟样例，不代表真实业务。",
+        "本文件为 OCR 服务 自动生成的扫描件模拟样例，不代表真实业务。",
         font=f_small,
         fill="#666666",
     )

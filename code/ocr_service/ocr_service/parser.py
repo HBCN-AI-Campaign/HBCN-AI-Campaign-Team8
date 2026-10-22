@@ -113,11 +113,83 @@ def parse_pdf(path: Path, ocr_min_text: int = 20) -> tuple[str, bool]:
     return "\n\n".join(ocr_lines), True
 
 
+def parse_image_detailed(path: Path, min_score: float = 0.3) -> dict:
+    """识别图片，返回带坐标的明细结果。"""
+    from .ocr_engine import recognize_image_detailed
+
+    items = recognize_image_detailed(path, min_score=min_score)
+    text = "\n".join(it["text"] for it in items)
+    return {"text": text, "blocks": items, "via_ocr": True}
+
+
+def parse_pdf_detailed(
+    path: Path, ocr_min_text: int = 20, min_score: float = 0.3
+) -> dict:
+    """解析 PDF，返回带坐标的明细结果。
+
+    文本型 PDF：用 pdfplumber 抽取词级坐标（每页的 words）。
+    扫描件 PDF：逐页转图走 OCR，返回 rec_boxes/rec_polys 坐标。
+    """
+    import pdfplumber
+
+    pages_text: list[str] = []
+    pages: list = []
+    with pdfplumber.open(str(path)) as pdf:
+        for pi, page in enumerate(pdf.pages, start=1):
+            t = page.extract_text() or ""
+            pages_text.append(t)
+            pages.append(page)
+
+    total_text = "\n".join(pages_text).strip()
+    if len(total_text) >= ocr_min_text:
+        # 文本型：取词级坐标（每个词：text/x0/top/x1/bottom）
+        blocks: list[dict] = []
+        for pi, page in enumerate(pages, start=1):
+            for w in page.extract_words():
+                blocks.append(
+                    {
+                        "text": w["text"],
+                        "score": 1.0,
+                        "box": [w["x0"], w["top"], w["x1"], w["bottom"]],
+                        "poly": [
+                            [w["x0"], w["top"]],
+                            [w["x1"], w["top"]],
+                            [w["x1"], w["bottom"]],
+                            [w["x0"], w["bottom"]],
+                        ],
+                        "page": pi,
+                    }
+                )
+        return {"text": total_text, "blocks": blocks, "via_ocr": False}
+
+    # 扫描件：转图 OCR，按页给坐标
+    from .ocr_engine import recognize_image_detailed
+    from .pdf_to_image import pdf_to_images
+
+    all_blocks: list[dict] = []
+    all_text: list[str] = []
+    imgs = pdf_to_images(path)
+    for pi, img_path in enumerate(imgs, start=1):
+        items = recognize_image_detailed(img_path, min_score=min_score)
+        for it in items:
+            it["page"] = pi
+            all_blocks.append(it)
+        all_text.append("\n".join(it["text"] for it in items))
+    return {
+        "text": "\n\n".join(all_text),
+        "blocks": all_blocks,
+        "via_ocr": True,
+    }
+
+
 # --------------------------------------------------------------------------
 # 统一入口
 # --------------------------------------------------------------------------
-def parse_file(path: Path) -> dict:
-    """按文件类型分派解析，返回统一结构。"""
+def parse_file(path: Path, detailed: bool = False) -> dict:
+    """按文件类型分派解析，返回统一结构。
+
+    detailed=True 时，图片/PDF 额外返回 `blocks`（带坐标的明细）。
+    """
     kind = config.classify(path)
     result = {
         "path": str(path),
@@ -130,18 +202,30 @@ def parse_file(path: Path) -> dict:
 
     try:
         if kind == "image":
-            from .ocr_engine import recognize_image
+            if detailed:
+                res = parse_image_detailed(path)
+                result["text"] = res["text"]
+                result["via_ocr"] = True
+                result["blocks"] = res["blocks"]
+            else:
+                from .ocr_engine import recognize_image
 
-            result["text"] = recognize_image(path)
-            result["via_ocr"] = True
+                result["text"] = recognize_image(path)
+                result["via_ocr"] = True
         elif kind == "word":
             result["text"] = parse_word(path)
         elif kind == "excel":
             result["text"] = parse_excel(path)
         elif kind == "pdf":
-            text, via_ocr = parse_pdf(path)
-            result["text"] = text
-            result["via_ocr"] = via_ocr
+            if detailed:
+                res = parse_pdf_detailed(path)
+                result["text"] = res["text"]
+                result["via_ocr"] = res["via_ocr"]
+                result["blocks"] = res["blocks"]
+            else:
+                text, via_ocr = parse_pdf(path)
+                result["text"] = text
+                result["via_ocr"] = via_ocr
         else:
             result["error"] = f"不支持的文件类型：{path.suffix}"
     except Exception as exc:  # noqa: BLE001

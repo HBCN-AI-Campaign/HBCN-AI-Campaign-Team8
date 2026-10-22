@@ -15,9 +15,9 @@ set PADDLE_PDX_MODEL_SOURCE=BOS
 set PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
 
 echo 正在启动 OCR 识别 API ...
-echo 服务地址：http://127.0.0.1:8000
-echo 接口文档：http://127.0.0.1:8000/docs
+echo 服务地址：http://127.0.0.1:7888
+echo 接口文档：http://127.0.0.1:7888/docs
 echo 按 Ctrl+C 停止服务。
 echo.
 
-"%VENV_PY%" -m uvicorn main:app --host 127.0.0.1 --port 8000
+"%VENV_PY%" -m uvicorn main:app --host 127.0.0.1 --port 7888

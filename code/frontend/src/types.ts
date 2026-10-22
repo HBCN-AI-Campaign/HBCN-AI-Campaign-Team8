@@ -10,13 +10,23 @@ export interface LoginResp {
 export interface TaskOut {
   id: number
   task_code: string
+  customer_no?: string | null
+  customer_name?: string | null
   borrower: string
   drawdown_currency: string
   drawdown_amount: number
   status: string
+  needs_recheck?: boolean // 字段被编辑后待重新核对
   created_at?: string | null
   review_comment?: string | null
   supplement_note?: string | null
+}
+
+// --- 客户主数据 ---
+export interface Customer {
+  id: number
+  customer_no: string
+  name: string
 }
 
 // --- 补件（经办人回填） ---
@@ -33,8 +43,10 @@ export interface SupplementIn {
 }
 
 export interface FieldSource {
+  doc_id?: number // 单据主键（编辑字段用）
   doc_code?: string
   type_code?: string
+  field_key?: string // 字段键（编辑字段用）
   pdf_file?: string | null
   page: number
   bbox: number[] // [x0, y0, x1, y1] 归一化 0~1
@@ -75,10 +87,10 @@ export interface RunSummary {
 
 export interface DashboardStats {
   total_tasks: number
-  created: number
-  reviewing: number
+  pending: number
+  ai_reviewing: number
+  to_recheck: number
   need_supplement: number
-  supplemented: number
   completed: number
 }
 
@@ -106,6 +118,8 @@ export interface ParseResult {
   suggested_borrower: string
   suggested_currency: string
   suggested_amount: number
+  suggested_customer_no?: string | null
+  suggested_customer_name?: string | null
   documents: ParsedDocument[]
 }
 
@@ -159,7 +173,8 @@ export interface DocumentIn {
 }
 
 export interface TaskCreate {
-  task_code: string
+  // 任务编号由后端自增生成，前端不再传入
+  customer_no?: string | null
   borrower: string
   drawdown_currency: string
   drawdown_amount: number

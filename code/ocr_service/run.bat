@@ -15,7 +15,7 @@ set PADDLE_PDX_MODEL_SOURCE=BOS
 set PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True
 
 if "%~1"=="" (
-    ".venv\Scripts\python.exe" -m ocr_demo.cli samples
+    ".venv\Scripts\python.exe" -m ocr_service.cli samples
 ) else (
-    ".venv\Scripts\python.exe" -m ocr_demo.cli %*
+    ".venv\Scripts\python.exe" -m ocr_service.cli %*
 )

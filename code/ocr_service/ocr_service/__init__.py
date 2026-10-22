@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""ocr_demo：轻量 OCR 文档识别。
+"""ocr_service：轻量 OCR 文档识别。
 
 技术栈（全部纯 CPU 可跑，远小于 MinerU）：
 - OCR：PaddleOCR 3.x + PaddlePaddle CPU
