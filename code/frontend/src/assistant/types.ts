@@ -83,6 +83,7 @@ export interface AssistantSkill {
 
 export interface AssistantStreamEvent {
   event: string
+  run?: import('./collaboration').Run
   message_id?: string
   task_code?: string | null
   delta?: string

@@ -61,4 +61,14 @@ describe('reviewer collaboration with Ant Design components', () => {
     expect(restored[0].steps).toHaveLength(1)
     expect(restored[0].steps[0].status).toBe('completed')
   })
+
+  it('uses the canonical final reply if the run completes while replaying its events', () => {
+    const run = { id: 'run-race', status: 'running', session_id: 3, user_id: 1, client_message_id: 'request-race' }
+    const final = { id: 12, run_id: run.id, role: 'assistant' as const, content: '已核对，需人工确认', status: 'completed', steps: [], citations: [] }
+    const restored = restoreActiveReply([], [
+      { id: 1, run_id: run.id, event: 'delta', delta: '不完整回显' },
+      { id: 2, run_id: run.id, event: 'message_end', message: final },
+    ], run)
+    expect(restored).toEqual([{ ...final, streaming: false }])
+  })
 })

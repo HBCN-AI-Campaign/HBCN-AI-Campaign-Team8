@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuthStore } from '@/stores/auth'
 import { assistantApi } from './api'
-import { collaborationApi, restoreActiveReply } from './collaboration'
+import { collaborationApi, restoreActiveReply, STOP_ASSISTANT_RUN } from './collaboration'
 import type { Run } from './collaboration'
 import type { AssistantCapabilities, AssistantMessage, AssistantSession, AssistantSkill, AssistantStep, AssistantTaskOption } from './types'
 
@@ -74,15 +74,17 @@ export function useAssistant(initialTask = '') {
   }, [activeId])
 
   useEffect(() => {
-    if (!shared || activeId === null || sending) return
+    if ((!shared && !activeRun) || activeId === null || sending) return
     let busy = false
-    const timer = setInterval(() => {
+    const poll = () => {
       if (busy || document.visibilityState === 'hidden') return
       busy = true
       void refreshSession().finally(() => { busy = false })
-    }, 1800)
+    }
+    poll()
+    const timer = setInterval(poll, 1800)
     return () => clearInterval(timer)
-  }, [shared, activeId, sending, refreshSession])
+  }, [shared, activeRun?.id, activeId, sending, refreshSession])
 
   useEffect(() => {
     let current = true
@@ -186,6 +188,10 @@ export function useAssistant(initialTask = '') {
   const send = useCallback(async (text: string, accepted?: () => void) => {
     const content = text.trim()
     if (!content || loading || switching || stream.current) return
+    if (activeRun) {
+      setError('当前会话的 AI 正在工作，请等待完成或先停止运行。')
+      return
+    }
     const controller = new AbortController()
     stream.current = controller
     setSending(true)
@@ -213,12 +219,12 @@ export function useAssistant(initialTask = '') {
       const user: AssistantMessage = { id: `user:${localId}`, role: 'user', content, status: 'completed', steps: [], citations: [] }
       const reply: AssistantMessage = { id: localId, role: 'assistant', content: '', status: 'running', streaming: true, steps: [], citations: [] }
       setMessages((items) => [...items, user, reply])
-      if (!shared) { accepted?.(); acceptedDraft = true }
-      const adapter = shared ? collaborationApi : assistantApi
-      for await (const event of adapter.streamMessage(id, content, taskCode, skillId, controller.signal)) {
+      for await (const event of collaborationApi.streamMessage(id, content, taskCode, skillId, controller.signal)) {
         if (controller.signal.aborted) break
         if (!acceptedDraft) { accepted?.(); acceptedDraft = true }
-        if (event.event === 'step' && event.step) {
+        if (event.event === 'run_started' && event.run) {
+          if (request === generation.current) setActiveRun(event.run)
+        } else if (event.event === 'step' && event.step) {
           update((message) => ({ ...message, steps: upsertStep(message.steps, event.step!) }))
         } else if (event.event === 'tool' && event.tool) {
           const tool = event.tool
@@ -233,6 +239,7 @@ export function useAssistant(initialTask = '') {
           update((message) => ({ ...message, citations: event.citations! }))
         } else if (event.event === 'message_end' && event.message) {
           ended = true
+          if (request === generation.current) setActiveRun(null)
           update(() => restoredMessage(event.message!))
           break
         } else if (event.event === 'error') {
@@ -262,9 +269,8 @@ export function useAssistant(initialTask = '') {
         }).catch(() => undefined)
       }
       if (stream.current === controller) stream.current = null
-      if (shared) void refreshSession()
     }
-  }, [activeId, loading, switching, taskCode, skillId, shared, refreshSession])
+  }, [activeId, loading, switching, taskCode, skillId, activeRun])
 
   const discuss = useCallback(async (content: string, accepted?: () => void) => {
     if (!content.trim() || activeId === null || discussionLock.current) return
@@ -284,6 +290,6 @@ export function useAssistant(initialTask = '') {
     loading, switching, sending, error, notice, setSkillId, setError,
     refreshCapabilities, newConversation, selectSession, deleteSession, send,
     shared, activeRun, refreshSession, discuss,
-    stop: () => stream.current?.abort(),
+    stop: () => stream.current?.abort(STOP_ASSISTANT_RUN),
   }
 }

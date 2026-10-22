@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AssistantView from '@/views/AssistantView'
 import ProtectedRoute from '@/router/ProtectedRoute'
 import { assistantApi } from '@/assistant/api'
+import { collaborationApi, STOP_ASSISTANT_RUN } from '@/assistant/collaboration'
 import { useAuthStore } from '@/stores/auth'
 import type { AssistantMessage, AssistantStreamEvent } from '@/assistant/types'
 
@@ -13,6 +14,10 @@ vi.mock('@/assistant/api', () => ({ assistantApi: {
   sessions: vi.fn(), capabilities: vi.fn(), tasks: vi.fn(), skills: vi.fn(),
   createSession: vi.fn(), session: vi.fn(), deleteSession: vi.fn(), streamMessage: vi.fn(),
 } }))
+vi.mock('@/assistant/collaboration', async (original) => {
+  const module = await original<typeof import('@/assistant/collaboration')>()
+  return { ...module, collaborationApi: { ...module.collaborationApi, streamMessage: vi.fn(), library: vi.fn() } }
+})
 
 const session = { id: 7, title: '风险讨论', message_count: 2, updated_at: '2026-10-20T10:00:00Z', task_code: null }
 const final: AssistantMessage = {
@@ -28,6 +33,7 @@ beforeEach(() => {
   vi.mocked(assistantApi.capabilities).mockResolvedValue({ sdk: 'opencode-sdk', configured: true, model: 'test-model', rag_available: true, supports_stream: true, message: '就绪' })
   vi.mocked(assistantApi.tasks).mockResolvedValue([{ id: 1, task_code: 'TASK-1', borrower: '测试企业', status: 'created' }])
   vi.mocked(assistantApi.skills).mockResolvedValue([{ id: 'risk-review', name: '风险梳理', desc: '梳理风险', version: '1.0', owner: '项目组', license: 'Internal', permissions: ['task:read'] }])
+  vi.mocked(collaborationApi.library).mockResolvedValue([])
   vi.mocked(assistantApi.createSession).mockImplementation(async () => {
     // The real API directory includes committed creations. Keep the network
     // fixture consistent, otherwise polling correctly treats it as revoked.
@@ -63,7 +69,7 @@ describe('React assistant user flows with real Ant Design X components', () => {
   it('sends a first message, streams visible progress, then collapses progress and retains sources', async () => {
     let finish!: () => void
     const gate = new Promise<void>((resolve) => { finish = resolve })
-    vi.mocked(assistantApi.streamMessage).mockImplementation(async function* () {
+    vi.mocked(collaborationApi.streamMessage).mockImplementation(async function* () {
       yield { event: 'step', step: { key: 'evidence', label: '读取授权证据', detail: '正在检索', status: 'running' } }
       yield { event: 'reasoning', delta: '内部推理不得出现' }
       yield { event: 'delta', delta: '可以协助梳理材料。' }
@@ -77,6 +83,7 @@ describe('React assistant user flows with real Ant Design X components', () => {
     expect(screen.getByText('正在检索')).toBeTruthy()
     expect(screen.queryByText('内部推理不得出现')).toBeNull()
     expect(assistantApi.createSession).toHaveBeenCalledTimes(1)
+    expect(assistantApi.streamMessage).not.toHaveBeenCalled()
     expect(assistantApi.tasks).toHaveBeenCalledWith(false)
     await act(async () => { finish() })
     await screen.findByText('执行完成 · 1 项操作')
@@ -103,7 +110,9 @@ describe('React assistant user flows with real Ant Design X components', () => {
   })
 
   it('stops receiving and re-enables sending', async () => {
-    vi.mocked(assistantApi.streamMessage).mockImplementation(async function* (_id, _text, _task, _skill, signal) {
+    let stoppedSignal: AbortSignal | undefined
+    vi.mocked(collaborationApi.streamMessage).mockImplementation(async function* (_id, _text, _task, _skill, signal) {
+      stoppedSignal = signal
       yield { event: 'delta', delta: '部分答复' }
       await new Promise<void>((resolve) => signal!.addEventListener('abort', () => resolve(), { once: true }))
     })
@@ -112,11 +121,12 @@ describe('React assistant user flows with real Ant Design X components', () => {
     await screen.findByText('部分答复')
     fireEvent.click(screen.getByRole('button', { name: '停止接收' }))
     await screen.findByText('已停止接收，此答复可能不完整。')
+    expect(stoppedSignal?.reason).toBe(STOP_ASSISTANT_RUN)
     expect(screen.getByRole('button', { name: '发送消息' })).toBeTruthy()
   })
 
   it('does not get stuck when the stream ends without message_end', async () => {
-    vi.mocked(assistantApi.streamMessage).mockImplementation(async function* () { yield { event: 'delta', delta: '未完成' } })
+    vi.mocked(collaborationApi.streamMessage).mockImplementation(async function* () { yield { event: 'delta', delta: '未完成' } })
     mount()
     await send()
     await screen.findByText('连接提前中断，未收到完整答复，请重新发送问题。')
@@ -129,7 +139,18 @@ describe('React assistant user flows with real Ant Design X components', () => {
     await send('保留这个问题')
     await screen.findByText('创建失败')
     expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('保留这个问题')
-    expect(assistantApi.streamMessage).not.toHaveBeenCalled()
+    expect(collaborationApi.streamMessage).not.toHaveBeenCalled()
+  })
+
+  it('keeps the question if the server refuses to admit the run', async () => {
+    vi.mocked(collaborationApi.streamMessage).mockImplementation(async function* () {
+      throw new Error('当前会话已有运行，请刷新后重试')
+    })
+    mount()
+    await send('不要丢失我的问题')
+    await screen.findByText('当前会话已有运行，请刷新后重试')
+    expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('不要丢失我的问题')
+    expect(screen.getByRole('button', { name: '发送消息' })).toBeTruthy()
   })
 
   it('opens persisted history and sends a selected skill with task context', async () => {
@@ -142,13 +163,13 @@ describe('React assistant user flows with real Ant Design X components', () => {
     vi.mocked(assistantApi.session).mockResolvedValue({ ...session, messages: [{ ...final, steps: [
       { ...final.steps[0], status: 'running' }, ...final.steps,
     ] }] })
-    vi.mocked(assistantApi.streamMessage).mockImplementation(async function* (): AsyncGenerator<AssistantStreamEvent> { yield { event: 'message_end', message: final } })
+    vi.mocked(collaborationApi.streamMessage).mockImplementation(async function* (): AsyncGenerator<AssistantStreamEvent> { yield { event: 'message_end', message: final } })
     mount('/assistant?task_code=TASK-1')
     await screen.findByText('模型服务就绪')
     fireEvent.click(screen.getByRole('button', { name: '业务技能' }))
     fireEvent.click(await screen.findByRole('button', { name: '使用此技能' }))
     await send('检查任务')
-    await waitFor(() => expect(assistantApi.streamMessage).toHaveBeenCalledWith(8, '检查任务', 'TASK-1', 'risk-review', expect.any(AbortSignal)))
+    await waitFor(() => expect(collaborationApi.streamMessage).toHaveBeenCalledWith(8, '检查任务', 'TASK-1', 'risk-review', expect.any(AbortSignal)))
     await screen.findByText('执行完成 · 1 项操作')
     fireEvent.click(screen.getByText('风险讨论'))
     await waitFor(() => expect(assistantApi.session).toHaveBeenCalledWith(7))

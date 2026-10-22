@@ -79,6 +79,7 @@ export default function AssistantView() {
   const activeSession = assistant.sessions.find((item) => item.id === assistant.activeId)
   const activeSkill = assistant.skills.find((skill) => skill.id === assistant.skillId)
   const requestedSession = query.get('session_id')
+  const waitingForRun = Boolean(assistant.activeRun) && !(assistant.shared && messageMode === '发给成员')
 
   useEffect(() => {
     if (!assistant.loading && requestedSession && /^\d+$/.test(requestedSession)) void assistant.selectSession(Number(requestedSession))
@@ -190,10 +191,10 @@ export default function AssistantView() {
             autoSize={{ minRows: 2, maxRows: 6 }}
             actions={(_, { components: { SendButton, LoadingButton } }) => assistant.sending
               ? <LoadingButton aria-label="停止接收" title="停止接收" />
-              : <SendButton aria-label="发送消息" title="发送消息" disabled={!draft.trim() || assistant.loading || assistant.switching} />}
+              : <SendButton aria-label="发送消息" title={waitingForRun ? '请等待当前运行完成，或先停止运行' : '发送消息'} disabled={!draft.trim() || assistant.loading || assistant.switching || waitingForRun} />}
             header={activeSkill ? <div className="hy-selected-skill"><ThunderboltOutlined /> 本轮技能：<Tag closable onClose={() => assistant.setSkillId(undefined)}>{activeSkill.name}</Tag></div> : undefined}
           />
-          <div className="hy-composer-footer"><span role="status">{assistant.sending ? '正在处理，可随时停止接收' : 'Enter 发送 · Shift + Enter 换行'}</span><span>审核结论须由有权限人员确认</span></div>
+          <div className="hy-composer-footer"><span role="status">{assistant.sending ? '正在处理；离开页面后可在会话记录中恢复，点击停止会取消运行' : waitingForRun ? '正在恢复本轮执行，请等待完成或先停止运行' : 'Enter 发送 · Shift + Enter 换行'}</span><span>审核结论须由有权限人员确认</span></div>
         </div>
       </main>
       <CollaborationPanel open={collaborationOpen} onClose={() => setCollaborationOpen(false)} session={activeSession} onChanged={assistant.refreshSession} context={assistant.messages.slice(-8).map((message) => message.content).join('\n')} />

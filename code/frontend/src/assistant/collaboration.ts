@@ -12,6 +12,9 @@ export interface RoomEvent extends AssistantStreamEvent { id: number; run_id?: s
 export interface EventPage { events: RoomEvent[]; cursor: number; has_more: boolean; active_run: Run | null }
 export interface LibrarySkill extends AssistantSkill { source: string; installed: boolean; update_available: boolean }
 
+// Aborting a reader (navigation/unmount) must not cancel a durable model run.
+export const STOP_ASSISTANT_RUN = 'stop-assistant-run'
+
 async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const token = useAuthStore.getState().token
   const response = await fetch(`/api/assistant${path}`, {
@@ -57,6 +60,7 @@ export const collaborationApi = {
     let ended = false
     const deadline = Date.now() + 310_000
     try {
+      yield { event: 'run_started', run }
       while (!signal?.aborted && Date.now() < deadline) {
         const page = await collaborationApi.events(id, cursor, run.id)
         cursor = page.cursor
@@ -74,7 +78,9 @@ export const collaborationApi = {
       }
       if (!signal?.aborted) throw new Error('运行超时，请刷新查看结果')
     } finally {
-      if (signal?.aborted && !ended) await collaborationApi.cancel(id, run.id).catch(() => undefined)
+      if (signal?.aborted && signal.reason === STOP_ASSISTANT_RUN && !ended) {
+        await collaborationApi.cancel(id, run.id).catch(() => undefined)
+      }
     }
   },
 }
@@ -93,6 +99,13 @@ export function restoreActiveReply(messages: AssistantMessage[], events: RoomEve
       const step = { key: `tool:${event.tool.name}`, label: '读取授权证据', status: event.tool.status }
       reply.steps = [...reply.steps.filter((item) => item.key !== step.key), step]
     } else if (event.event === 'delta') reply.content += event.delta || ''
+    else if (event.event === 'citations' && event.citations) reply.citations = event.citations
+    else if (event.event === 'message_end' && event.message) return [...messages, { ...event.message, streaming: false }]
+    else if (event.event === 'error' || event.event === 'run_end') {
+      reply.streaming = false
+      reply.status = event.status === 'cancelled' ? 'stopped' : 'error'
+      reply.steps = reply.steps.map((step) => step.status === 'running' ? { ...step, status: 'error' } : step)
+    }
   }
   return [...messages, reply]
 }
