@@ -655,6 +655,77 @@
         "title": "LegalContext",
         "type": "object"
       },
+      "QualityRecheck": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Expected Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_sha256"
+        ],
+        "title": "QualityRecheck",
+        "type": "object"
+      },
+      "QualityReview": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "expected_parsed_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Expected Parsed Sha256",
+            "type": "string"
+          },
+          "expected_report_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Expected Report Sha256",
+            "type": "string"
+          },
+          "expected_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Expected Sha256",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "source_compared",
+              "incomplete",
+              "incorrect",
+              "unreadable"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "verified_units": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 2000,
+            "title": "Verified Units",
+            "type": "array"
+          }
+        },
+        "required": [
+          "expected_sha256",
+          "expected_parsed_sha256",
+          "expected_report_sha256",
+          "decision",
+          "verified_units",
+          "reason"
+        ],
+        "title": "QualityReview",
+        "type": "object"
+      },
       "QueryRequest": {
         "properties": {
           "query": {
@@ -1148,7 +1219,7 @@
   },
   "info": {
     "title": "HBCN Business Knowledge Service",
-    "version": "0.3.1"
+    "version": "0.4.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -1639,6 +1710,281 @@
           }
         },
         "summary": "Document Content"
+      }
+    },
+    "/api/v1/documents/{document_id}/quality": {
+      "get": {
+        "operationId": "document_quality_api_v1_documents__document_id__quality_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-document-review-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Document-Review-Key"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "rag_ui_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rag Ui Session"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Document Quality"
+      }
+    },
+    "/api/v1/documents/{document_id}/quality-recheck": {
+      "post": {
+        "operationId": "recheck_document_quality_api_v1_documents__document_id__quality_recheck_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-document-review-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Document-Review-Key"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "rag_ui_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rag Ui Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QualityRecheck"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recheck Document Quality"
+      }
+    },
+    "/api/v1/documents/{document_id}/quality-review": {
+      "post": {
+        "operationId": "review_document_quality_api_v1_documents__document_id__quality_review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-document-review-key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Document-Review-Key"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "rag_ui_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rag Ui Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QualityReview"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Document Quality"
       }
     },
     "/api/v1/documents/{document_id}/retry": {

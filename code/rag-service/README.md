@@ -1,6 +1,6 @@
 # RAG 模块总览与运行说明
 
-协作交付入口：服务 `0.3.1` / HTTP 契约 `1.1.0`。其他模块只调用 [接口契约](API_CONTRACT.md) 与 [OpenAPI](contracts/openapi-v1.json)，无需依赖 RAG 内部类、表或模型；云端部署同事使用 [部署交接](deploy/README.md)。现有 `/query` 保持兼容，新增消费者优先对接 `/retrievals` 原文证据接口；内部优化独立发布，云端可提供模型/API/存储资源，不因现有 ECS 配置降低质量目标。
+协作交付入口：服务 `0.4.0` / HTTP 契约 `1.2.0`。其他模块只调用 [接口契约](API_CONTRACT.md) 与 [OpenAPI](contracts/openapi-v1.json)，无需依赖 RAG 内部类、表或模型；云端部署同事使用 [部署交接](deploy/README.md)。现有 `/query` 保持兼容，新增消费者优先对接 `/retrievals` 原文证据接口；内部优化独立发布，云端可提供模型/API/存储资源，不因现有 ECS 配置降低质量目标。
 
 模块边界：RAG 管理检索、证据与独立问答；主站助手和专项 Agent 负责各自最终输出。调用方按接口消费原文证据和缺口，主站负责最终用户/任务授权。模块可独立部署与更新，真实云端接线及完整业务验收仍须分别取证。
 
@@ -24,6 +24,8 @@
 
 第十三轮补齐普通知识文档逻辑撤回：HTTP/React 确认、hash 绑定、事务关闭向量/词法可见性、原文拒读、在途入库发布屏障，以及跨轮候选和答复返回前复核。原件保留，未实现物理删除、跨系统缓存通知或案例依赖统一传播；详见[第十三轮验证](../../docs/RAG优化第十三轮验证记录.md)。
 
+第十四轮增加解析质量报告、隔离/待复核、独立凭证逐单元原文审核与旧库授权重检；**旧 ready 缺本版报告默认排除**，升级需迁移窗口。见[质量契约](../../docs/RAG文档质量门禁契约.md)和[第十四轮验证](../../docs/RAG优化第十四轮验证记录.md)。这不是 OCR 准确率或法规业务质量验收。
+
 ## 当前 RAG 架构
 
 第八轮 React 工作台已接同源真实问答 SSE、增强检索、原文与文档入库状态，使用 Ant Design X 成熟组件；移除固定答复/来源/假页数。浏览器→实际 FastAPI 传输验收采用合成依赖，不等于模型/数据库/MCP 完整业务验收。契约兼容标记、构建/鉴权与复现见 [UI 说明](ui/README.md)。未重启共享后端，旧进程不具备本轮接口时 UI 会提示版本不匹配。
@@ -43,11 +45,16 @@
 ```mermaid
 flowchart LR
   Caller[已授权的后端调用方] -->|Bearer · HTTP| API[FastAPI RAG 服务<br/>本机 127.0.0.1:8011]
+  API --> QUALITY[版本化解析质量门禁<br/>乱码隔离 / OCR及结构不确定待复核]
+  QUALITY --> QREVIEW[独立 reviewer 凭证 / 逐单元对照原件<br/>原件、解析、报告三 hash 绑定]
+  QREVIEW --> DOC
+  QUALITY --> QREADY[基础检查或本版复核后才可索引<br/>旧库缺报告默认排除 / 授权重检]
+  QREADY --> VEC
   API --> WITHDRAW[文档撤回事务<br/>版本 hash / 片段停止检索 / 原文拒读]
   WITHDRAW --> DOC
   WITHDRAW --> VEC
   WITHDRAW -.阻止在途发布.-> GRAPH
-  GRAPH --> RECHECK[候选与结果返回前复核<br/>失效依据移除 / 隐藏原答复]
+  GRAPH --> RECHECK[候选与结果返回前复核<br/>当前质量策略 / 失效依据移除 / 隐藏原答复]
   API --> DOC[(PostgreSQL<br/>hbcn_rag.documents)]
   API --> VEC[(pgvector<br/>chunks_v1 · 1024维 · HNSW)]
   API --> FILES[(持久化原件目录<br/>data/originals)]

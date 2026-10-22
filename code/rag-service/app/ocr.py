@@ -29,6 +29,14 @@ IMAGE_MIME = {
 
 
 def _read_text(content: bytes) -> str:
+    # Honor explicit Unicode BOMs before the legacy encoding fallback.
+    for marker, encoding in ((b"\xff\xfe\x00\x00", "utf-32"), (b"\x00\x00\xfe\xff", "utf-32"),
+                             (b"\xff\xfe", "utf-16"), (b"\xfe\xff", "utf-16"), (b"\xef\xbb\xbf", "utf-8-sig")):
+        if content.startswith(marker):
+            try:
+                return content.decode(encoding)
+            except UnicodeDecodeError:
+                return content.decode(encoding, errors="replace")
     for encoding in ("utf-8", "gb18030"):
         try:
             return content.decode(encoding)
@@ -83,9 +91,9 @@ class OCRClient:
             data = response.json()
         except ValueError:
             return None
-        if data.get("error"):
+        if not isinstance(data, dict) or data.get("error") or not isinstance(data.get("text"), str):
             return None
-        return {"text": data.get("text", ""), "via_ocr": bool(data.get("via_ocr")), "error": None}
+        return {"text": data["text"], "via_ocr": True, "error": None, "method": "ocr_service"}
 
     def _call_vision(self, filename: str, content: bytes, extension: str) -> dict[str, Any]:
         data_url = f"data:{IMAGE_MIME[extension]};base64,{base64.b64encode(content).decode('ascii')}"
@@ -107,13 +115,16 @@ class OCRClient:
                 headers={"Authorization": f"Bearer {self.vision_api_key}"},
                 timeout=self.timeout,
             )
-        except httpx.HTTPError as exc:
-            return {"text": "", "via_ocr": True, "error": f"视觉 OCR 请求失败：{exc}"}
+        except httpx.HTTPError:
+            return {"text": "", "via_ocr": True, "error": "视觉 OCR 请求失败"}
         if response.status_code >= 400:
-            return {"text": "", "via_ocr": True, "error": f"视觉 OCR 返回 {response.status_code}：{response.text[:200]}"}
+            return {"text": "", "via_ocr": True, "error": "视觉 OCR 服务返回错误"}
         try:
             data = response.json()
-            text = data["choices"][0]["message"]["content"]
-        except (ValueError, KeyError, IndexError):
+            choice = data["choices"][0]
+            text = choice["message"]["content"]
+            if choice.get("finish_reason") != "stop" or not isinstance(text, str):
+                raise ValueError("OCR completion truncated or unknown")
+        except (ValueError, KeyError, IndexError, TypeError):
             return {"text": "", "via_ocr": True, "error": "视觉 OCR 返回格式异常"}
-        return {"text": text, "via_ocr": True, "error": None}
+        return {"text": text, "via_ocr": True, "error": None, "method": "vision_ocr"}

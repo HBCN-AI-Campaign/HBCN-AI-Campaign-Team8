@@ -1,6 +1,6 @@
 # RAG 独立模块接口 v1
 
-服务版本 `0.3.1`，HTTP 契约版本 `1.1.0`。调用方只依赖本文和 [OpenAPI 快照](contracts/openapi-v1.json)，不导入 `app/`、不查 RAG 表、不读取模型凭证。部署方法见 [deploy/README.md](deploy/README.md)；完整现状与优化范围见 [README](README.md)。
+服务版本 `0.4.0`，HTTP 契约版本 `1.2.0`。调用方只依赖本文和 [OpenAPI 快照](contracts/openapi-v1.json)，不导入 `app/`、不查 RAG 表、不读取模型凭证。部署方法见 [deploy/README.md](deploy/README.md)；完整现状与优化范围见 [README](README.md)。
 
 ## 接线约定
 
@@ -75,3 +75,11 @@ v1.1 新增文档 `sha256`、状态 `withdrawn` 及撤回入口；调用方需�
 默认增强请求总预算 240 秒，调用方/网关超时至少 300 秒；如果部署方调整预算，必须同步调用方。上传处理与问答预算分开，入库用 202 + 轮询。超时后不自动重复有费用的模型/MCP 调用；429/503 是否重试由调用方按只读性、预算和退避策略决定。时延和吞吐指标尚待真实云端测量，不能据配置推断达标。
 
 发布时运行 `python scripts/export-openapi.py --check`，并执行后端、UI、隔离 API 回归。发生有意接口变化时先评审兼容性/版本与本文，再显式重新导出快照。未知可选字段允许扩展，旧客户端读取原证据结构仍受契约测试保护。
+
+## 解析质量门禁（1.2，升级需处理旧库）
+
+文档新增可选 quality 报告与 quality_review/quarantined 状态；消费者必须按 state 判断可用性，不能将未知状态或 202 视为完成。run 是历史粗粒度兼容标记，待复核也可能为 FAILED；具体流程看 state/stage/quality。报告不等于 OCR 正确率/完整性或业务审批。
+
+新增 GET `/documents/{id}/quality`、POST `/documents/{id}/quality-review` 和 POST `/documents/{id}/quality-recheck`，除服务鉴权外要求独立 X-Document-Review-Key。默认未配置注册表时关闭，不把凭证暴露浏览器。三份 hash、单元核对、响应/错误与运维工具见[质量契约](../../docs/RAG文档质量门禁契约.md)。
+
+这是有意收紧知识可用性的质量升级：旧 ready 缺当前策略报告将不再召回，ready 增加 quality_policy_version/unverified_ready_documents 并可返回 503/degraded。需先备份/隔离预演、授权重检/必要复核、真实召回回归，不能直接覆盖版本后认为升级完成。现有 query/retrievals 请求结构保持兼容；云端迁移和主站接线另行验收。

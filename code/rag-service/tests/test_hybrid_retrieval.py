@@ -79,10 +79,12 @@ class HybridPostgresTests(unittest.TestCase):
             chunks.create(engine)
             with engine.begin() as connection:
                 from app.document_store import utc_now
+                from app.document_quality import assess_pages
                 connection.execute(service.documents.table.insert(), [{"id": item["document_id"], "name": "synthetic.txt",
                     "scope": item["scope"], "sha256": str(index).zfill(64), "embedding_model": item["embedding_model"],
                     "state": "ready", "stage": "ready", "content_type": "text/plain", "size_bytes": 1,
-                    "chunk_count": 1, "error": None, "pages": [], "provenance": {}, "events": [],
+                    "chunk_count": 1, "error": None, "pages": [], "provenance": {"quality_report": assess_pages([
+                        {"page": None, "text": item["content"], "extraction": {"method": "text_decode"}}])}, "events": [],
                     "created_at": utc_now(), "updated_at": utc_now()} for index, item in enumerate(data)])
                 connection.execute(chunks.insert(), data)
             with patch.object(settings, "RAG_SEARCH_MODE", "hybrid"):

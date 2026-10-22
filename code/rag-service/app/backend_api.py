@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
@@ -22,6 +22,8 @@ from .evidence_context import utf16_units
 from .legal_applicability import LegalContext
 from .graph_transport import GraphRun
 from .document_store import DocumentConflict
+from .document_quality import QualityReview
+from .reference_security import ReferenceForbidden, resolve_principal
 
 
 router = APIRouter(prefix="/api/v1")
@@ -83,8 +85,9 @@ def ready():
     try:
         resources = postgres_engine().readiness()
         runtime_ready = SDKRuntime().health()
-        return JSONResponse(status_code=200 if runtime_ready else 503, content={
-            "status": "ready" if runtime_ready else "degraded", "engine": engine_kind(),
+        fully_ready = runtime_ready and resources.get("unverified_ready_documents", 0) == 0
+        return JSONResponse(status_code=200 if fully_ready else 503, content={
+            "status": "ready" if fully_ready else "degraded", "engine": engine_kind(),
             **resources, "sdk_runtime": "ready" if runtime_ready else "unavailable",
             "note": "就绪检查不产生模型费用；模型调用由上传与问答真实验收验证",
         })
@@ -147,6 +150,57 @@ class DocumentWithdrawal(BaseModel):
     model_config = ConfigDict(extra="forbid")
     expected_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     reason: Literal["superseded", "incorrect", "authorization_revoked", "quality_issue", "other"]
+
+
+def document_reviewer(x_document_review_key: str | None = Header(default=None)):
+    if not settings.RAG_DOCUMENT_REVIEW_PRINCIPALS_FILE:
+        raise HTTPException(404, "文档质量复核接口未开放")
+    return resolve_principal(x_document_review_key, settings.RAG_DOCUMENT_REVIEW_PRINCIPALS_FILE)
+
+
+@router.get("/documents/{document_id}/quality")
+def document_quality(document_id: str, actor=Depends(document_reviewer)):
+    engine = postgres_engine()
+    row = engine.documents.get(valid_uuid(document_id))
+    if not row or row["state"] == "withdrawn":
+        raise HTTPException(404, "文档不存在或不可用")
+    try:
+        actor.require(row["scope"], "reviewer")
+    except ReferenceForbidden:
+        raise HTTPException(403, "无权复核此知识范围") from None
+    return {"document": engine.documents.public(row), "pages": row["pages"],
+            "notice": "解析结果尚需与原件逐单元核对，质量复核不构成法规或业务审批"}
+
+
+@router.post("/documents/{document_id}/quality-review", status_code=202)
+def review_document_quality(document_id: str, payload: QualityReview, actor=Depends(document_reviewer)):
+    try:
+        document = postgres_engine().review_quality(valid_uuid(document_id), payload, actor)
+    except LookupError:
+        raise HTTPException(404, "文档不存在") from None
+    except ReferenceForbidden:
+        raise HTTPException(403, "无权复核此知识范围") from None
+    except DocumentConflict:
+        raise HTTPException(409, "状态、内容或复核范围不匹配，请重新核对") from None
+    return {"document": document}
+
+
+class QualityRecheck(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+@router.post("/documents/{document_id}/quality-recheck", status_code=202)
+def recheck_document_quality(document_id: str, payload: QualityRecheck, actor=Depends(document_reviewer)):
+    try:
+        document = postgres_engine().recheck_quality(valid_uuid(document_id), payload.expected_sha256, actor)
+    except LookupError:
+        raise HTTPException(404, "文档不存在") from None
+    except ReferenceForbidden:
+        raise HTTPException(403, "无权重检此知识范围") from None
+    except DocumentConflict:
+        raise HTTPException(409, "文档版本或重检状态不匹配") from None
+    return {"document": document}
 
 
 @router.post("/documents/{document_id}/withdraw")

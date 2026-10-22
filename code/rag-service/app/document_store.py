@@ -143,6 +143,38 @@ class DocumentStore:
             rows = connection.execute(select(self.table).order_by(self.table.c.created_at.desc())).mappings().all()
         return [self.public(dict(row)) for row in rows]
 
+    def review_quality(self, document_id, review, actor):
+        from .document_quality import POLICY_VERSION, assess_pages
+        with self.engine.begin() as connection:
+            connection.execute(select(func.set_config("lock_timeout", "5000", True)))
+            row = connection.execute(select(self.table).where(self.table.c.id == document_id).with_for_update()).mappings().first()
+            if not row:
+                raise LookupError("文档不存在")
+            actor.require(row["scope"], "reviewer")
+            report = assess_pages(row["pages"])
+            if row["state"] != "quality_review" or report["status"] != "quality_review":
+                raise DocumentConflict("文档不处于可复核状态")
+            if (review.expected_sha256 != row["sha256"] or review.expected_parsed_sha256 != report["parsed_sha256"]
+                or review.expected_report_sha256 != report["report_sha256"]
+                or report != row["provenance"].get("quality_report")):
+                raise DocumentConflict("文档或质量报告已变化，请重新核对")
+            if review.decision == "approve" and (review.reason != "source_compared"
+                or sorted(review.verified_units) != list(range(len(row["pages"])))):
+                raise DocumentConflict("必须逐单元核对原件后才能放行")
+            now = utc_now()
+            provenance = {**row["provenance"], "quality_review": {"reviewer": actor.subject, "decision": review.decision,
+                "reason": review.reason, "at": now.isoformat(), "report_sha256": report["report_sha256"]}}
+            if review.decision == "approve":
+                provenance["quality_approval"] = {"policy_version": POLICY_VERSION, "source_sha256": row["sha256"],
+                    "parsed_sha256": report["parsed_sha256"], "report_sha256": report["report_sha256"],
+                    "decision": "approve", "reviewer": actor.subject, "at": now.isoformat()}
+            stage = "quality_approved" if review.decision == "approve" else "quality_rejected"
+            connection.execute(update(self.table).where(self.table.c.id == document_id).values(
+                state="queued" if review.decision == "approve" else "failed", stage=stage, updated_at=now,
+                error=None if review.decision == "approve" else "解析质量复核未通过，请更正原件或解析后重试",
+                provenance=provenance, events=[*row["events"], {"stage": stage, "label": "解析质量复核已记录",
+                    "actor": actor.subject, "decision": review.decision, "at": now.isoformat()}]))
+
     def recover_interrupted(self):
         with self.engine.begin() as connection:
             connection.execute(update(self.table).where(self.table.c.state.in_(["queued", "processing"])).values(
@@ -152,7 +184,14 @@ class DocumentStore:
     def public(self, row):
         fields = ("id", "name", "scope", "sha256", "state", "stage", "size_bytes", "chunk_count", "error", "events", "provenance", "created_at", "updated_at")
         result = {key: row[key] for key in fields}
-        result["run"] = "DONE" if row["state"] == "ready" else "FAILED" if row["state"] in {"failed", "withdrawn"} else "RUNNING"
+        report = row["provenance"].get("quality_report")
+        if report:
+            from .document_quality import approval_matches
+            result["quality"] = {**report, "review_status": "approved" if approval_matches(row, report)
+                else "pending" if report["status"] == "quality_review" else "not_required"}
+        else:
+            result["quality"] = None
+        result["run"] = "DONE" if row["state"] == "ready" else "FAILED" if row["state"] in {"failed", "withdrawn", "quarantined", "quality_review"} else "RUNNING"
         result["page_count"] = len(row["pages"]) if row["pages"] and all(page["page"] is not None for page in row["pages"]) else None
         result["section_count"] = len(row["pages"])
         result["source_available"] = row["state"] != "withdrawn" and self.original_path(row["id"]).is_file()

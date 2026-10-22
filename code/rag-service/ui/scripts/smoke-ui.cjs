@@ -81,6 +81,9 @@ let browser;
   await page.getByRole('button', { name: '确认撤回', exact: true }).click();
   await page.getByText('synthetic-upload.txt：withdrawn / withdrawn', { exact: true }).waitFor();
   assert(await documentRow.getByRole('button', { name: '撤回资料', exact: true }).count() === 0, 'Withdrawn document still offers withdrawal');
+  await page.getByLabel('选择文件入库', { exact: true }).setInputFiles({ name: 'quality-synthetic.txt', mimeType: 'text/plain', buffer: Buffer.from('Synthetic quality fixture only') });
+  await page.getByText('quality-synthetic.txt：quality_review / quality_review', { exact: true }).waitFor();
+  await page.getByText('解析结果尚未核验，当前不能用于检索；请由获授权审核人逐页核对原件后处理。', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   const mobile = await context.newPage();
   await mobile.setViewportSize({ width: 390, height: 844 });
@@ -89,7 +92,7 @@ let browser;
   assert(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Mobile horizontal overflow');
   assert(errors.length === 0, 'Browser page errors: ' + errors.join('; '));
   await mobile.screenshot({ path: path.join(output, 'rag-ui-mobile-synthetic-contract.png'), fullPage: true });
-  console.log('PASS: built React + real FastAPI cookie/SSE; citations, parsed text, error/cancel, evidence-only mode, case gap, upload/poll/withdraw with confirmation, mobile layout. Synthetic dependencies; no model/DB/MCP calls.');
+  console.log('PASS: built React + real FastAPI cookie/SSE; citations, parsed text, error/cancel, evidence-only mode, case gap, upload/poll/withdraw, quality-review isolation message, mobile layout. Synthetic dependencies; no model/DB/MCP calls.');
 })().catch(error => { console.error(error.message); process.exitCode = 1; }).finally(async () => {
   if (browser) await browser.close();
   child.kill();

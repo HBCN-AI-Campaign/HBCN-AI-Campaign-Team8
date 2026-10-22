@@ -71,7 +71,8 @@ class FixtureEngine:
     def get(self, identifier):
         row = rows.get(identifier)
         if row and row["state"] == "queued":
-            row.update(state="ready", stage="done", chunk_count=1)
+            row.update(state="quality_review" if row.get("quality") else "ready",
+                       stage="quality_review" if row.get("quality") else "done", chunk_count=0 if row.get("quality") else 1)
         return row
 
     def retrieve(self, *, query, **kwargs):
@@ -96,6 +97,9 @@ class FixtureEngine:
     def submit(self, *, filename, scope, **kwargs):
         identifier = "33333333-3333-3333-3333-333333333333"
         rows[identifier] = {"id": identifier, "name": filename, "scope": scope, "state": "queued", "stage": "queued", "chunk_count": 0, "sha256": hashlib.sha256(b"synthetic").hexdigest()}
+        if filename.startswith("quality-"):
+            rows[identifier]["quality"] = {"status": "quality_review", "policy_version": "document-quality-v1", "unit_count": 2,
+                                          "review_reasons": ["ocr_requires_source_comparison"], "blockers": []}
         return rows[identifier], True
 
 

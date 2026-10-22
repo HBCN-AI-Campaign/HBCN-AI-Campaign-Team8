@@ -77,7 +77,9 @@ class ParsingTests(unittest.TestCase):
         with patch("app.parsing.OCRClient") as client:
             client.return_value.extract.return_value = {"text": "扫描原文", "error": None}
             pages = extract_pages("scan.pdf", buffer.getvalue())
-            self.assertEqual(pages[0], {"page": 1, "text": "扫描原文"})
+            self.assertEqual(pages[0]["page"], 1)
+            self.assertEqual(pages[0]["text"], "扫描原文")
+            self.assertEqual(pages[0]["extraction"]["method"], "ocr_unknown")
             self.assertTrue(client.return_value.extract.call_args.args[1].startswith(b"\x89PNG"))
 
     def test_xlsx_preserves_worksheet_not_fabricated_page(self):
@@ -221,6 +223,16 @@ class BackendContractTests(unittest.TestCase):
             response = self.client.post("/api/v1/ingestions", headers=self.headers, files={"file": ("rules.txt", b"rules")})
         self.assertEqual(response.status_code, 202)
         self.assertEqual(response.json()["document"]["state"], "queued")
+
+    def test_readiness_reports_legacy_quality_backlog_as_degraded(self):
+        engine = Mock()
+        engine.readiness.return_value = {"unverified_ready_documents": 2, "quality_policy_version": "document-quality-v1"}
+        with patch("app.backend_api.postgres_engine", return_value=engine), patch("app.backend_api.SDKRuntime") as runtime:
+            runtime.return_value.health.return_value = True
+            response = self.client.get("/api/v1/ready", headers=self.headers)
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["status"], "degraded")
+        self.assertEqual(response.json()["unverified_ready_documents"], 2)
 
     def test_empty_unsupported_and_oversized_files_are_rejected(self):
         for filename, content, status in [("old.doc", b"test", 415), ("empty.txt", b"", 422), ("big.txt", b"x" * 20, 413)]:

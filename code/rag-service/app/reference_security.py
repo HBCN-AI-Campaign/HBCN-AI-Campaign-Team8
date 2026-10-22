@@ -69,19 +69,24 @@ class PrincipalRegistry(ReferenceModel):
 def require_reference_principal(x_reference_key: str | None = Header(default=None)):
     if not settings.RAG_REFERENCES_ENABLED:
         raise HTTPException(404, "参考库接口未开放")
-    if not x_reference_key or not 32 <= len(x_reference_key) <= 256:
-        raise HTTPException(401, "参考库凭证无效")
+    return resolve_principal(x_reference_key, settings.RAG_REFERENCE_PRINCIPALS_FILE)
+
+
+def resolve_principal(key, registry_file):
+    """Shared credential validation, with independently configured registries."""
+    if not key or not 32 <= len(key) <= 256:
+        raise HTTPException(401, "治理主体凭证无效")
     try:
-        path = Path(settings.RAG_REFERENCE_PRINCIPALS_FILE)
-        if not settings.RAG_REFERENCE_PRINCIPALS_FILE or path.stat().st_size > 256_000:
+        path = Path(registry_file)
+        if not registry_file or path.stat().st_size > 256_000:
             raise ValueError("invalid registry")
         registry = PrincipalRegistry.model_validate_json(path.read_bytes())
     except Exception:
-        raise HTTPException(503, "参考库主体注册表未就绪") from None
-    digest = hashlib.sha256(x_reference_key.encode()).hexdigest()
+        raise HTTPException(503, "治理主体注册表未就绪") from None
+    digest = hashlib.sha256(key.encode()).hexdigest()
     for entry in registry.principals:
         if hmac.compare_digest(digest, entry.key_sha256):
             if entry.valid_until <= datetime.now(timezone.utc):
-                raise HTTPException(401, "参考库凭证无效")
+                raise HTTPException(401, "治理主体凭证无效")
             return ReferencePrincipal(entry.subject, frozenset(entry.namespaces), frozenset(entry.roles))
-    raise HTTPException(401, "参考库凭证无效")
+    raise HTTPException(401, "治理主体凭证无效")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import hashlib
 import re
 import threading
 import uuid
@@ -12,16 +13,17 @@ from langchain_core.embeddings import Embeddings
 from langchain_postgres import Column, PGEngine, PGVectorStore
 from langchain_postgres.v2.indexes import HNSWIndex
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from sqlalchemy import MetaData, Table, inspect, select, text, update, func
+from sqlalchemy import MetaData, Table, and_, or_, inspect, select, text, update, func
 from sqlalchemy.dialects.postgresql.base import ischema_names
 from pgvector.sqlalchemy import Vector
 
 from .config import settings
 from .database import ResourceError, database_url
-from .document_store import DocumentStore, DocumentWithdrawn, utc_now
+from .document_store import DocumentConflict, DocumentStore, DocumentWithdrawn, utc_now
 from .embedding import EmbeddingClient, EmbeddingError
 from .parsing import ParseError, extract_pages
 from .lexical_index import TOKENIZER_VERSION, index_chunk, lexical_table, pending_chunks, query_expression
+from .document_quality import POLICY_VERSION, approval_matches, assess_pages
 from .retrieval_fusion import fuse_channels
 
 
@@ -40,6 +42,17 @@ class BailianEmbeddings(Embeddings):
 
     def embed_query(self, text):
         return self.embed_documents([text])[0]
+
+
+def quality_predicate(documents):
+    report, approval = documents.c.provenance["quality_report"], documents.c.provenance["quality_approval"]
+    return and_(report["policy_version"].astext == POLICY_VERSION,
+        or_(report["status"].astext == "mechanically_checked", and_(
+            report["status"].astext == "quality_review", approval["decision"].astext == "approve",
+            approval["policy_version"].astext == POLICY_VERSION,
+            approval["source_sha256"].astext == documents.c.sha256,
+            approval["parsed_sha256"].astext == report["parsed_sha256"].astext,
+            approval["report_sha256"].astext == report["report_sha256"].astext)))
 
 
 class PostgresEngine:
@@ -129,16 +142,30 @@ class PostgresEngine:
             row = self.documents.get(document_id)
             self.vectors.delete(filter={"document_id": document_id})
             self.documents.set_stage(document_id, "parsing", "正在提取原文", state="processing", error=None)
-            pages = extract_pages(row["name"], self.documents.original_path(document_id).read_bytes())
-            self.documents.set_stage(document_id, "splitting", "正在切分可引用片段", pages=pages)
+            original = self.documents.original_path(document_id).read_bytes()
+            if hashlib.sha256(original).hexdigest() != row["sha256"]:
+                raise ParseError("原件内容与登记摘要不一致，请核对文件存储")
+            pages = row["pages"] if row["provenance"].get("quality_approval") else extract_pages(row["name"], original)
+            report = assess_pages(pages)
+            provenance = {**row["provenance"], "quality_report": report}
+            if report["status"] == "quarantined":
+                self.documents.set_stage(document_id, "quarantined", "解析结果含无效字符，禁止进入检索", state="quarantined",
+                    pages=[], provenance=provenance)
+                return
+            if report["status"] == "quality_review" and not approval_matches(row, report):
+                self.documents.set_stage(document_id, "quality_review", "OCR 或解析结果待逐单元原文复核", state="quality_review",
+                    pages=pages, provenance={key: value for key, value in provenance.items() if key != "quality_approval"})
+                return
+            self.documents.set_stage(document_id, "splitting", "正在切分可引用片段", pages=pages, provenance=provenance)
             splitter = RecursiveCharacterTextSplitter(
                 chunk_size=settings.CHUNK_SIZE, chunk_overlap=settings.CHUNK_OVERLAP,
                 add_start_index=True, separators=["\n\n", "\n", "。", "；", " ", ""],
             )
             inputs = [Document(page_content=page["text"], metadata={
+                **{key: value for key, value in row["provenance"].items() if key not in {"quality_report", "quality_approval", "quality_review"}},
                 "document_id": document_id, "scope": row["scope"], "filename": row["name"],
                 "embedding_model": settings.EMBEDDING_MODEL, "searchable": False,
-                "page": page["page"], "section": page.get("section"), **row["provenance"],
+                "page": page["page"], "section": page.get("section"),
             }) for page in pages if page["text"].strip()]
             chunks = splitter.split_documents(inputs)
             if not chunks:
@@ -176,6 +203,20 @@ class PostgresEngine:
         row = self.documents.withdraw(document_id, self.chunks, expected_sha256=expected_sha256, reason=reason)
         return self.documents.public(row)
 
+    def review_quality(self, document_id, review, actor):
+        if not self.slots.acquire(blocking=False):
+            raise ResourceError("处理队列已满，请稍后重试")
+        try:
+            self.documents.review_quality(document_id, review, actor)
+            if review.decision == "approve":
+                self.executor.submit(self._job, document_id)
+            else:
+                self.slots.release()
+        except Exception:
+            self.slots.release()
+            raise
+        return self.documents.public(self.documents.get(document_id))
+
     def current_evidence(self, items):
         """Recheck cached multi-round evidence before publication.
 
@@ -199,8 +240,31 @@ class PostgresEngine:
                 valid = {(row.document_id, str(row.langchain_id)) for row in connection.execute(
                     select(self.chunks.c.document_id, self.chunks.c.langchain_id).join(d, d.c.id == self.chunks.c.document_id).where(
                         self.chunks.c.langchain_id.in_(keys), self.chunks.c.searchable.is_(True),
-                        self.chunks.c.embedding_model == settings.EMBEDDING_MODEL, d.c.state == "ready"))}
+                        self.chunks.c.embedding_model == settings.EMBEDDING_MODEL, d.c.state == "ready", quality_predicate(d)))}
         return [item for index, item in enumerate(items) if index in external or (item.get("document_id"), item.get("chunk_id")) in valid]
+
+    def recheck_quality(self, document_id, expected_sha256, actor):
+        if not self.slots.acquire(blocking=False):
+            raise ResourceError("处理队列已满，请稍后重试")
+        try:
+            with self.documents.engine.begin() as connection:
+                row = connection.execute(select(self.documents.table).where(self.documents.table.c.id == document_id).with_for_update()).mappings().first()
+                if not row:
+                    raise LookupError("文档不存在")
+                actor.require(row["scope"], "reviewer")
+                if row["sha256"] != expected_sha256 or row["state"] not in {"ready", "failed", "quarantined", "quality_review"}:
+                    raise DocumentConflict("文档版本或重检状态不匹配")
+                connection.execute(update(self.chunks).where(self.chunks.c.document_id == document_id).values(searchable=False))
+                connection.execute(update(self.documents.table).where(self.documents.table.c.id == document_id).values(
+                    state="queued", stage="quality_recheck", error=None, updated_at=utc_now(),
+                    provenance={key: value for key, value in row["provenance"].items() if key != "quality_approval"},
+                    events=[*row["events"], {"stage": "quality_recheck", "label": "授权审核人要求重新解析与检查",
+                        "actor": actor.subject, "at": utc_now().isoformat()}]))
+            self.executor.submit(self._job, document_id)
+        except Exception:
+            self.slots.release()
+            raise
+        return self.documents.public(self.documents.get(document_id))
 
     def upload(self, *, scope, filename, content, content_type="application/octet-stream"):
         row, created = self.documents.create(filename, scope, content, content_type)
@@ -294,12 +358,16 @@ class PostgresEngine:
             connection.execute(text("SELECT 1"))
             version = connection.execute(text("SELECT extversion FROM pg_extension WHERE extname='vector'")).scalar_one()
             dimension = connection.execute(text("SELECT format_type(atttypid, atttypmod) FROM pg_attribute WHERE attrelid = CAST(:table_name AS regclass) AND attname='embedding'"), {"table_name": f"{settings.RAG_DATABASE_SCHEMA}.{settings.RAG_VECTOR_TABLE}"}).scalar_one()
+            d = self.documents.table
+            unverified = connection.execute(select(func.count()).select_from(d).where(d.c.state == "ready",
+                d.c.embedding_model == settings.EMBEDDING_MODEL, func.coalesce(quality_predicate(d), False).is_(False))).scalar_one()
         if dimension != f"vector({settings.EMBEDDING_DIMENSIONS})":
             raise ResourceError("现有向量表与模型维度不同，请配置独立的新向量表并重新索引")
         if settings.RAG_SEARCH_MODE == "hybrid":
             self._require_lexical_ready()
         return {"database": "ok", "pgvector": version, "embedding_column": dimension,
                 "search_mode": settings.RAG_SEARCH_MODE,
+                "quality_policy_version": POLICY_VERSION, "unverified_ready_documents": unverified,
                 "lexical_tokenizer": TOKENIZER_VERSION if settings.RAG_SEARCH_MODE == "hybrid" else None}
 
 

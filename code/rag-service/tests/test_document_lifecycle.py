@@ -60,6 +60,11 @@ class DocumentLifecyclePostgresTests(unittest.TestCase):
         return self.store.create("synthetic.txt", "business_rules", "金额有误须核对原始指令。".encode(), "text/plain")[0]
 
     def add_chunk(self, document_id, *, searchable=True, content="金额有误须核对原始指令。"):
+        from app.document_quality import assess_pages
+        pages = [{"page": None, "text": content, "extraction": {"method": "text_decode"}}]
+        row = self.store.get(document_id)
+        self.store.set_stage(document_id, row["stage"], "synthetic mechanical check",
+            pages=pages, provenance={**row["provenance"], "quality_report": assess_pages(pages)})
         key = uuid.uuid4()
         metadata = {"filename": "synthetic.txt", "scope": "business_rules"}
         with self.engine.begin() as connection:

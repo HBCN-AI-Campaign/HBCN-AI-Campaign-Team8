@@ -106,8 +106,9 @@ function Library({ capabilities }: { capabilities: Capabilities }) {
         accept={capabilities.supported_file_extensions.join(',')} onChange={event => { const file = event.target.files?.[0]; if (file) void submit(file); event.target.value = '' }} /></label>
       <Button onClick={() => void refresh()}>刷新文档状态</Button></Space>
     {error && <Alert type="error" message={error} />}
-    {active && <Alert type={active.state === 'failed' ? 'error' : 'info'} message={`${active.name}：${active.state} / ${active.stage || ''}`} description={active.error || '仅 ready 的文档可用于检索；关闭面板不会撤销已提交的入库任务。'} />}
+    {active && <Alert type={['failed', 'quarantined'].includes(active.state || '') ? 'error' : active.state === 'quality_review' ? 'warning' : 'info'} message={`${active.name}：${active.state} / ${active.stage || ''}`} description={active.error || (active.state === 'quality_review' ? '解析结果尚未核验，当前不能用于检索；请由获授权审核人逐页核对原件后处理。' : '仅 ready 的文档可用于检索；关闭面板不会撤销已提交的入库任务。')} />}
     <div className="document-list">{documents.map(doc => <article key={doc.id}><b>{doc.name}</b><p>{doc.scope} · {doc.state === 'withdrawn' ? '已撤回' : doc.state || doc.run || '状态未知'} · {doc.chunk_count ?? '未知'} 个片段</p>
+      {doc.quality && <p>解析检查：{doc.quality.review_status === 'approved' ? '本版解析原文复核已记录' : doc.quality.status === 'mechanically_checked' ? '基础字符检查完成，仍需核对完整性' : doc.quality.status === 'quarantined' ? '解析已隔离，不参与检索' : '解析待原文复核'} · {doc.quality.unit_count} 个解析单元；不代表 OCR 准确率或业务审批。</p>}
       {doc.sha256 && doc.state !== 'withdrawn' && <Popconfirm title="确认撤回这份资料？" description="停止检索和原文访问，保留存档；恢复使用需要重新复核版本。" okText="确认撤回" cancelText="取消" onConfirm={() => withdraw(doc)}>
         <Button danger disabled={busy}>撤回资料</Button></Popconfirm>}
     </article>)}</div>

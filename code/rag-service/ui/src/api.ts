@@ -32,6 +32,7 @@ export interface KnowledgeDocument {
   sha256?: string
   chunk_count?: number; run?: string
   source_available?: boolean
+  quality?: { status: string; policy_version: string; blockers: string[]; review_reasons: string[]; unit_count: number; review_status?: string } | null
 }
 export interface DocumentContent { document: KnowledgeDocument; pages: { page: number | null; text: string }[] }
 
