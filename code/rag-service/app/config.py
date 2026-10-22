@@ -66,6 +66,8 @@ class Settings(BaseSettings):
     RAG_REFERENCES_ENABLED: bool = False
     RAG_REFERENCE_PRINCIPALS_FILE: str = ""
     RAG_DOCUMENT_REVIEW_PRINCIPALS_FILE: str = ""
+    # Opt-in trusted local operator bridge. Never sent to the browser.
+    RAG_UI_DOCUMENT_REVIEW_KEY: SecretStr = SecretStr("")
     RAG_WEB_CONTEXT_ENABLED: bool = False
     RAG_WEB_CONTEXT_PRINCIPALS_FILE: str = ""
     RAG_WEB_CONTEXT_ALLOWED_HOSTS: str = ""

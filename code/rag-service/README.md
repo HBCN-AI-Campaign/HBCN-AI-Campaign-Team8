@@ -1,266 +1,33 @@
-# RAG 模块总览与运行说明
+# RAG 模块｜架构、优化规划与运行
 
-协作交付入口：服务 `0.5.0` / HTTP 契约 `1.3.0`，代码以 **lfc** 为准。首次接入看 [接入指南](INTEGRATION.md)，本轮结果看 [2026-10-22 验收记录](ACCEPTANCE-2026-10-22.md)。其他模块只调用 [接口契约](API_CONTRACT.md) 与 [OpenAPI](contracts/openapi-v1.json)，无需依赖 RAG 内部类、表或模型；云端部署同事使用 [部署交接](deploy/README.md)。现有 `/query` 保持兼容，新增消费者优先对接 `/retrievals` 原文证据接口；内部优化独立发布，云端可提供模型/API/存储资源，不因现有 ECS 配置降低质量目标。
-
-模块边界：RAG 管理检索、证据与独立问答；主站助手和专项 Agent 负责各自最终输出。调用方按接口消费原文证据和缺口，主站负责最终用户/任务授权。模块可独立部署与更新，真实云端接线及完整业务验收仍须分别取证。
-
-独立的境外贷款知识查询模块。2026-10-22 已在本机通过真实 PostgreSQL/pgvector、Embedding 与 OpenCode SDK 协议 2 的 HTTP 链路验收，包括增强检索、引用回答和撤回。**本机验收不代表已经部署到汇丰服务器，也不代表主站助手已完成端到端联调。** 历史后端明细见 [`docs/RAG后端验收与运行.md`](../../docs/RAG后端验收与运行.md)，最新可复现结果以本轮验收记录为准。
-
-## 一页现状
-
-规划入口：[优化规划 v3](../../docs/Agentic-RAG优化规划.md) 与 [执行台账](../../docs/RAG持续优化执行台账.md)。当前优先交付可运行模块及接入文档，不启动无止境优化；R01–R21 各项以实际证据为准。北大法宝只读适配有历史真实烟测，当前验收服务未启用；专用重排契约已接入但模型未部署。下文保留历史实现范围，当前运行事实以本轮验收记录为准。
-
-| 项目 | 当前事实 |
-| --- | --- |
-| 代码位置 | `code/rag-service/`，独立 FastAPI 服务；不并入主站后端进程 |
-| 已验收服务 | 本机 `127.0.0.1:8012`；本轮临时启动的8011旧库检查实例因缺质量报告返回 degraded，检查后已停止 |
-| 检索存储 | 汇丰 PostgreSQL 的隔离 `hbcn_rag_release_v050` schema，pgvector 1024 维 `chunks_v1`、HNSW；旧 `hbcn_rag` 保留 |
-| 已接能力 | 百炼 Embedding、OpenCode SDK、文件解析/切片、相关性核对与有限重检索、带引用回答、原文定位 |
-| 验收证据 | RAG 回归 202 项：189 通过、13 跳过；另跑真实 PG 混合检索测试 3 项通过；真实 HTTP 链路 16 项通过；UI 17 项和生产构建通过 |
-| 尚未完成 | 综合业务增强检索有模型核对未完成的实测失败；另有汇丰服务器 RAG 常驻部署、主站真实 UI/权限联调、真实业务金标质量验收、法规原件复核、专用重排与当前 MCP 联合验收 |
-| 原件位置 | 本轮为本机 `data/release-v050/originals/`；与新 schema 一致迁移/备份；旧 `data/originals/` 保留 |
-
-本轮源码增量：首次结构化问题规划、原始事实查询保留、中英互补表达、查询族归一 RRF、空召回恢复、跨轮候选保留、查询/轮次/时间预算与停止原因；新增 `/api/v1/retrievals` 仅返回原文证据。测试和 2 个真实模型规划冒烟见执行台账，第二轮新增可切换的中文词法/向量混合及显式回填，实际 PostgreSQL 隔离合成测试通过，见 [第二轮验证](../../docs/RAG优化第二轮验证记录.md)。第三轮新增法宝与知识库多源归并、显式来源选择和专用重排契约，见 [第三轮验证](../../docs/RAG优化第三轮验证记录.md)；尚未宣告正式语料检索质量、真实重排模型、完整法规服务、UI 或共享部署验收完成。第四轮增加可追溯长文窗口、按字节分批与联合覆盖核对，真实 SDK 已取回长文末尾限制；具体局限见第四轮记录。第十七轮主站适配接入 `/retrievals` 原文证据和检索充分性状态，保留旧 `/query` 兼容；第十九轮传入最近 12 条 user/assistant 会话背景；第二十轮增加带用户原文来源索引的事实槽位和未知/歧义输出；第二十一轮补充金额/币种单值边界与服务端 unknown 补全。真实模型、正式语料及主站/云端联合验收仍待完成。
-
-第十三轮补齐普通知识文档逻辑撤回：HTTP/React 确认、hash 绑定、事务关闭向量/词法可见性、原文拒读、在途入库发布屏障，以及跨轮候选和答复返回前复核。原件保留，未实现物理删除、跨系统缓存通知或案例依赖统一传播；详见[第十三轮验证](../../docs/RAG优化第十三轮验证记录.md)。
-
-第十四轮增加解析质量报告、隔离/待复核、独立凭证逐单元原文审核与旧库授权重检；**旧 ready 缺本版报告默认排除**，升级需迁移窗口。见[质量契约](../../docs/RAG文档质量门禁契约.md)和[第十四轮验证](../../docs/RAG优化第十四轮验证记录.md)。这不是 OCR 准确率或法规业务质量验收。
-
-第十五轮增加默认关闭的网页上下文适配：独立授权的调用方提交实际文本快照，与知识库/法宝候选共同重排和核对；不代抓任意 URL，不把网页自动升格为法规依据。见[接入契约](../../docs/RAG网页上下文接入契约.md)及[第十五轮验证](../../docs/RAG优化第十五轮验证记录.md)，真实浏览器采集和主站授权接线尚未完成。
-
-## 当前 RAG 架构
-
-详细展开见 [RAG专属架构图与实测缺口](ARCHITECTURE.md)：包括上传、OCR、质量门禁、人工批准、Embedding、Agentic检索与回答。**当前OCR一律待复核，后台机制已有，但页面批准入口和审核身份未配置，真实操作尚未闭环。** 该状态在Embedding之前，不是没有OCR能力。
-
-![RAG当前模块详细架构](docs/diagrams/rag-module-current.png)
-
-[放大SVG](docs/diagrams/rag-module-current.svg) · [入库/质量拦截详细图](docs/diagrams/rag-ingestion-quality.svg)。以下保留可选来源和依赖关系的补充图，当前启用/实测状态以专属图和验收记录为准。
-
-第八轮 React 工作台已接同源真实问答 SSE、增强检索、原文与文档入库状态，使用 Ant Design X 成熟组件；移除固定答复/来源/假页数。浏览器→实际 FastAPI 传输验收采用合成依赖，不等于模型/数据库/MCP 完整业务验收。契约兼容标记、构建/鉴权与复现见 [UI 说明](ui/README.md)。未重启共享后端，旧进程不具备本轮接口时 UI 会提示版本不匹配。
-
-第九轮补充请求取消：HTTP 断开可通知图工作线程，阻止后续调用并取消在途模型、Embedding、rerank 和 MCP 异步操作；并发名额在实际线程退出后释放。浏览器与合成依赖清理已验证，阻塞数据库不会强制杀线程，真实 SDK 会话和外部服务实际停止尚待验收；见[第九轮记录](../../docs/RAG优化第九轮验证记录.md)。
-
-第十轮增加离线排名质量评测 CLI 与严格数据契约，支持案件组隔离、六组 holdout 数量校验、Recall@20/nDCG@10 和配对置信区间。目录中没有真实审核题或金标；评测契约不等于质量门槛通过。详情见[评测契约](../../docs/RAG评测集与排名评估契约.md)和[第十轮记录](../../docs/RAG优化第十轮验证记录.md)。
-
-第十一轮增加现有 PostgreSQL/RRF/专用重排的排名采集 CLI，固定审核查询表达并共用一次候选池，报告按案件组重采样；真实金标、不可变索引与实际模型收益仍待验收，见[第十一轮记录](../../docs/RAG优化第十一轮验证记录.md)。
-
-第十二轮增加默认关闭的独立案例/经验治理：不可变版本、分离复核、精确范围/政策过滤、PostgreSQL 词法检索、来源撤销传播、到期清理及读取审计。实际隔离 PG/并发/HTTP 路由机制已验；真实案例、主站用户/任务 ACL、Agent 接线和相关性质量仍未完成，见[治理契约](../../docs/RAG案例与经验治理契约.md)及[第十二轮记录](../../docs/RAG优化第十二轮验证记录.md)。本轮同步冻结独立模块接口并提供 Linux/systemd/Dockerfile；无 Docker/云端实测，部署不视为完成。
-
-第七轮新增用途与法规条件门禁：一般参考不等于本案核验；显式本案判断需要业务日期、辖区、主体、业务类型与原文/版本绑定的服务端复核记录。缺口阻断结论生成但保留参考片段。配置、返回状态与未完成边界见 [法规复核契约](../../docs/RAG法规复核台账契约.md)；默认未配置真实复核文件，尚未完成法规业务验收。
-
-此图说明独立后端结构；问答图节点标签已按本轮源码增量更新，新增行为的验证边界见台账。主站适配层代码已存在，但 ECS 上的服务地址、Token 和端到端调用仍须按部署方案验证。
+> 当前代码协作基线：lfc。模块独立部署，其他 AI / 业务模块通过 HTTP 调用，内部更新不要求调用方修改索引实现。
 
 ```mermaid
 flowchart LR
-  Caller[已授权的后端调用方<br/>AI 模块调用增强证据接口] -->|Bearer · HTTP| API[FastAPI RAG 服务<br/>本轮本机 127.0.0.1:8012]
-  API --> QUALITY[版本化解析质量门禁<br/>乱码隔离 / OCR及结构不确定待复核]
-  QUALITY --> QREVIEW[独立 reviewer 凭证 / 逐单元对照原件<br/>原件、解析、报告三 hash 绑定]
-  QREVIEW --> DOC
-  QUALITY --> QREADY[基础检查或本版复核后才可索引<br/>旧库缺报告默认排除 / 授权重检]
-  QREADY --> VEC
-  API --> WITHDRAW[文档撤回事务<br/>版本 hash / 片段停止检索 / 原文拒读]
-  WITHDRAW --> DOC
-  WITHDRAW --> VEC
-  WITHDRAW -.阻止在途发布.-> GRAPH
-  GRAPH --> RECHECK[候选与结果返回前复核<br/>本库质量 / 网页授权、时效与正文绑定<br/>失效依据移除 / 隐藏原答复]
-  API --> DOC[(PostgreSQL 独立 schema<br/>本轮 hbcn_rag_release_v050)]
-  API --> VEC[(pgvector<br/>chunks_v1 · 1024维 · HNSW)]
-  API --> FILES[(持久化原件目录<br/>data/originals)]
-  CURATOR[受控治理主体<br/>独立凭证 / 范围 / 期限] --> REFAPI[独立参考治理接口<br/>默认关闭 / 作者与复核分离]
-  API --> REFAPI
-  REFAPI --> REFDB[(PostgreSQL 独立参考表<br/>案例 / 经验 / 依赖 / 审计)]
-  REFDB --> REFLIMIT[仅历史参考与计划建议<br/>尚未接入问答图 / 主站任务 ACL]
-  API -->|切片向量化| EMB[汇丰百炼 Embedding]
-  API --> CTRL[请求断开检测与工作线程<br/>连接清理 / 退出后释放名额]
-  CTRL --> GRAPH[LangGraph<br/>问题规划与用户事实槽位 / 多查询 / 覆盖检查 / 有限重检索]
-  GRAPH --> VEC
-  GRAPH -.配置 hybrid 且回填后启用.-> LEX[(PostgreSQL FTS + GIN<br/>版本化中文分词 / 同范围过滤)]
-  VEC --> FUSION[源内通道 RRF + 查询族归并]
-  LEX --> FUSION
-  GRAPH -.显式来源选择 + 服务端启用.-> MCP[官方 MCP SDK<br/>法宝只读契约与预算]
-  MCP --> LAW[北大法宝法规服务]
-  FUSION --> POOL[跨源 RRF / 来源状态 / 缺口]
-  MCP --> POOL
-  API -.显式快照 / 默认关闭.-> WEBAUTH[独立 reader 凭证 / 精确 scope<br/>域名、时效与处理授权]
-  WEBAUTH --> WEB[请求内网页原文快照<br/>URL、采集时间和 hash / 真实性未核实]
-  POOL --> MIX[有序结果与无序上下文共同候选<br/>网页不制造 RRF 排名]
-  WEB --> MIX
-  MIX -.已接接口，模型尚未部署.-> RANK[专用重排契约]
-  RANK --> CONTEXT[可追溯原文窗口<br/>UTF-16与字节预算 / 分批及联合覆盖]
-  CONTEXT --> LEGAL[用途与法规适用性门禁<br/>本案结构化条件 / 服务端复核台账 / 原文版本绑定]
-  LEGAL --> GRAPH
-  GRAPH -->|结构化生成及逐段原文支持复核| RT[OpenCode SDK runtime<br/>本机 8090]
-  GRAPH -->|增强检索跳过答复生成| EV[原文证据 / 充分性 / 缺口 / 停止原因]
-  EV --> CONSUMER[主站校验响应并保留缺口、澄清与来源状态<br/>主站生成最终辅助答复 / 充分不等于审批通过]
-  EVAL[检索排名采集与重排对照 CLI<br/>同候选池 / 案件组配对区间<br/>真实金标题集尚未建立] -.复用检索与重排适配器.-> GRAPH
-  RT --> LLM[汇丰百炼 LLM]
-  UI[React + Ant Design X 工作台<br/>源码已接真实接口 / 合成依赖浏览器契约验证] -->|同源 Cookie / SSE 与 JSON| API
+  DOC[共享知识资料] --> ING[解析 / OCR / 质量处理与原文复核]
+  ING --> DB[切片 / Embedding / 词法与向量索引]
+  AI[AI 模块 / 专项 Agent] --> API[HTTP 增强证据接口]
+  API --> AG[Agentic RAG<br/>改写 / 召回 / 归并 / 重排 / 覆盖 / 有限补查]
+  DB --> AG
+  AG --> E[可追溯原文 / 缺口 / 来源状态]
+  E --> AI
 ```
 
-### 主站增强证据接线（源码已实现）
+## 阅读入口
 
-第十七/十八轮接线只检索共享知识库，任务资料仍在主站授权上下文；新增 v1 响应校验、具体缺口/澄清状态传递和可见执行提示。下图说明实际代码路径，不证明模型遵循率、原文链接可用率或云端已验收。可编辑[图源](../../docs/diagrams/rag-assistant-evidence.mmd)与[可缩放图](../../docs/diagrams/rendered/rag-assistant-evidence.svg)。
+| 看什么 | 唯一维护入口 |
+|---|---|
+| 先看图理解模块 | [RAG模块架构](RAG模块架构.md)：总图、入库、Agentic、部署边界与源码入口 |
+| 怎么改、怎么测、如何验收 | [RAG模块优化规划](RAG模块优化规划.md)：实现方案、场景S01–S14、循环与完成标准 |
+| 本轮实际结果 | [RAG模块流程验收报告](RAG模块流程验收报告.md)；前次真实链路见[2026-10-22记录](ACCEPTANCE-2026-10-22.md) |
+| 其他同事调用 | [接入指南](INTEGRATION.md)、[HTTP契约](API_CONTRACT.md)、[OpenAPI](contracts/openapi-v1.json) |
+| 部署与维护 | [部署交接](deploy/README.md)、[工作台构建](ui/README.md) |
 
-![主站增强证据接线](../../docs/diagrams/rendered/rag-assistant-evidence.png)
+## 当前边界
 
-## 优化后的目标架构（执行中，逐项验收）
+本机8012已有真实PG/Embedding/模型的基础链路记录，**尚不等于汇丰服务器已部署或主站已完成联合验收**。当前实例使用vector模式；hybrid、可选法宝、多源与专用重排的机制和启用/质量验收分别记录。复杂流贷/固贷题已有模型覆盖核对失败，仍需复验。
 
-本节是按 [优化规划 v3](../../docs/Agentic-RAG优化规划.md) 维护的完整目标，不替换上文当前实现。目标中的多源、独立重排、历史案例等仍未完成；按执行台账逐项实现和验收。图源：[总体架构](../../docs/diagrams/rag-target-architecture.mmd)、[检索闭环](../../docs/diagrams/rag-target-retrieval.mmd)。
-
-[北大法宝接入交接说明](../../docs/PKULaw-MCP接入说明.md) 已记录 9 个地址的 initialize 和其中法规语义服务的查询验证；规划优先复用已发现的 `search_article` / `get_article`，其余工具逐项核对后开放。交接历史保留；第三轮已实现官方 SDK 客户端并实际调用 search_article 和联合证据链路，get_article 的补正文机制有契约回归但尚未真实调用；不代表其余八个服务已接入。
-
-### 总体架构：多源检索、联合重排、案例与记忆
-
-图像预览：[PNG](../../docs/diagrams/rendered/rag-target-architecture.png) / [SVG 放大版](../../docs/diagrams/rendered/rag-target-architecture.svg)。
-
-```mermaid
-flowchart TB
-  UI["React 工作台 / 主站助手 / 审核调用方<br/>明确用途与业务条件 / 按消息绑定引用"] --> API["服务入口：用户与任务授权、请求预算、追踪 ID"]
-  API --> PLAN["LangGraph 查询与行动计划<br/>意图 / 可追溯用户事实槽位 / 未知与歧义 / 澄清 / 多语言查询"]
-  subgraph SOURCES["授权来源：按需并行"]
-    KB["内部规则与本地法规<br/>词法 + pgvector"]
-    LAW["北大法宝来源适配<br/>MCP SDK / 只读白名单<br/>优先 search_article 与 get_article"]
-    WEB["授权网页上下文<br/>实际内容 / URL / 获取时间"]
-    CASES["历史案例库<br/>已复核 / 脱敏 / 可比性过滤"]
-    FACT["业务事实查询<br/>只读结构化适配 / 确定性金额校验"]
-  end
-  PLAN --> KB
-  PLAN --> LAW
-  PLAN --> WEB
-  PLAN --> CASES
-  PLAN --> FACT
-  KB --> NORM
-  LAW --> NORM
-  WEB --> NORM
-  CASES --> NORM
-  FACT -->|"类型化事实与记录定位"| EVID
-  NORM["文本候选标准化与来源内归并<br/>ID / 版本 / 权限 / 原文定位 / 分数类型"] --> POOL["跨源候选池<br/>去重 / RRF 基线 / 来源配额 / 摘要补全文"]
-  POOL --> RANK["多语言 rerank<br/>按原始问题与子问题排序原文片段"]
-  RANK --> EVID["证据池与选择<br/>规范依据 / 当前事实 / 历史参考分组<br/>覆盖度 / 时效 / 适用性 / 冲突检查"]
-  EVID --> CONTEXT["可追溯原文窗口与上下文预算<br/>按字节分批 / 保留例外冲突 / 联合覆盖核对"]
-  CONTEXT --> LEGAL["用途与法规适用性门禁<br/>业务日期 / 辖区 / 主体 / 业务类型<br/>原文与版本绑定的服务端复核 / 撤销检查"]
-  LEGAL --> CHECK{"证据是否充分"}
-  CHECK -->|"明确缺口且有预算"| PLAN
-  CHECK -->|"充分"| DRAFT["结构化结论 + 原文短引<br/>服务端渲染引用 / 局限单列"]
-  DRAFT --> ANSWER["逐段原文支持核验<br/>精确短引锚点 / 编号与完整映射<br/>未通过则隐藏答复"]
-  CHECK -->|"增强检索调用"| EOUT["仅返回原文证据 R17<br/>充分性 / 缺口 / 来源 / 停止原因<br/>用户陈述摘录 / 未知槽位"]
-  CHECK -->|"不充分或停止条件满足"| STOP["说明缺口 / 澄清 / 转人工"]
-  MEM["经审批的经验记忆<br/>命名空间 / 版本 / 撤销与期限"] -. "只提供检索与处理建议" .-> PLAN
-  RT["既有 OpenCode SDK / 汇丰 LLM<br/>受控调用，不自行开放全部 MCP 工具"] -. "推理与生成" .-> PLAN
-  RT -. "生成与核验" .-> ANSWER
-  GOV["贯穿全链路：权限 / 取消与资源清理 / 语料版本 / 删除传播 / 审计 / 评测 / 费用与延迟"] -.-> API
-  GOV -.-> EVID
-  classDef primary fill:#e8f1ff,stroke:#4779ae,color:#143456
-  classDef evidence fill:#eaf5ef,stroke:#4b8564,color:#214932
-  classDef source fill:#f5f3ec,stroke:#9a8859,color:#473f29
-  classDef control fill:#f2edf7,stroke:#8c70a4,color:#513963
-  class UI,API,PLAN,DRAFT,ANSWER,EOUT primary
-  class NORM,POOL,RANK,EVID,CONTEXT evidence
-  class KB,LAW,WEB,CASES,FACT source
-  class MEM,RT,GOV,LEGAL,CHECK,STOP control
-```
-
-### 多路归并与 Agentic RAG 流程
-
-图像预览：[PNG](../../docs/diagrams/rendered/rag-target-retrieval.png) / [SVG 放大版](../../docs/diagrams/rendered/rag-target-retrieval.svg)。
-
-```mermaid
-flowchart TD
-  Q["原始问题 + 授权上下文"] --> I["意图与槽位校验<br/>保留数字、币种、时间、主体"]
-  I --> C{"需要澄清吗"}
-  C -->|"是"| ASK["请求补充"]
-  C -->|"否"| P["查询族与来源计划<br/>简单直查 / 多源 / 多跳"]
-  P --> PAR["有界并行召回<br/>每源独立超时、分页预算与失败状态<br/>断开取消 / 在途清理 / 实际退出后释放名额"]
-  PAR --> F["来源内融合<br/>词法 + 向量 + 多语言 / 查询族去偏"]
-  F --> N["统一候选去重<br/>法规 ID + 版本 + 条款 / 内容指纹"]
-  N --> T["补取入围摘要的原文与适用元数据<br/>全文不可取则标为线索"]
-  T --> R["跨源 rerank<br/>相关性排序 + 子问题覆盖"]
-  R --> E["合并跨轮证据池<br/>保留来源、反例与冲突"]
-  E --> W["可追溯原文窗口<br/>UTF-16 / 请求字节预算 / 分批原文核对"]
-  W --> J["联合覆盖检查<br/>保留反例 / 例外 / 缺口；未读部分显式标记"]
-  J --> L["法规适用性门禁<br/>参考查询与本案判断分开<br/>时点 / 辖区 / 主体 / 业务 / 原文版本 / 复核撤销"]
-  L --> A{"充分性与适用性判定"}
-  A -->|"增强检索入口"| RET["返回已有原文证据与缺口<br/>不生成最终业务答复"]
-  A -->|"有新方向且预算允许"| GAP["记录缺失子问题<br/>改写 / 换源 / 获取必要全文"]
-  GAP --> P
-  A -->|"足够"| D["结构化业务结论与原文短引<br/>严格 schema / 不附加来源说明"]
-  D --> G["服务端生成引用编号<br/>局限和来源状态单独展示"]
-  G --> V{"逐段模型支持判断 + 精确短引校验<br/>引用完整映射与原文定位通过吗"}
-  V -->|"是"| O["回答 + 来源 + 局限 + 原文入口"]
-  V -->|"否"| B["局部修订或限定结论<br/>预算耗尽则明确证据不足"]
-  A -->|"无新增证据 / 超时 / 预算耗尽"| B
-```
-
-关键设计：先按来源做混合召回与去偏归并，再按可比原文做跨源 rerank；摘要没有取得全文时仅作线索。证据池分清现行规范、本案事实和历史参考，检查时点、辖区与冲突后，Agent 决定补查、回答或说明不足。精确业务数据走只读结构化工具与确定性金额校验。
-
-历史文件采用“复核案例库＋经审批的经验记忆”：案例供相似问题参考，记忆供流程/查询建议；旧案放行不能变成现行规则。详见规划的历史案例治理图。北大法宝由服务端 MCP 客户端发现真实工具并固定只读白名单，按 schema 做搜索/原文/效力能力映射；详情见规划的接入时序图与 M1–M8。
-
-| 规划范围 | 对应需求 | 实施出口 |
-| --- | --- | --- |
-| 查询与检索底座 | R01–R04、R06 | 事实保真、多语言混合召回与重排质量对照 |
-| 多源与受控闭环 | R05、R07–R08、R13、R15 | MCP 契约、证据覆盖/适用性、只读事实与预算控制 |
-| 案例、文档与记忆 | R09、R11–R12 | 真实 UI、权限、版本/时效、复核及撤销传播 |
-| 验收与条件实验 | R10、R14、R16 | 独立题集、T01–T16、资源成本、灰度回滚；高级方法按收益启用 |
-
-图中阶段都不能以“代码有接口”认定验收完成；按优化规划持续提供单元/契约/端到端测试及真实质量报告，缺少条件的部分如实记录。
-
-## 入库时序
-
-```mermaid
-sequenceDiagram
-  autonumber
-  actor Caller as 授权调用方
-  participant API as RAG FastAPI
-  participant Disk as 原件目录
-  participant DB as PostgreSQL documents
-  participant Parser as 解析与切片
-  participant Emb as 百炼 Embedding
-  participant PGV as pgvector chunks_v1
-  Caller->>API: POST /api/v1/ingestions（Bearer）
-  API->>Disk: 保存原始文件
-  API->>DB: 建立 queued / received 文档记录
-  API-->>Caller: 202 + document_id + status_url
-  API->>Parser: 提取页面/工作表并切片
-  Parser->>DB: 更新 parsing / splitting 阶段与原文位置
-  API->>Emb: 为片段生成 1024 维向量
-  Emb-->>API: 向量
-  API->>PGV: 保存片段、元数据和向量
-  API->>DB: 全部成功后标记 ready / searchable
-  Caller->>API: GET /api/v1/documents/{id}
-  API-->>Caller: 状态、处理事件与片段数
-```
-
-## 当前数据关系
-
-```mermaid
-erDiagram
-  DOCUMENTS ||--o{ CHUNKS_V1 : indexes
-  DOCUMENTS {
-    uuid id PK
-    string name
-    string scope
-    string sha256
-    string embedding_model
-    string state
-    string stage
-    int chunk_count
-    jsonb pages
-    jsonb provenance
-    jsonb events
-  }
-  CHUNKS_V1 {
-    uuid langchain_id PK
-    string document_id FK
-    string scope
-    string embedding_model
-    boolean searchable
-    text content
-    vector embedding
-    jsonb langchain_metadata
-  }
-```
-
-`DOCUMENTS.events/pages/provenance` 是文档记录中的 JSONB 字段，不是单独的事件表；原始文件存于文件系统，不是 PostgreSQL 大对象。`document_id` 是片段回到文档的逻辑关联。RAG 原件目录和数据库都要备份，不能只备份 pgvector。
+你上传的政策问答已真实OCR到3页，停在quality_review，尚未Embedding。本轮补受控操作员原文对照与批准/拒绝/重检页面；是否可用以本轮报告和实际部署配置为准，不自动批准真实文件。历史R01–R21材料是机制和决策证据，入口为[历史规划](../../docs/Agentic-RAG优化规划.md)与[历史台账](../../docs/RAG持续优化执行台账.md)，不作为新的独立实施基线。
 
 ## 技术选择
 
@@ -282,7 +49,7 @@ Copy-Item .env.example .env
 .\scripts\start-backend.ps1 -Port 8011
 ```
 
-以上是通用启动方式，需先配置实际可达的数据库、Embedding、协议 2 runtime 与 Token；模板中的本机 8090 不保证有运行时。启动脚本后台隐藏运行，检测端口冲突，不杀已有进程；日志/PID 在忽略目录 `data/`。停止用 `scripts/stop-backend.ps1 -Port <实际端口>`。本轮 8012 已由本机临时隧道启动，原件目录和 schema 见上表；不要同时再启动一个共享该 schema 的 worker。
+以上是通用启动方式，需先配置实际可达的数据库、Embedding、协议 2 runtime 与 Token；模板中的本机 8090 不保证有运行时。启动脚本后台隐藏运行，检测端口冲突，不杀已有进程；日志/PID 在忽略目录 `data/`。停止用 `scripts/stop-backend.ps1 -Port <实际端口>`。本轮8012使用本机临时隧道、隔离验收schema与原件目录；当前状态看[流程报告](RAG模块流程验收报告.md)，不要同时再启动一个共享该schema的worker。
 
 | 配置 | 含义 |
 | --- | --- |

@@ -11,6 +11,8 @@ import sys
 import time
 import asyncio
 import hashlib
+import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -18,8 +20,23 @@ os.environ.update(RAG_ENGINE="ragflow", RAGFLOW_BASE_URL="", RAGFLOW_API_KEY="",
                   PKULAW_MCP_ENABLED="false", RAG_RERANK_PROVIDER="disabled", RAG_LEGAL_REVIEW_FILE="")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import uvicorn
+from pydantic import SecretStr
 from app import main, backend_api, answer_graph
 from app.request_control import run_async
+from app.document_quality import assess_pages
+from app.document_store import DocumentConflict
+
+review_folder = tempfile.TemporaryDirectory()
+review_key = secrets.token_urlsafe(48)
+registry = Path(review_folder.name) / 'principals.json'
+registry.write_text(json.dumps({'principals': [{'subject': 'synthetic-browser-operator', 'key_sha256': hashlib.sha256(review_key.encode()).hexdigest(),
+    'namespaces': ['business_rules'], 'roles': ['reviewer'], 'valid_until': (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()}]}))
+main.settings.RAG_DOCUMENT_REVIEW_PRINCIPALS_FILE = str(registry)
+main.settings.RAG_UI_DOCUMENT_REVIEW_KEY = SecretStr(review_key)
+original = Path(review_folder.name) / 'synthetic-original.txt'
+original.write_text('金额 5000 USD 不得更改。\n请核对日期。', encoding='utf-8')
+PAGES = [{'page': 1, 'text': '金额 5000 USD 不得更改。', 'extraction': {'method': 'vision_ocr'}},
+         {'page': 2, 'text': '请核对日期。', 'extraction': {'method': 'vision_ocr'}}]
 
 cancel_state = {"started": 0, "closed": 0, "active": 0}
 
@@ -66,13 +83,36 @@ class FixtureRuntime:
 class FixtureEngine:
     def __init__(self):
         self.documents = SimpleNamespace(recover_interrupted=lambda: None, list=lambda: list(rows.values()), get=self.get,
-                                         public=lambda row: row)
+                                         public=lambda row: row, original_path=lambda identifier: original)
 
     def get(self, identifier):
         row = rows.get(identifier)
         if row and row["state"] == "queued":
-            row.update(state="quality_review" if row.get("quality") else "ready",
-                       stage="quality_review" if row.get("quality") else "done", chunk_count=0 if row.get("quality") else 1)
+            pending = row.get('quality') and row['quality'].get('review_status') != 'approved'
+            row.update(state="quality_review" if pending else "ready",
+                       stage="quality_review" if pending else "done", chunk_count=0 if pending else 1)
+        return row
+
+    def review_quality(self, identifier, payload, actor):
+        row = rows[identifier]
+        actor.require(row['scope'], 'reviewer')
+        report = row['quality']
+        if row['state'] != 'quality_review' or payload.expected_sha256 != row['sha256'] or payload.expected_parsed_sha256 != report['parsed_sha256'] or payload.expected_report_sha256 != report['report_sha256']:
+            raise DocumentConflict('synthetic stale version')
+        if payload.decision == 'approve':
+            if payload.verified_units != [0, 1] or payload.reason != 'source_compared':
+                raise DocumentConflict('synthetic incomplete comparison')
+            row.update(state='queued', stage='quality_approved', quality={**report, 'review_status': 'approved'})
+        else:
+            row.update(state='failed', stage='quality_rejected')
+        return row
+
+    def recheck_quality(self, identifier, expected_sha256, actor):
+        row = rows[identifier]
+        actor.require(row['scope'], 'reviewer')
+        if expected_sha256 != row['sha256'] or row['state'] == 'withdrawn':
+            raise DocumentConflict('synthetic stale version')
+        row.update(state='queued', stage='quality_recheck', quality=assess_pages(PAGES))
         return row
 
     def retrieve(self, *, query, **kwargs):
@@ -98,8 +138,7 @@ class FixtureEngine:
         identifier = "33333333-3333-3333-3333-333333333333"
         rows[identifier] = {"id": identifier, "name": filename, "scope": scope, "state": "queued", "stage": "queued", "chunk_count": 0, "sha256": hashlib.sha256(b"synthetic").hexdigest()}
         if filename.startswith("quality-"):
-            rows[identifier]["quality"] = {"status": "quality_review", "policy_version": "document-quality-v1", "unit_count": 2,
-                                          "review_reasons": ["ocr_requires_source_comparison"], "blockers": []}
+            rows[identifier].update(quality=assess_pages(PAGES), pages=PAGES, source_available=True)
         return rows[identifier], True
 
 

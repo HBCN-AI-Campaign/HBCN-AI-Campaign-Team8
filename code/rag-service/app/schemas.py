@@ -43,6 +43,8 @@ class Capabilities(BaseModel):
     enhanced_retrieval: bool = False
     dedicated_reranking: bool = False
     web_context: bool = False
+    document_quality_review_scopes: list[str] = Field(default_factory=list)
+    document_quality_review_subject: str | None = None
     supported_scopes: list[str]
     max_upload_bytes: int = 50 * 1024 * 1024
     upload_timeout_seconds: int = 900

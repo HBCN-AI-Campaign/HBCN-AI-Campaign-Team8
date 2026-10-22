@@ -314,8 +314,17 @@ def build_answer_graph(engine, runtime=None, *, generate_answer=True, law_source
             reason = "source_withdrawn"
         step("generate", "组织检索证据与来源" if not generate_answer else "基于引用证据生成回答", "running")
         answer = clarification or "当前知识库没有足够证据回答这个问题。请补充相关资料或业务信息，不能据此给出确定性审核结论。"
+        if not clarification and reason in {"assessment_unavailable", "invalid_assessment", "time_budget", "evidence_budget"}:
+            answer = {
+                "assessment_unavailable": "本轮模型未完成原文覆盖核对，暂时无法确认依据是否充分。请稍后重试；这不表示知识库没有相关资料。",
+                "invalid_assessment": "本轮模型返回的依据核对结果格式异常，未能完成验证。请稍后重试，当前不据此生成业务或法律结论。",
+                "time_budget": "本轮检索或核对达到时间上限，尚未完成。请缩小问题范围或稍后重试，不能据此判断知识库没有相关资料。",
+                "evidence_budget": "检索到的完整依据超过本次输出数量上限。请拆分问题或扩大 top_k 后重试，当前不生成未完整核对的结论。",
+            }[reason]
         if not evidence and not clarification:
-            warnings.append("证据不足，未生成业务或法律结论")
+            warnings.append("本轮验证未完成，未生成业务或法律结论" if reason in {
+                "assessment_unavailable", "invalid_assessment", "time_budget", "evidence_budget"}
+                else "证据不足，未生成业务或法律结论")
         if evidence:
             if generate_answer and state["sufficient"]:
                 if time.monotonic() >= state["deadline"]:

@@ -1,10 +1,10 @@
-# 汇丰云服务器部署交接：独立 RAG 0.5.0
+# 汇丰云服务器部署交接：独立 RAG 0.5.1
 
 这是供同事部署/联调的模块版本，不表示已经迁移到汇丰 ECS 或通过完整业务质量验收。模块只通过 HTTP 与主站、模型 runtime、Embedding、reranker、法宝连接；调用方接口见 [API_CONTRACT.md](../API_CONTRACT.md)，不需要随内部模型或数据库实现改代码。
 
 ## 获取协作分支版本
 
-RAG 协作版本以远端 `lfc` 为准；之前进入 `main` 的 RAG 改动已经撤回，**不要从 main 部署本版本**。源码版本 0.5.0，本轮接线修复与测试记录见 [验收记录](../ACCEPTANCE-2026-10-22.md)。部署时固定审核过的 lfc commit，避免直接覆盖同事正在修改的工作区；交接范围为 `code/rag-service` 及对应 RAG 文档，不包含个人凭证、已建索引或真实资料。
+RAG 协作版本以审核过的 `lfc` commit为准，**不要从 main 部署本版本**。当前源码版本0.5.1；本轮工作区是否已提交/推送以[流程验收报告](../RAG模块流程验收报告.md)为准，不把文件已修改当成GitHub已更新。部署时固定审核过的lfc commit，避免覆盖同事工作区；交接范围为`code/rag-service`及对应RAG文档，不包含个人凭证、已建索引或真实资料。
 
 ```bash
 git fetch origin lfc
@@ -60,10 +60,10 @@ cd ..
 模块根目录提供多阶段 Dockerfile：构建 React UI，安装锁定的 Python 直接依赖，以非 root 运行。只复制应用、脚本、接口快照和公开目录说明，排除 .env、data、业务原件和 node_modules。镜像中不内置模型、账号、数据库、个人文件或真实知识库；这些由外部服务和受控存储提供。
 
 ```bash
-docker build -t hbcn-rag:0.5.0 .
+docker build -t hbcn-rag:0.5.1 .
 docker volume create hbcn-rag-data
 docker run --name hbcn-rag --env-file /etc/hbcn-rag/rag.env \
-  -p 127.0.0.1:8011:8011 -v hbcn-rag-data:/var/lib/hbcn-rag hbcn-rag:0.5.0
+  -p 127.0.0.1:8011:8011 -v hbcn-rag-data:/var/lib/hbcn-rag hbcn-rag:0.5.1
 ```
 
 部署方确保数据卷 UID/GID 10001 可写；覆盖 RAG_DATA_DIR 时同步挂载。示例不指定 CPU/内存限额；资源按目标质量与实测容量配置。HEALTHCHECK 仅查存活，发布仍要查就绪和真实提问。当前 Windows 开发机无 Docker，**本轮没有验证 Linux 镜像构建和云端运行**；Dockerfile/原生模板均需部署同事在目标环境验证，不能把模板存在视为部署成功。
@@ -88,6 +88,20 @@ docker run --name hbcn-rag --env-file /etc/hbcn-rag/rag.env \
 部署前按[质量契约](../../../docs/RAG文档质量门禁契约.md)在隔离副本清点与预演；缺本版质量报告的旧 ready 默认排除，ready 将报告未验证数量并 503。2026-10-22 旧 `hbcn_rag` 保留 10 份缺报告的旧 ready（另 1 failed）；本机已将其中 4 份业务、2 份法规原件按相同 SHA256 重新提交到独立的 `hbcn_rag_release_v050` 与 `data/release-v050`。这是本机验收副本，不是服务器共享服务的发布。OCR/结构不确定资料仍须独立 reviewer 对照原件复核，不能批量盖合格章；最新结果见验收记录。
 
 新增 RAG_DOCUMENT_REVIEW_PRINCIPALS_FILE 默认为空；部署同事配置受控注册表、精确业务 scope、reviewer 角色、有效期与高熵独立凭证。只把 key SHA256 存服务端文件，原 key 仅给受控审核方，禁止前端持有。HTTP 复核工具不导入内部类，默认读取而非审批。没有新增数据库列；报告保存在已有 JSONB。重检可能产生 OCR/Embedding 费用，仍按单实例进程内队列运行，多实例持久队列/租约尚未完成。
+
+## 0.5.1 本机解析复核入口
+
+仅在可信本机操作员场景启用；此配置不能替代服务器上的个人登录、主站角色和任务权限。默认未配置时，页面说明缺少复核授权；文件不会因刷新而自动通过。
+
+```bash
+python scripts/provision-local-reviewer.py --subject local-rag-operator --scope law --scope business_rules --scope project_design --days 7
+# 先将下列两个文件的读取权限限制到服务账号，再启动本机服务。
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8012 --env-file data/local-review.env
+```
+
+脚本生成被 Git 忽略的 `data/local-review.env` 和 `data/local-review-principals.json`，不打印 key、不覆盖已有配置。Linux 创建时使用受限 umask；Windows 部署者须设置这两个文件的服务账号 ACL。有效期最多7天，过期必须按授权重新配置；撤销时移除注册表中的主体即立即拒绝后续动作。环境文件只由服务端加载，不复制到浏览器、不提交仓库。基础数据库/模型配置继续由原环境提供。
+
+工作台打开“资料入库→查看解析与复核”，对照原件逐页/单元确认后显式批准，或选择原因拒绝。批准返回202表示已排队，必须继续等到 ready 才完成 Embedding 和索引发布；重检可能产生新 OCR 费用。接口仍检查角色、范围、有效期和原件/解析/报告三个摘要。测试证据及未通过项见[流程验收报告](../RAG模块流程验收报告.md)。
 
 回滚必须同时保留质量和撤回门禁；0.3.x 忽略质量报告，不能无条件回滚后开放读取。使用兼容修复版或停读、恢复经批准的一致快照并复验，不能重新公开已撤回/待核验资料。Docker/Linux/云端实际运行、备份恢复及负载验收仍由部署环境取证，不因本机构建成功标记完成。
 

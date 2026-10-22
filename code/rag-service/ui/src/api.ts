@@ -8,6 +8,7 @@ export interface Capabilities {
   engine: string; retrieval: boolean; answer_generation: boolean; enhanced_retrieval: boolean
   external_law_mcp: boolean; document_ingestion: boolean; supported_scopes: string[]
   max_upload_bytes: number; supported_file_extensions: string[]
+  document_quality_review_scopes?: string[]; document_quality_review_subject?: string | null
 }
 export interface Evidence {
   citation: number; content: string; document_id: string; document_name: string
@@ -32,14 +33,19 @@ export interface KnowledgeDocument {
   sha256?: string
   chunk_count?: number; run?: string
   source_available?: boolean
-  quality?: { status: string; policy_version: string; blockers: string[]; review_reasons: string[]; unit_count: number; review_status?: string } | null
+  quality?: { status: string; policy_version: string; blockers: string[]; review_reasons: string[]; unit_count: number; review_status?: string
+    parsed_sha256?: string; report_sha256?: string
+    units?: { index: number; page: number | null; method: string; review_reasons: string[] }[] } | null
 }
 export interface DocumentContent { document: KnowledgeDocument; pages: { page: number | null; text: string }[] }
+export interface QualityContent extends DocumentContent { pages: { page: number | null; text: string; section?: string; extraction?: { method?: string } }[] }
 
 async function checkedResponse(url: string, init?: RequestInit) {
   const response = await fetch(url, { credentials: 'same-origin', ...init })
   if (!response.ok) {
     if (response.status === 401) throw new Error('会话无效，请重新打开本机 /ui/ 页面。')
+    if (response.status === 403) throw new Error('当前操作员没有此知识范围的复核权限。')
+    if (response.status === 409) throw new Error('文档状态或版本已变化，请刷新并重新核对；本次操作未自动重试。')
     if (response.status === 422) throw new Error('请求条件不完整或格式有误，请检查日期、范围和输入长度。')
     // Do not render upstream error bodies, credentials, exception traces or HTML.
     throw new Error(`服务请求未完成（${response.status}），请检查服务状态后重试。`)
@@ -138,3 +144,23 @@ export function uploadDocument(file: File, scope: Exclude<Scope, 'all'>, signal?
   return json<{ document: KnowledgeDocument; created: boolean }>('/api/v1/ingestions', { method: 'POST', body: form, signal })
 }
 export function errorMessage(error: unknown) { return error instanceof Error ? error.message : '本轮未完成，请重试。' }
+
+export async function getQuality(id: string, signal?: AbortSignal) {
+  if (!originalPath(id)) throw new Error('文档编号无效。')
+  const data = await json<QualityContent>(`/api/v1/documents/${id}/quality`, { signal })
+  if (data?.document?.id !== id || !Array.isArray(data.pages) || !data.pages.every(page => typeof page?.text === 'string'
+    && (page.page === null || (Number.isInteger(page.page) && page.page! > 0)))) throw new Error('复核原文格式或文档归属异常。')
+  return data
+}
+export function reviewQuality(document: KnowledgeDocument, verified: number[], decision: 'approve' | 'reject', reason: string, signal?: AbortSignal) {
+  if (!originalPath(document.id) || ![document.sha256, document.quality?.parsed_sha256, document.quality?.report_sha256]
+    .every(value => /^[0-9a-f]{64}$/.test(value || ''))) throw new Error('复核版本摘要不完整，请刷新后重试。')
+  return json<{ document: KnowledgeDocument }>(`/api/v1/documents/${document.id}/quality-review`, post({
+    expected_sha256: document.sha256, expected_parsed_sha256: document.quality!.parsed_sha256,
+    expected_report_sha256: document.quality!.report_sha256, decision, reason, verified_units: verified,
+  }, signal))
+}
+export function recheckQuality(document: KnowledgeDocument, signal?: AbortSignal) {
+  if (!originalPath(document.id) || !/^[0-9a-f]{64}$/.test(document.sha256 || '')) throw new Error('原件版本无效。')
+  return json<{ document: KnowledgeDocument }>(`/api/v1/documents/${document.id}/quality-recheck`, post({ expected_sha256: document.sha256 }, signal))
+}

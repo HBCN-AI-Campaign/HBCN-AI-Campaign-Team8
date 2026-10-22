@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { answer, externalLink, getCapabilities, getContent, originalPath, readerPath, retrieve } from '../src/api'
+import { answer, externalLink, getCapabilities, getContent, originalPath, readerPath, retrieve, reviewQuality } from '../src/api'
 import type { Request } from '../src/api'
 
 const id = '11111111-1111-1111-1111-111111111111'
@@ -14,6 +14,17 @@ function stream(text: string) {
   } }), { headers: { 'Content-Type': 'text/event-stream; charset=utf-8' } })
 }
 describe('real request contracts', () => {
+  it('binds review decisions to source, parsed and report versions without browser credentials', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ document: { id } })))
+    vi.stubGlobal('fetch', fetcher)
+    const document = { id, name: '合成.pdf', scope: 'law' as const, sha256: 'a'.repeat(64), quality: { status: 'quality_review', policy_version: 'v1', blockers: [], review_reasons: [], unit_count: 2, parsed_sha256: 'b'.repeat(64), report_sha256: 'c'.repeat(64) } }
+    await reviewQuality(document, [0, 1], 'approve', 'source_compared')
+    const [url, init] = fetcher.mock.calls[0]
+    expect(url).toBe(`/api/v1/documents/${id}/quality-review`)
+    expect(init.credentials).toBe('same-origin')
+    expect(init.headers['X-Document-Review-Key']).toBeUndefined()
+    expect(JSON.parse(init.body)).toEqual({ expected_sha256: 'a'.repeat(64), expected_parsed_sha256: 'b'.repeat(64), expected_report_sha256: 'c'.repeat(64), verified_units: [0, 1], decision: 'approve', reason: 'source_compared' })
+  })
   it('uses cookie authentication and forwards request context without browser credentials', async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(result)))
     vi.stubGlobal('fetch', fetcher)

@@ -65,7 +65,8 @@ def extract_pages(filename: str, content: bytes) -> list[dict]:
                     rendered_page.close()
                 result = OCRClient().extract(f"page-{index + 1}.png", buffer.getvalue())
                 if result["error"]:
-                    raise ParseError("扫描页识别失败，请确认 OCR 或视觉模型可用")
+                    # OCRClient returns only fixed, safe diagnostics, never provider bodies.
+                    raise ParseError(f"第 {index + 1} 页扫描识别失败：{result['error']}")
                 text = result["text"].strip()
                 method = result.get("method", "ocr_unknown")
             total += len(text)

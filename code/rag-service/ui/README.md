@@ -45,7 +45,7 @@ $env:HBCN_UI_BROWSER='你的 Chromium/Edge 可执行文件'
 node scripts/smoke-ui.cjs
 ```
 
-Python 默认按平台使用 `../.venv/Scripts/python.exe` 或 `../.venv/bin/python`，也可设置 `HBCN_UI_PYTHON`。脚本只结束自己创建的进程；截图以 synthetic-contract 命名，不能用其证明真实检索质量。完整真实模型/索引/MCP/UI 联调与远端取消验收、可访问性、首屏加载及并发指标继续按 [总规划](../../../docs/Agentic-RAG优化规划.md)验收。
+Python 默认按平台使用 `../.venv/Scripts/python.exe` 或 `../.venv/bin/python`，也可设置 `HBCN_UI_PYTHON`。脚本只结束自己创建的进程；截图以 synthetic-contract 命名，不能用其证明真实检索质量。完整真实模型/索引/MCP/UI 联调与远端取消验收、可访问性、首屏加载及并发指标继续按 [模块优化规划](../RAG模块优化规划.md)验收。
 
 ## v0.3.1 文档撤回
 
@@ -53,7 +53,7 @@ Python 默认按平台使用 `../.venv/Scripts/python.exe` 或 `../.venv/bin/pyt
 
 ## 解析质量状态（0.4.0）
 
-资料入库显示 quality_review/quarantined，待原文复核或隔离资料不能用于检索。机械检查通过只说明基础字符检查，界面不显示 OCR 准确率或完整性已合格；本版审核后显示复核记录。审批仅在受控后端独立凭证流程执行，工作台没有审批 key 或自动放行按钮。真实浏览器合成依赖烟测覆盖待复核提示，不代表 OCR 实际识别正确。旧 ready 缺质量记录的升级要求见[质量契约](../../../docs/RAG文档质量门禁契约.md)。
+资料入库显示quality_review/quarantined，待复核或隔离资料不能检索。0.5.1已补“查看解析与复核”：打开原件、查看具体页和风险、逐单元确认、显式批准/拒绝和重检。需部署者显式配置服务端本机操作员，沿用实时注册表授权；没有授权时显示配置说明。浏览器不持有复核key，不自动放行；批准202后继续轮询，ready才表示Embedding和索引发布完成。机械检查和人工解析复核均不代表OCR准确率、法规适用性或业务审批。真实浏览器合成依赖烟测覆盖确认/批准/重检/拒绝，实际依赖结果见[流程报告](../RAG模块流程验收报告.md)。旧库迁移见[质量契约](../../../docs/RAG文档质量门禁契约.md)。
 
 ## 网页来源展示（0.5.0）
 

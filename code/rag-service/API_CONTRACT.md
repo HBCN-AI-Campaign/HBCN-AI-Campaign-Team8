@@ -1,6 +1,6 @@
 # RAG 独立模块接口 v1
 
-服务版本 `0.5.0`，HTTP 契约版本 `1.3.0`。首次接入先看 [接入指南](INTEGRATION.md) 和 [2026-10-22 实测记录](ACCEPTANCE-2026-10-22.md)。调用方只依赖本文和 [OpenAPI 快照](contracts/openapi-v1.json)，不导入 `app/`、不查 RAG 表、不读取模型凭证。部署方法见 [deploy/README.md](deploy/README.md)；完整现状与优化范围见 [README](README.md)。
+服务版本 `0.5.1`，HTTP 契约版本 `1.3.1`。首次接入先看 [接入指南](INTEGRATION.md) 和 [2026-10-22 实测记录](ACCEPTANCE-2026-10-22.md)。调用方只依赖本文和 [OpenAPI 快照](contracts/openapi-v1.json)，不导入 `app/`、不查 RAG 表、不读取模型凭证。部署方法见 [deploy/README.md](deploy/README.md)；完整现状与优化范围见 [README](README.md)。
 
 ## 接线约定
 
@@ -9,6 +9,8 @@
 `GET /health` 检查进程并返回 service_version/api_contract_version；不能据此认为数据库、模型或知识已就绪。`GET /api/v1/capabilities` 查询当前能力开关；`GET /api/v1/ready` 检查数据库/向量列、旧库质量报告和模型 runtime 的鉴权就绪/协议 2，仍不能代替真实提问验收。响应头提供 `X-RAG-Service-Version`、`X-RAG-Contract-Version`，调用方接受 v1 主版本并容忍新增可选字段。
 
 v1 保持路径、已有字段含义/类型、scope 和鉴权约定。新增可选字段/能力可在 v1 内发布；删除、改名、收窄既有含义或改变授权语义需要新契约主版本及迁移。内部模型、检索引擎、多源路由、重排和云端/API 资源可以替换，但必须通过相同 HTTP 契约与质量门槛。OpenAPI 快照变化须评审兼容性；快照一致不等于已证明业务质量。
+
+1.3.1 增加可选能力字段 `document_quality_review_scopes`（默认空）与 `document_quality_review_subject`（默认null），仅描述当前受控本机会话显式配置的操作员。服务Bearer单独调用不会获得此权限。原有质量接口仍支持独立 `X-Document-Review-Key`；服务端可选本机桥接使用同一注册表、scope/role/有效期与撤销校验，不把复核key交给浏览器。远程/跨站/无本机会话不能使用桥接，云端不可把它作为真实用户授权方案。路径与原有请求/响应保持兼容；具体审批字段见[质量契约](../../docs/RAG文档质量门禁契约.md)。
 
 ## 两种检索入口
 

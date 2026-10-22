@@ -160,9 +160,20 @@ class DocumentWithdrawal(BaseModel):
     reason: Literal["superseded", "incorrect", "authorization_revoked", "quality_issue", "other"]
 
 
-def document_reviewer(x_document_review_key: str | None = Header(default=None)):
+def local_ui_reviewer(request: Request):
+    from .main import require_local_ui_session
+    require_local_ui_session(request)
     if not settings.RAG_DOCUMENT_REVIEW_PRINCIPALS_FILE:
         raise HTTPException(404, "文档质量复核接口未开放")
+    return resolve_principal(settings.RAG_UI_DOCUMENT_REVIEW_KEY.get_secret_value(),
+                             settings.RAG_DOCUMENT_REVIEW_PRINCIPALS_FILE)
+
+
+def document_reviewer(request: Request, x_document_review_key: str | None = Header(default=None)):
+    if not settings.RAG_DOCUMENT_REVIEW_PRINCIPALS_FILE:
+        raise HTTPException(404, "文档质量复核接口未开放")
+    if x_document_review_key is None and settings.RAG_UI_DOCUMENT_REVIEW_KEY.get_secret_value():
+        return local_ui_reviewer(request)
     return resolve_principal(x_document_review_key, settings.RAG_DOCUMENT_REVIEW_PRINCIPALS_FILE)
 
 

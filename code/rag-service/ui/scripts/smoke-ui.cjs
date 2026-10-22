@@ -25,6 +25,16 @@ let browser;
   browser = await chromium.launch({ headless: true, ...(process.env.HBCN_UI_BROWSER ? { executablePath: process.env.HBCN_UI_BROWSER } : {}) });
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await context.newPage();
+  async function waitForCancellation(check) {
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+      const response = await context.request.get(url + '/api/v1/fixture-cancellation');
+      assert(response.ok(), 'Cancellation fixture status unavailable');
+      if (check(await response.json())) return;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    throw new Error('Cancellation state did not reach the expected value');
+  }
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(url + '/ui/');
@@ -53,13 +63,10 @@ let browser;
   await ask('故障测试');
   await page.getByText('检索或生成服务未完成本轮请求，请稍后重试。', { exact: true }).waitFor();
   await ask('取消测试');
-  await page.waitForFunction(async () => (await (await fetch('/api/v1/fixture-cancellation')).json()).started === 1);
+  await waitForCancellation(status => status.started === 1);
   await page.getByRole('button', { name: '停止接收', exact: true }).click();
   await page.getByText('已停止接收。本轮未获得完整答复，服务端可能仍在处理。', { exact: true }).waitFor();
-  await page.waitForFunction(async () => {
-    const status = await (await fetch('/api/v1/fixture-cancellation')).json();
-    return status.closed === 1 && status.active === 0 && status.capacity_available;
-  }, null, { timeout: 5000 });
+  await waitForCancellation(status => status.closed === 1 && status.active === 0 && status.capacity_available);
   await page.getByRole('button', { name: '新会话', exact: true }).click();
   await page.locator('.query-controls').getByText('引用问答', { exact: true }).click();
   await page.getByTitle('增强检索（仅原文）').click();
@@ -84,7 +91,25 @@ let browser;
   await page.getByLabel('选择文件入库', { exact: true }).setInputFiles({ name: 'quality-synthetic.txt', mimeType: 'text/plain', buffer: Buffer.from('Synthetic quality fixture only') });
   await page.getByText('quality-synthetic.txt：quality_review / quality_review', { exact: true }).waitFor();
   await page.getByText('解析结果尚未核验，当前不能用于检索；请由获授权审核人逐页核对原件后处理。', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  const qualityRow = page.locator('.document-list article').filter({ hasText: 'quality-synthetic.txt' });
+  await qualityRow.getByRole('button', { name: '查看解析与复核', exact: true }).click();
+  await page.getByText('金额 5000 USD 不得更改。', { exact: true }).waitFor();
+  assert(await page.getByRole('button', { name: '批准解析并继续入库', exact: true }).isDisabled(), 'Unchecked OCR was approvable');
+  await page.getByLabel('已对照原件核对单元 1', { exact: true }).check();
+  assert(await page.getByRole('button', { name: '批准解析并继续入库', exact: true }).isDisabled(), 'Partial OCR confirmation was approvable');
+  await page.getByLabel('已对照原件核对单元 2', { exact: true }).check();
+  await page.getByRole('button', { name: '批准解析并继续入库', exact: true }).click();
+  await page.getByRole('button', { name: '确认批准', exact: true }).click();
+  await page.getByText('quality-synthetic.txt：ready / done', { exact: true }).waitFor();
+  await qualityRow.getByRole('button', { name: '查看解析与复核', exact: true }).click();
+  await page.getByRole('button', { name: '重新解析并检查', exact: true }).click();
+  await page.getByRole('button', { name: '确认重新解析', exact: true }).click();
+  await page.getByText('quality-synthetic.txt：quality_review / quality_review', { exact: true }).waitFor();
+  await qualityRow.getByRole('button', { name: '查看解析与复核', exact: true }).click();
+  await page.getByRole('button', { name: '拒绝解析', exact: true }).click();
+  await page.getByRole('button', { name: '确认拒绝', exact: true }).click();
+  await page.getByText('quality-synthetic.txt：failed / quality_rejected', { exact: true }).waitFor();
+  await page.getByRole('dialog', { name: '资料入库与处理状态', exact: true }).getByRole('button', { name: 'Close', exact: true }).click();
   const mobile = await context.newPage();
   await mobile.setViewportSize({ width: 390, height: 844 });
   await mobile.goto(url + '/ui/');
@@ -92,7 +117,7 @@ let browser;
   assert(await mobile.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'Mobile horizontal overflow');
   assert(errors.length === 0, 'Browser page errors: ' + errors.join('; '));
   await mobile.screenshot({ path: path.join(output, 'rag-ui-mobile-synthetic-contract.png'), fullPage: true });
-  console.log('PASS: built React + real FastAPI cookie/SSE; citations, parsed text, error/cancel, evidence-only mode, case gap, upload/poll/withdraw, quality-review isolation message, mobile layout. Synthetic dependencies; no model/DB/MCP calls.');
+  console.log('PASS: built React + real FastAPI cookie/SSE; citations, parsed text, error/cancel, evidence-only mode, case gap, upload/poll/withdraw, OCR compare/partial blocking/approve/recheck/reject, mobile layout. Synthetic dependencies; no model/DB/MCP calls.');
 })().catch(error => { console.error(error.message); process.exitCode = 1; }).finally(async () => {
   if (browser) await browser.close();
   child.kill();

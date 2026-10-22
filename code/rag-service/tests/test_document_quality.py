@@ -46,12 +46,16 @@ class DocumentQualityTests(unittest.TestCase):
                 result = client._call_vision("test.png", b"synthetic", ".png")
             self.assertTrue(result["error"])
             self.assertEqual(result["text"], "")
+            if finish == "length":
+                self.assertIn("输出长度上限", result["error"])
         response.json.return_value = {"choices": [{"finish_reason": "stop", "message": {"content": "金额5000"}}]}
         with patch("app.ocr.httpx.post", return_value=response):
             self.assertEqual(client._call_vision("test.png", b"synthetic", ".png")["text"], "金额5000")
         response.status_code, response.text = 503, "SYNTHETIC-SECRET"
         with patch("app.ocr.httpx.post", return_value=response):
-            self.assertNotIn("SYNTHETIC-SECRET", str(client._call_vision("test.png", b"synthetic", ".png")))
+            result = client._call_vision("test.png", b"synthetic", ".png")
+            self.assertNotIn("SYNTHETIC-SECRET", str(result))
+            self.assertIn("503", result["error"])
 
     def test_docx_retains_table_position_and_flags_untranscribed_headers(self):
         document = Document()

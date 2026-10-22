@@ -258,6 +258,18 @@ class RetrievalGraphTests(unittest.TestCase):
             self.assertEqual(engine.retrieve.call_count, 1)
             self.assertEqual(result["grounding"], "insufficient")
             self.assertEqual(result["stop_reason"], "invalid_assessment")
+            self.assertIn("格式异常", result["answer"])
+            self.assertNotIn("知识库没有足够证据", result["answer"])
+
+    def test_model_assessment_failure_is_not_reported_as_absent_knowledge(self):
+        from app.runtime_client import RuntimeErrorResponse
+        engine, runtime = Mock(), Mock()
+        engine.retrieve.return_value = [evidence("A", "金额不一致须重新核对")]
+        runtime.complete.side_effect = [encoded_plan(), RuntimeErrorResponse("synthetic empty model response")]
+        result = build_answer_graph(engine, runtime).invoke(self.state())["result"]
+        self.assertEqual(result["stop_reason"], "assessment_unavailable")
+        self.assertIn("未完成原文覆盖核对", result["answer"])
+        self.assertNotIn("知识库没有足够证据回答", result["answer"])
 
     def test_claimed_sufficiency_with_a_missing_requirement_cannot_pass(self):
         engine, runtime = Mock(), Mock()

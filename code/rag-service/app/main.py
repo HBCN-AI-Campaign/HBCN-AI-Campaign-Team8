@@ -85,6 +85,21 @@ def _same_origin(request: Request) -> bool:
     return origin == f"{request.url.scheme}://{host}"
 
 
+def require_local_ui_session(request: Request) -> None:
+    """Additional guard for explicitly enabled local operator actions.
+
+    A service Bearer or proxy forwarding header is never sufficient. The local
+    workbench is an operator surface, not a production user identity provider.
+    """
+    host = request.client.host if request.client else ""
+    if (not _is_loopback(host)
+        or not _is_loopback(request.url.hostname or "")
+        or not _valid_ui_session(request.cookies.get(UI_SESSION_COOKIE))
+        or not _same_origin(request)
+        or request.headers.get("sec-fetch-site") == "cross-site"):
+        raise HTTPException(401, "需要有效的本机工作台会话")
+
+
 def require_service_token(
     request: Request,
     authorization: str | None = Header(default=None),
@@ -134,7 +149,7 @@ app.add_middleware(ContractIdentityMiddleware)
 
 
 @app.get("/api/v1/capabilities", response_model=Capabilities, dependencies=[Depends(require_service_token)])
-def capabilities():
+def capabilities(request: Request = None):
     kind = engine_kind()
     supported_extensions = ALLOWED_EXTENSIONS
     if kind == "postgres":
@@ -157,6 +172,16 @@ def capabilities():
     else:
         configured = False
         configured_scopes = []
+    review_scopes, review_subject = [], None
+    if request is not None and kind == "postgres" and settings.RAG_UI_DOCUMENT_REVIEW_KEY.get_secret_value():
+        from .backend_api import local_ui_reviewer
+        try:
+            actor = local_ui_reviewer(request)
+            if "reviewer" in actor.roles:
+                review_scopes = sorted(actor.namespaces & {"law", "business_rules", "project_design"})
+                review_subject = actor.subject
+        except HTTPException:
+            pass
     return Capabilities(
         workbench_contract_version=1 if kind == "postgres" else 0,
         engine=kind,
@@ -169,6 +194,8 @@ def capabilities():
         external_law_mcp=kind == "postgres" and settings.PKULAW_MCP_ENABLED and bool(settings.PKULAW_MCP_TOKEN.get_secret_value()),
         dedicated_reranking=kind == "postgres" and settings.RAG_RERANK_PROVIDER != "disabled" and bool(settings.RAG_RERANK_URL and settings.RAG_RERANK_MODEL),
         web_context=kind == "postgres" and settings.RAG_WEB_CONTEXT_ENABLED and bool(settings.RAG_WEB_CONTEXT_PRINCIPALS_FILE and settings.RAG_WEB_CONTEXT_ALLOWED_HOSTS),
+        document_quality_review_scopes=review_scopes,
+        document_quality_review_subject=review_subject,
         supported_scopes=configured_scopes,
         max_upload_bytes=settings.MAX_UPLOAD_BYTES,
         upload_timeout_seconds=settings.UPLOAD_TIMEOUT_SECONDS,

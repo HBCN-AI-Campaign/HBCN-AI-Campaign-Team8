@@ -115,14 +115,18 @@ class OCRClient:
                 headers={"Authorization": f"Bearer {self.vision_api_key}"},
                 timeout=self.timeout,
             )
+        except httpx.TimeoutException:
+            return {"text": "", "via_ocr": True, "error": "视觉 OCR 请求超时，请稍后重试或检查识别服务"}
         except httpx.HTTPError:
-            return {"text": "", "via_ocr": True, "error": "视觉 OCR 请求失败"}
+            return {"text": "", "via_ocr": True, "error": "视觉 OCR 连接失败，请检查识别服务"}
         if response.status_code >= 400:
-            return {"text": "", "via_ocr": True, "error": "视觉 OCR 服务返回错误"}
+            return {"text": "", "via_ocr": True, "error": f"视觉 OCR 服务请求未成功（HTTP {response.status_code}）"}
         try:
             data = response.json()
             choice = data["choices"][0]
             text = choice["message"]["content"]
+            if choice.get("finish_reason") == "length":
+                return {"text": "", "via_ocr": True, "error": "视觉 OCR 达到输出长度上限，本页识别未完整完成；请拆分页或配置长页识别服务"}
             if choice.get("finish_reason") != "stop" or not isinstance(text, str):
                 raise ValueError("OCR completion truncated or unknown")
         except (ValueError, KeyError, IndexError, TypeError):
