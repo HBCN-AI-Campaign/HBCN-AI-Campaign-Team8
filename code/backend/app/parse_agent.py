@@ -227,7 +227,8 @@ def parse_files(uploads: list) -> dict:
         })
 
     return {
-        "suggested_task_code": "FOL LN20260318-" + f"{(len(uploads) * 7) % 1000:03d}",
+        # 任务编号由后端创建时自增生成（YYYY-NNNN），此处仅占位，前端不展示为可编辑项
+        "suggested_task_code": "（创建时自动生成）",
         "suggested_borrower": _BORROWER,
         "suggested_currency": "USD",
         "suggested_amount": 10_000_000,

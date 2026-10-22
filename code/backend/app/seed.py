@@ -9,6 +9,7 @@ R03 通过（1000 万 ≤ 3000 万），R16 通过（汇款人 = 借款人）。
 """
 from .database import Base, SessionLocal, engine
 from .models import (
+    Customer,
     Document,
     DocumentType,
     ReviewTask,
@@ -19,6 +20,17 @@ from .models import (
 from .security import hash_password
 
 BORROWER = "XX铜版纸制造有限公司"
+
+# 客户主数据种子（客户号 + 客户名称）。样本任务的借款人与第一条客户名称一致，
+# 便于演示「解析后按借款人自动匹配客户号」。
+CUSTOMERS: list[tuple[str, str]] = [
+    ("C0001", BORROWER),
+    ("C0002", "智汇跨境贸易有限公司"),
+    ("C0003", "环宇国际物流股份有限公司"),
+    ("C0004", "新丝路进出口贸易有限公司"),
+    ("C0005", "恒通化工材料有限公司"),
+    ("C0006", "远东精密机械制造有限公司"),
+]
 
 
 def seed():
@@ -36,16 +48,28 @@ def seed():
             db.commit()
             print("✓ 已创建用户: operator / reviewer（密码见脚本）")
 
+        # --- 客户主数据 ---
+        if not db.query(Customer).first():
+            db.add_all([
+                Customer(customer_no=no, name=name) for no, name in CUSTOMERS
+            ])
+            db.commit()
+            print(f"✓ 已创建 {len(CUSTOMERS)} 个客户: {CUSTOMERS[0][0]} ~ {CUSTOMERS[-1][0]}")
+
         # --- 样本任务 ---
-        code = "FOL LN20260315-008"
+        code = "2026-0001"
         if db.query(ReviewTask).filter_by(task_code=code).first():
             print(f"· 任务 {code} 已存在，跳过")
             return
 
+        # 关联到第一条客户（借款人同名）
+        customer = db.query(Customer).filter_by(customer_no="C0001").first()
+
         task = ReviewTask(
             task_code=code, borrower=BORROWER,
+            customer_id=customer.id if customer else None,
             drawdown_currency="USD", drawdown_amount=10_000_000,
-            status=TaskStatus.CREATED,
+            status=TaskStatus.PENDING,
         )
         task.documents.extend([
             Document(doc_code="F1", type_code=DocumentType.FACILITY_LETTER,
