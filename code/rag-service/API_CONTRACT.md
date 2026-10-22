@@ -1,12 +1,12 @@
 # RAG 独立模块接口 v1
 
-服务版本 `0.5.0`，HTTP 契约版本 `1.3.0`。调用方只依赖本文和 [OpenAPI 快照](contracts/openapi-v1.json)，不导入 `app/`、不查 RAG 表、不读取模型凭证。部署方法见 [deploy/README.md](deploy/README.md)；完整现状与优化范围见 [README](README.md)。
+服务版本 `0.5.0`，HTTP 契约版本 `1.3.0`。首次接入先看 [接入指南](INTEGRATION.md) 和 [2026-10-22 实测记录](ACCEPTANCE-2026-10-22.md)。调用方只依赖本文和 [OpenAPI 快照](contracts/openapi-v1.json)，不导入 `app/`、不查 RAG 表、不读取模型凭证。部署方法见 [deploy/README.md](deploy/README.md)；完整现状与优化范围见 [README](README.md)。
 
 ## 接线约定
 
 部署同事提供私网 `RAG_BASE_URL` 和独立 `RAG_SERVICE_TOKEN`，调用方在自己的后端设置环境变量；地址不固定为个人电脑或某个端口。请求头使用 `Authorization: Bearer ...`。浏览器只访问主站 JWT API，由主站校验用户/任务权限后调用本服务，不把此服务 Token 交给浏览器。
 
-`GET /health` 检查进程并返回 service_version/api_contract_version；不能据此认为数据库、模型或知识已就绪。`GET /api/v1/capabilities` 查询当前能力开关；`GET /api/v1/ready` 检查数据库/向量列与 SDK 健康，仍不能代替真实提问验收。响应头提供 `X-RAG-Service-Version`、`X-RAG-Contract-Version`，调用方接受 v1 主版本并容忍新增可选字段。
+`GET /health` 检查进程并返回 service_version/api_contract_version；不能据此认为数据库、模型或知识已就绪。`GET /api/v1/capabilities` 查询当前能力开关；`GET /api/v1/ready` 检查数据库/向量列、旧库质量报告和模型 runtime 的鉴权就绪/协议 2，仍不能代替真实提问验收。响应头提供 `X-RAG-Service-Version`、`X-RAG-Contract-Version`，调用方接受 v1 主版本并容忍新增可选字段。
 
 v1 保持路径、已有字段含义/类型、scope 和鉴权约定。新增可选字段/能力可在 v1 内发布；删除、改名、收窄既有含义或改变授权语义需要新契约主版本及迁移。内部模型、检索引擎、多源路由、重排和云端/API 资源可以替换，但必须通过相同 HTTP 契约与质量门槛。OpenAPI 快照变化须评审兼容性；快照一致不等于已证明业务质量。
 
@@ -51,7 +51,7 @@ v1 保持路径、已有字段含义/类型、scope 和鉴权约定。新增可�
 python examples/retrieve.py --query '支付指令金额有误如何核查？' --scope business_rules
 ```
 
-运行前在调用方配置 RAG_BASE_URL/RAG_SERVICE_TOKEN，安装 httpx。脚本不会读取本模块内部配置或业务后端对象；本轮 `--help`/机制测试不表示已在云端真实调用。
+运行前在调用方配置 RAG_BASE_URL/RAG_SERVICE_TOKEN，安装 httpx。脚本不会读取本模块内部配置或业务后端对象。本机真实 HTTP/模型联调已在验收记录中单列，不能据此推定汇丰服务器常驻 RAG 或主站调用方已部署。
 
 ## 入库、原文和 SSE
 

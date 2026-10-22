@@ -8,6 +8,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 MAX_RUNTIME_ITEMS = 20
+RUNTIME_PROTOCOL = 2
 MAX_RUNTIME_TEXT_UNITS = 4000
 MAX_RUNTIME_BODY_BYTES = 250_000  # below the runtime's 256000-byte hard limit
 CONTEXT_BATCH_BYTES = 220_000
@@ -50,7 +51,8 @@ def runtime_payload(*, message, instructions, evidence, conversation=None):
         raise ContextBudgetError("会话超过 SDK 限制，不能静默丢弃历史")
     if utf16_units(message) > 8000 or utf16_units(instructions) > 24000:
         raise ContextBudgetError("问题或指令超过 SDK 限制")
-    return {"message": message, "instructions": instructions, "conversation": conversation,
+    return {"assistant_protocol": RUNTIME_PROTOCOL,
+            "message": message, "instructions": instructions, "conversation": conversation,
             "evidence": [{"type": "rag", "id": str(index + 1), "text": item["content"],
                           "source": evidence_source(item), "page": item.get("page_num")}
                          for index, item in enumerate(evidence)]}

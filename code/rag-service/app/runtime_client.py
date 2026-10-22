@@ -7,7 +7,7 @@ import httpx
 from dotenv import dotenv_values
 
 from .config import settings
-from .evidence_context import ContextBudgetError, MAX_RUNTIME_BODY_BYTES, payload_bytes, runtime_payload
+from .evidence_context import ContextBudgetError, MAX_RUNTIME_BODY_BYTES, RUNTIME_PROTOCOL, payload_bytes, runtime_payload
 from .request_control import run_async
 
 
@@ -34,8 +34,17 @@ class SDKRuntime:
         if not self.configured:
             return False
         try:
-            response = httpx.get(f"{settings.ASSISTANT_RUNTIME_URL.rstrip('/')}/healthz", timeout=5)
-            return response.is_success and response.json().get("configured") is True
+            response = httpx.get(
+                f"{settings.ASSISTANT_RUNTIME_URL.rstrip('/')}/readyz",
+                headers={"Authorization": f"Bearer {runtime_token()}"}, timeout=5,
+            )
+            if not response.is_success:
+                return False
+            payload = response.json()
+            return (isinstance(payload, dict) and payload.get("status") == "ready"
+                    and payload.get("configured") is True
+                    and type(payload.get("assistant_protocol")) is int
+                    and payload["assistant_protocol"] == RUNTIME_PROTOCOL)
         except (httpx.HTTPError, ValueError):
             return False
 

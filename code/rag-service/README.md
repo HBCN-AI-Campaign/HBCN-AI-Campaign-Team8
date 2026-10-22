@@ -1,24 +1,24 @@
 # RAG 模块总览与运行说明
 
-协作交付入口：服务 `0.5.0` / HTTP 契约 `1.3.0`。其他模块只调用 [接口契约](API_CONTRACT.md) 与 [OpenAPI](contracts/openapi-v1.json)，无需依赖 RAG 内部类、表或模型；云端部署同事使用 [部署交接](deploy/README.md)。现有 `/query` 保持兼容，新增消费者优先对接 `/retrievals` 原文证据接口；内部优化独立发布，云端可提供模型/API/存储资源，不因现有 ECS 配置降低质量目标。
+协作交付入口：服务 `0.5.0` / HTTP 契约 `1.3.0`，代码以 **lfc** 为准。首次接入看 [接入指南](INTEGRATION.md)，本轮结果看 [2026-10-22 验收记录](ACCEPTANCE-2026-10-22.md)。其他模块只调用 [接口契约](API_CONTRACT.md) 与 [OpenAPI](contracts/openapi-v1.json)，无需依赖 RAG 内部类、表或模型；云端部署同事使用 [部署交接](deploy/README.md)。现有 `/query` 保持兼容，新增消费者优先对接 `/retrievals` 原文证据接口；内部优化独立发布，云端可提供模型/API/存储资源，不因现有 ECS 配置降低质量目标。
 
 模块边界：RAG 管理检索、证据与独立问答；主站助手和专项 Agent 负责各自最终输出。调用方按接口消费原文证据和缺口，主站负责最终用户/任务授权。模块可独立部署与更新，真实云端接线及完整业务验收仍须分别取证。
 
-独立的境外贷款知识查询模块。2026-10-21 已真实跑通 PostgreSQL/pgvector 入库、业务检索与 OpenCode SDK 引用问答。**当前主机验收不代表已经部署到团队 ECS，也不代表 RAG 工作台或主站助手已完成端到端联调。** 后端验收明细见 [`docs/RAG后端验收与运行.md`](../../docs/RAG后端验收与运行.md)，ECS 迁移步骤见 [`docs/部署到汇丰ECS实施方案.md`](../../docs/部署到汇丰ECS实施方案.md)。
+独立的境外贷款知识查询模块。2026-10-22 已在本机通过真实 PostgreSQL/pgvector、Embedding 与 OpenCode SDK 协议 2 的 HTTP 链路验收，包括增强检索、引用回答和撤回。**本机验收不代表已经部署到汇丰服务器，也不代表主站助手已完成端到端联调。** 历史后端明细见 [`docs/RAG后端验收与运行.md`](../../docs/RAG后端验收与运行.md)，最新可复现结果以本轮验收记录为准。
 
 ## 一页现状
 
-持续优化入口：[优化规划 v3](../../docs/Agentic-RAG优化规划.md) 与 [执行台账](../../docs/RAG持续优化执行台账.md)。用户已授权按需求持续实现、测试、审查与迭代；R01–R21 各项以台账的实际证据为准。北大法宝只读适配源码已完成真实烟测，服务端默认未启用；专用重排契约已接入但模型未部署。下文区分历史已验收后端、本轮源码增量和仍待实现的完整目标。
+规划入口：[优化规划 v3](../../docs/Agentic-RAG优化规划.md) 与 [执行台账](../../docs/RAG持续优化执行台账.md)。当前优先交付可运行模块及接入文档，不启动无止境优化；R01–R21 各项以实际证据为准。北大法宝只读适配有历史真实烟测，当前验收服务未启用；专用重排契约已接入但模型未部署。下文保留历史实现范围，当前运行事实以本轮验收记录为准。
 
 | 项目 | 当前事实 |
 | --- | --- |
 | 代码位置 | `code/rag-service/`，独立 FastAPI 服务；不并入主站后端进程 |
-| 已验收服务 | 本机 `127.0.0.1:8011`；旧 `8010` 是另一实例，不代表本次版本 |
-| 检索存储 | 汇丰 PostgreSQL 的 `hbcn_rag` schema，pgvector 1024 维向量表 `chunks_v1`，HNSW 索引 |
+| 已验收服务 | 本机 `127.0.0.1:8012`；本轮临时启动的8011旧库检查实例因缺质量报告返回 degraded，检查后已停止 |
+| 检索存储 | 汇丰 PostgreSQL 的隔离 `hbcn_rag_release_v050` schema，pgvector 1024 维 `chunks_v1`、HNSW；旧 `hbcn_rag` 保留 |
 | 已接能力 | 百炼 Embedding、OpenCode SDK、文件解析/切片、相关性核对与有限重检索、带引用回答、原文定位 |
-| 验收证据 | 当前版本全量 RAG 回归 199 项：186 项通过、13 项按设计跳过；另有 OpenAPI 快照、隔离 API 烟测、RAG UI 17 项测试与构建证据。具体资料范围和测试边界见执行台账与验收报告 |
-| 尚未完成 | ECS 常驻部署、真实模型/索引/MCP/UI 完整验收、主站助手部署联调、任务级资料权限、完整法规服务 |
-| 原件位置 | 当前验收环境为本机 `data/originals/`；迁移时必须与数据库记录一起搬迁并备份 |
+| 验收证据 | RAG 回归 202 项：189 通过、13 跳过；另跑真实 PG 混合检索测试 3 项通过；真实 HTTP 链路 16 项通过；UI 17 项和生产构建通过 |
+| 尚未完成 | 综合业务增强检索有模型核对未完成的实测失败；另有汇丰服务器 RAG 常驻部署、主站真实 UI/权限联调、真实业务金标质量验收、法规原件复核、专用重排与当前 MCP 联合验收 |
+| 原件位置 | 本轮为本机 `data/release-v050/originals/`；与新 schema 一致迁移/备份；旧 `data/originals/` 保留 |
 
 本轮源码增量：首次结构化问题规划、原始事实查询保留、中英互补表达、查询族归一 RRF、空召回恢复、跨轮候选保留、查询/轮次/时间预算与停止原因；新增 `/api/v1/retrievals` 仅返回原文证据。测试和 2 个真实模型规划冒烟见执行台账，第二轮新增可切换的中文词法/向量混合及显式回填，实际 PostgreSQL 隔离合成测试通过，见 [第二轮验证](../../docs/RAG优化第二轮验证记录.md)。第三轮新增法宝与知识库多源归并、显式来源选择和专用重排契约，见 [第三轮验证](../../docs/RAG优化第三轮验证记录.md)；尚未宣告正式语料检索质量、真实重排模型、完整法规服务、UI 或共享部署验收完成。第四轮增加可追溯长文窗口、按字节分批与联合覆盖核对，真实 SDK 已取回长文末尾限制；具体局限见第四轮记录。第十七轮主站适配接入 `/retrievals` 原文证据和检索充分性状态，保留旧 `/query` 兼容；第十九轮传入最近 12 条 user/assistant 会话背景；第二十轮增加带用户原文来源索引的事实槽位和未知/歧义输出；第二十一轮补充金额/币种单值边界与服务端 unknown 补全。真实模型、正式语料及主站/云端联合验收仍待完成。
 
@@ -46,7 +46,7 @@
 
 ```mermaid
 flowchart LR
-  Caller[已授权的后端调用方<br/>主站助手通过 retrieve 调用增强证据接口] -->|Bearer · HTTP| API[FastAPI RAG 服务<br/>本机 127.0.0.1:8011]
+  Caller[已授权的后端调用方<br/>AI 模块调用增强证据接口] -->|Bearer · HTTP| API[FastAPI RAG 服务<br/>本轮本机 127.0.0.1:8012]
   API --> QUALITY[版本化解析质量门禁<br/>乱码隔离 / OCR及结构不确定待复核]
   QUALITY --> QREVIEW[独立 reviewer 凭证 / 逐单元对照原件<br/>原件、解析、报告三 hash 绑定]
   QREVIEW --> DOC
@@ -57,7 +57,7 @@ flowchart LR
   WITHDRAW --> VEC
   WITHDRAW -.阻止在途发布.-> GRAPH
   GRAPH --> RECHECK[候选与结果返回前复核<br/>本库质量 / 网页授权、时效与正文绑定<br/>失效依据移除 / 隐藏原答复]
-  API --> DOC[(PostgreSQL<br/>hbcn_rag.documents)]
+  API --> DOC[(PostgreSQL 独立 schema<br/>本轮 hbcn_rag_release_v050)]
   API --> VEC[(pgvector<br/>chunks_v1 · 1024维 · HNSW)]
   API --> FILES[(持久化原件目录<br/>data/originals)]
   CURATOR[受控治理主体<br/>独立凭证 / 范围 / 期限] --> REFAPI[独立参考治理接口<br/>默认关闭 / 作者与复核分离]
@@ -276,7 +276,7 @@ Copy-Item .env.example .env
 .\scripts\start-backend.ps1 -Port 8011
 ```
 
-本机现有 `.env` 已配置。后台隐藏运行，仅监听 `127.0.0.1:8011`；检测冲突，不杀已有进程。日志/PID 在忽略目录 `data/`。停止：`scripts/stop-backend.ps1 -Port 8011`。
+以上是通用启动方式，需先配置实际可达的数据库、Embedding、协议 2 runtime 与 Token；模板中的本机 8090 不保证有运行时。启动脚本后台隐藏运行，检测端口冲突，不杀已有进程；日志/PID 在忽略目录 `data/`。停止用 `scripts/stop-backend.ps1 -Port <实际端口>`。本轮 8012 已由本机临时隧道启动，原件目录和 schema 见上表；不要同时再启动一个共享该 schema 的 worker。
 
 | 配置 | 含义 |
 | --- | --- |
@@ -286,7 +286,7 @@ Copy-Item .env.example .env
 | `RAG_DATABASE_RESOURCE_FILE` | PostgreSQL 资源文件路径，读取 PGHOST/PGPORT/PGDATABASE/PGUSER/PGPASSWORD |
 | `RAG_SSH_RESOURCE_FILE` / `RAG_SSH_HOST_KEY_SHA256` | 本机经 ECS 访问私网 RDS；固定主机指纹，不接受任意密钥 |
 | `RAG_POSTGRES_SSLMODE` | 默认 require；本次 RDS 不支持 TLS，经 SSH 隧道显式 disable，不能自行开放数据库公网 |
-| `ASSISTANT_RUNTIME_URL` | 已有 SDK 运行时，默认本机8090 |
+| `ASSISTANT_RUNTIME_URL` | 实际可达的协议 2 SDK 运行时；不要把模板 8090 当已部署地址 |
 | `ASSISTANT_RUNTIME_TOKEN` / `ASSISTANT_RUNTIME_RESOURCE_FILE` | 服务 token，或仅读取已有 runtime `.env` 中的 token |
 | `RAG_DATABASE_SCHEMA` / `RAG_VECTOR_TABLE` | 默认 hbcn_rag / chunks_v1，不改主项目业务表 |
 | `RAG_DATA_DIR` | 原件目录，默认 data/，须与数据库一起备份 |
@@ -385,10 +385,10 @@ $env:HBCN_TEST_SOURCE_ROOT = '实际共享资料根目录'
 .venv\Scripts\python -m unittest discover -s tests -v
 ```
 
-导入默认预览，仅4份明确业务资料、2份已检查文本的境外贷款通知，不扫描资源凭证目录。真实验收会产生少量模型费用并创建明确标记的验收资料；报告在 data/，不含凭证与业务原文。新电脑需准备知识文件，见 `knowledge-base/README.md`；catalog 不能替代原文正确性检查。
+导入默认预览，仅4份明确业务资料、2份境外贷款通知，不扫描资源凭证目录。法规有可提取文本不等于图像/OCR 层完整，仍须按本版质量报告处理待复核状态。真实验收会产生模型费用并创建明确标记的验收资料；报告在 data/，不含凭证与业务原文。新电脑需准备知识文件，见 `knowledge-base/README.md`；catalog 不能替代原文正确性检查。
 
 ## 接入边界
 
 **后端跑通不等于完整 UI 业务验收。** 2026-10-21 首轮后端验收时，React 页面仍为静态演示；第八轮已移除演示并接真实接口，合成依赖浏览器契约已验证。真实模型/索引/MCP/UI 联合质量、任务权限及共享部署仍须按台账验收，不能由历史后端结果替代。
 
-主系统调用方需将 RAG_BASE_URL 指向实际8011服务，服务 token 仅留后端；本次没有修改队友配置/代码，未停止原有8010实例。旧 `scripts/deploy-ragflow.ps1` / `app.cli` 是 RAGFlow 工作流，不用于本次 PostgreSQL 验收。
+主系统调用方将 RAG_BASE_URL 指向部署方提供的实际服务，本轮本机使用8012，服务 token 仅留后端；本次只提交 RAG 自身修复与文档。旧 `scripts/deploy-ragflow.ps1` / `app.cli` 是 RAGFlow 工作流，不用于本次 PostgreSQL 验收。

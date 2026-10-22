@@ -2,17 +2,19 @@
 
 这是供同事部署/联调的模块版本，不表示已经迁移到汇丰 ECS 或通过完整业务质量验收。模块只通过 HTTP 与主站、模型 runtime、Embedding、reranker、法宝连接；调用方接口见 [API_CONTRACT.md](../API_CONTRACT.md)，不需要随内部模型或数据库实现改代码。
 
-## 获取已合并版本
+## 获取协作分支版本
 
-首版已通过 PR #4 合入 `main`，合并提交为 `32d08431108b06fdd2d67ac0f9d4b52f6cc0d5b3`，源码版本 0.5.0。部署时固定审核过的 commit，避免直接覆盖同事正在修改的工作区；交接范围为 `code/rag-service` 及对应 RAG 规划/验证文档，不包含个人凭证、已建索引或真实资料。
+RAG 协作版本以远端 `lfc` 为准；之前进入 `main` 的 RAG 改动已经撤回，**不要从 main 部署本版本**。源码版本 0.5.0，本轮接线修复与测试记录见 [验收记录](../ACCEPTANCE-2026-10-22.md)。部署时固定审核过的 lfc commit，避免直接覆盖同事正在修改的工作区；交接范围为 `code/rag-service` 及对应 RAG 文档，不包含个人凭证、已建索引或真实资料。
 
 ```bash
-git fetch origin main
-git switch --detach 32d08431108b06fdd2d67ac0f9d4b52f6cc0d5b3
+git fetch origin lfc
+# 在独立部署目录中检出；发布时记录这个实际 commit，后续回滚也使用固定 commit。
+git switch --detach origin/lfc
+git rev-parse HEAD
 cd code/rag-service
 ```
 
-主站助手源码已通过 `RAGClient.retrieve()` 调用增强 `/retrievals`；部署同事须一并评审对应主站适配提交并验证 `RAG_BASE_URL`、`RAG_SERVICE_TOKEN`、`RAG_REQUEST_TIMEOUT=300` 和反向代理超时。其他调用方仍可通过 `/query` 完成旧契约最小联调；无需等待整个优化规划完成。以下未验收项仍是后续工作，不能将协作版本标记为生产就绪。
+AI 模块按 [接入指南](../INTEGRATION.md) 调用增强 `/retrievals`；部署同事验证调用方的 `RAG_BASE_URL`、`RAG_SERVICE_TOKEN`、300 秒请求超时和反向代理超时。其他调用方仍可通过 `/query` 完成旧契约最小联调；无需等待整个优化规划完成。主站适配独立评审/部署，不需要把助手实现复制进 RAG。以下未验收项仍是后续工作，不能将协作版本标记为生产就绪。
 
 ## 资源与配置
 
@@ -22,7 +24,7 @@ cd code/rag-service
 | --- | --- |
 | PostgreSQL + pgvector | RAG_DATABASE_URL、RAG_DATABASE_SCHEMA、RAG_VECTOR_TABLE；独立 schema/存储权限；生产证书与 TLS，优先 verify-full |
 | Embedding | BAILIAN_BASE_URL/BAILIAN_API_KEY、EMBEDDING_MODEL/DIMENSIONS；与既有索引维度及模型版本匹配 |
-| OpenCode SDK runtime | ASSISTANT_RUNTIME_URL/TOKEN；RAG 只依赖 HTTP /healthz 和 /runs，不读取 runtime 内部对象 |
+| OpenCode SDK runtime | ASSISTANT_RUNTIME_URL/TOKEN；使用带 Bearer 的 /readyz 及 /runs，请求/就绪均要求 assistant_protocol=2；/healthz 不能代替就绪。对齐 runtime 的 AI_REQUEST_TIMEOUT_MS 与 RAG 单次/总预算；当前借用 runtime 为45秒，综合业务题未通过，见验收记录 |
 | 原件与持久状态 | RAG_DATA_DIR 使用持久盘/经评审对象存储适配；数据库和原件一致备份，不能只搬向量 |
 | 服务入口 | SERVICE_TOKEN 通过部署 Secret/受限环境文件注入；私网 HTTP 或受保护 HTTPS 反代，浏览器走主站 JWT 网关 |
 | 专用 reranker | RAG_RERANK_* 配置兼容 API；模型、数据流、资源与质量比较后启用，不因 ECS 暂缺 GPU而宣称弱模型最优 |
@@ -83,7 +85,7 @@ docker run --name hbcn-rag --env-file /etc/hbcn-rag/rag.env \
 
 ## 0.4.0 / 契约 1.2 的质量升级门槛
 
-部署前按[质量契约](../../../docs/RAG文档质量门禁契约.md)在隔离副本清点与预演；缺本版质量报告的旧 ready 默认排除，ready 将报告未验证数量并 503。当前本机只读清点为 10 份旧 ready 待重检（另 1 failed），没有迁移或重启共享实例。请安排备份与迁移窗口，逐份授权 quality-recheck，OCR/结构不确定资料由独立 reviewer 对照原件复核，重建索引并实测召回；不自动批量盖合格章。
+部署前按[质量契约](../../../docs/RAG文档质量门禁契约.md)在隔离副本清点与预演；缺本版质量报告的旧 ready 默认排除，ready 将报告未验证数量并 503。2026-10-22 旧 `hbcn_rag` 保留 10 份缺报告的旧 ready（另 1 failed）；本机已将其中 4 份业务、2 份法规原件按相同 SHA256 重新提交到独立的 `hbcn_rag_release_v050` 与 `data/release-v050`。这是本机验收副本，不是服务器共享服务的发布。OCR/结构不确定资料仍须独立 reviewer 对照原件复核，不能批量盖合格章；最新结果见验收记录。
 
 新增 RAG_DOCUMENT_REVIEW_PRINCIPALS_FILE 默认为空；部署同事配置受控注册表、精确业务 scope、reviewer 角色、有效期与高熵独立凭证。只把 key SHA256 存服务端文件，原 key 仅给受控审核方，禁止前端持有。HTTP 复核工具不导入内部类，默认读取而非审批。没有新增数据库列；报告保存在已有 JSONB。重检可能产生 OCR/Embedding 费用，仍按单实例进程内队列运行，多实例持久队列/租约尚未完成。
 
