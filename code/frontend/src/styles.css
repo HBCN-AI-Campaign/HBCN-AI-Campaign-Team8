@@ -19,7 +19,6 @@ body,
   height: 100%;
   margin: 0;
 }
-.ant-app { height: 100%; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
     'Microsoft YaHei', sans-serif;
@@ -29,9 +28,6 @@ body {
 
 .mono {
   font-family: 'SF Mono', Menlo, Consolas, monospace;
-}
-@media (max-width: 760px) {
-  .platform-name { display: none; }
 }
 .page-head h2 {
   margin: 0 0 4px;
