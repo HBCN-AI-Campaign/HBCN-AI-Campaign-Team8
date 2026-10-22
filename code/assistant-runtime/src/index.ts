@@ -376,6 +376,17 @@ const server = Bun.serve({
         runtime: "@opencode/sdk@2.0.32",
       })
     }
+    if (url.pathname === "/readyz" && request.method === "GET") {
+      if (!validToken(request)) return Response.json({ detail: "Unauthorized" }, { status: 401 })
+      // Validate the caller's token and local configuration without creating an
+      // SDK session or making a billable request to the model provider.
+      return Response.json({
+        status: configured() ? "ready" : "unconfigured",
+        configured: configured(),
+        model: modelID || null,
+        runtime: "@opencode/sdk@2.0.32",
+      }, { status: configured() ? 200 : 503 })
+    }
     if (url.pathname === "/runs" && request.method === "POST") return handleRun(request)
     return Response.json({ detail: "Not found" }, { status: 404 })
   },

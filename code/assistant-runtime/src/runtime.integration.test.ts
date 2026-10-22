@@ -141,6 +141,12 @@ describe("OpenCode assistant runtime", () => {
       const baseURL = `http://127.0.0.1:${runtimePort}`
       const health = await fetch(`${baseURL}/healthz`)
       expect(await health.json()).toMatchObject({ status: "ok", configured: true })
+      expect((await fetch(`${baseURL}/readyz`)).status).toBe(401)
+      expect((await fetch(`${baseURL}/readyz`, { headers: { Authorization: 'Bearer wrong-token' } })).status).toBe(401)
+      const ready = await fetch(`${baseURL}/readyz`, { headers: { Authorization: 'Bearer runtime-test-token' } })
+      expect(ready.status).toBe(200)
+      expect(await ready.json()).toMatchObject({ status: 'ready', configured: true })
+      expect(modelRequests).toBe(0)
 
       const unauthorized = await fetch(`${baseURL}/runs`, { method: "POST", body: "{}" })
       expect(unauthorized.status).toBe(401)
@@ -158,7 +164,7 @@ describe("OpenCode assistant runtime", () => {
       expect(response.status).toBe(200)
       const stream = await response.text()
 
-      expect(modelRequests).toBe(2)
+      expect(modelRequests, JSON.stringify({ stream, stdout, stderr, requestMetadata })).toBe(2)
       expect(modelAuthorizationSeen).toBe(true)
       expect(exposedTools, JSON.stringify(requestMetadata)).toEqual([toolName])
       expect(evidenceReachedModel).toBe(true)
