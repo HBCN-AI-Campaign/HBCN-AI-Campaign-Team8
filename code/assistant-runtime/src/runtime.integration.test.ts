@@ -47,6 +47,7 @@ describe("OpenCode assistant runtime", () => {
     let exposedTools: string[] = []
     const requestMetadata: Array<{ keys: string[]; roles: string[]; tools: string[] }> = []
     let evidenceReachedModel = false
+    let referenceReachedModel = false
 
     const model = Bun.serve({
       hostname: "127.0.0.1",
@@ -77,6 +78,9 @@ describe("OpenCode assistant runtime", () => {
           ]), { headers: { "Content-Type": "text/event-stream" } })
         }
         evidenceReachedModel ||= JSON.stringify(body.messages || []).includes(evidenceMarker)
+        referenceReachedModel ||= (body.messages || []).some((message) =>
+          typeof message.content === 'string' && message.content.includes('"reference_id":"E1"'),
+        )
         return new Response(chunks([
           responseChunk({ content: "This is a safe mock answer." }, "stop"),
         ]), { headers: { "Content-Type": "text/event-stream" } })
@@ -158,7 +162,7 @@ describe("OpenCode assistant runtime", () => {
           message: "Summarize the reviewed evidence",
           instructions: "Return a concise evidence-based answer.",
           conversation: [],
-          evidence: [{ type: "rule", id: "rule-1", text: evidenceMarker, source: "approved rule" }],
+          evidence: [{ type: "rule", id: "rule-1", reference_id: 'E1', text: evidenceMarker, source: "approved rule" }],
         }),
       })
       expect(response.status).toBe(200)
@@ -168,6 +172,7 @@ describe("OpenCode assistant runtime", () => {
       expect(modelAuthorizationSeen).toBe(true)
       expect(exposedTools, JSON.stringify(requestMetadata)).toEqual([toolName])
       expect(evidenceReachedModel).toBe(true)
+      expect(referenceReachedModel).toBe(true)
       expect(stream).toContain('"status":"running"')
       expect(stream).toContain('"status":"completed"')
       expect(stream, JSON.stringify({ stdout, stderr })).toContain("This is a safe mock answer.")

@@ -22,6 +22,7 @@ type Evidence = {
   text?: string
   source?: string
   page?: number | null
+  reference_id?: string | null
 }
 
 type RunInput = {
@@ -96,6 +97,7 @@ function parseRun(value: unknown): RunInput | null {
       text: typeof item.text === "string" ? item.text.slice(0, MAX_EVIDENCE_TEXT) : "",
       source: typeof item.source === "string" ? item.source.slice(0, 500) : "",
       page: typeof item.page === "number" && Number.isFinite(item.page) ? item.page : null,
+      reference_id: typeof item.reference_id === 'string' && /^E[1-9][0-9]*$/.test(item.reference_id) ? item.reference_id : null,
     }))
   return { message: input.message, instructions: input.instructions, conversation, evidence }
 }
@@ -148,7 +150,7 @@ function runtimePlugin() {
             if (!run) throw new Error("No authorized evidence context is attached to this session")
             return {
               content: JSON.stringify({ evidence: run.evidence }),
-              metadata: { result_count: run.evidence.length },
+              metadata: { result_count: run.evidence.filter((item) => item.type !== "expert").length },
             }
           },
         })
@@ -262,7 +264,7 @@ async function handleRun(request: Request) {
               sendSse(controller, "tool", { tool: { name: EVIDENCE_TOOL, status: "running" } })
             } else if (event.type === "session.tool.success") {
               sendSse(controller, "tool", {
-                tool: { name: EVIDENCE_TOOL, status: "completed", result_count: input!.evidence.length },
+                tool: { name: EVIDENCE_TOOL, status: "completed", result_count: input!.evidence.filter((item) => item.type !== "expert").length },
               })
             } else if (event.type === "session.tool.failed") {
               sendSse(controller, "tool", { tool: { name: EVIDENCE_TOOL, status: "error" } })
