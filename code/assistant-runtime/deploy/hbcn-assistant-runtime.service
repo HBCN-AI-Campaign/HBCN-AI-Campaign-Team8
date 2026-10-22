@@ -11,6 +11,9 @@ WorkingDirectory=/opt/hbcn/current/code/assistant-runtime
 EnvironmentFile=/etc/hbcn/runtime.env
 Environment=ASSISTANT_RUNTIME_HOST=127.0.0.1
 Environment=ASSISTANT_RUNTIME_PORT=8090
+Environment=HOME=/var/lib/hbcn-assistant-runtime
+StateDirectory=hbcn-assistant-runtime
+StateDirectoryMode=0700
 # Install the approved Bun version here, or replace with its verified path.
 ExecStart=/usr/local/bin/bun run dist/index.js
 Restart=on-failure
@@ -23,6 +26,7 @@ PrivateTmp=true
 PrivateDevices=true
 ProtectSystem=strict
 ProtectHome=true
+ReadWritePaths=/var/lib/hbcn-assistant-runtime
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true

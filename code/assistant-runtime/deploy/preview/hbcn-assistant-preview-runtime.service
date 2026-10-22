@@ -1,0 +1,30 @@
+[Unit]
+Description=Huiyan isolated preview OpenCode runtime
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hbcn-assistant-preview
+Group=hbcn-assistant-preview
+WorkingDirectory=/opt/hbcn-assistant-preview/current/code/assistant-runtime
+EnvironmentFile=/etc/hbcn-assistant-preview/runtime.env
+ExecStart=/opt/hbcn-assistant-preview/tooling/node_modules/@oven/bun-linux-x64/bin/bun run dist/index.js
+Restart=on-failure
+RestartSec=5
+Environment=HOME=/var/lib/hbcn-assistant-preview/runtime
+TimeoutStopSec=30
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/hbcn-assistant-preview/runtime
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

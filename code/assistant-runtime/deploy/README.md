@@ -1,10 +1,10 @@
 # 助手发布交付
 
-本目录只交付 OpenCode runtime，主站与 RAG 沿用各自发布流程。[总设计与接口](../../../docs/ai-assistant/README.md) · [当前验收](../../../docs/ai-assistant/持续优化实施规划.md)。模板未在比赛 ECS 安装，不表示已上线。
+主站与 RAG 沿用各自发布流程。[总设计与接口](../../../docs/ai-assistant/README.md) · [当前验收](../../../docs/ai-assistant/持续优化实施规划.md)。现已在比赛云电脑部署[隔离预览](preview/README.md)，云端真实汇丰双账号 HTTP 协作验收通过；正式主站尚未切换。
 
 对外接入统一走[助手 V1](../../../docs/ai-assistant/对外接口V1.md)，不直接开放本 runtime。主后端 release 须包含同仓库 `code/assistant-sdk`；在 backend 安装 `requirements-assistant.txt` 会安装该包，旧 `app.assistant_client` 转为兼容导入。其他调用模块可单独安装 SDK，不需要部署主后端源码。
 
-## 0. 现有比赛云环境（2026-10-22 只读核对）
+## 0. 原主站基线（2026-10-22 首次只读核对）
 
 | 已核对事实 | 助手发布需要做什么 |
 |---|---|
@@ -16,7 +16,7 @@
 | backend 没有 `.env`；进程没有任何 DB/JWT/assistant 配置变量，SQLite 仅有 users/tasks/documents/check_results；当前 Python 环境未安装 Alembic 与 HTTPX | 现有运行未体现部署所需配置。不能让新 release 默默指向空默认数据库或直接沿用示例 JWT Secret；主站 owner 必须通过批准渠道交接 DB 位置、JWT 配置及 requirements 安装策略。现有后端配置由主站模块所有，助手部署不改它 |
 | 未发现 8090/8010/8011 监听服务 | runtime 和 RAG 在该机的部署尚需完成；RAG 由其模块负责，不把本机服务状态写成云端就绪 |
 
-本次仅 SSH 读取系统/监听/目录/业务表结构、进程环境变量名（不读值）与 OpenAPI，连接沿用团队资源与已固定的主机指纹；没有发布文件、运行迁移、重启进程或查询业务记录内容。登录资料仍由团队安全渠道提供，此文不保存密码、IP 或 HSBC key。监听状态会变化，正式切换前需重新核对。
+该表保留首次只读核对事实。用户随后授权部署独立预览，新增内容与验收见[预览说明](preview/README.md)；未改原主站进程/业务库。SSH 沿用团队资源及固定主机指纹；此文不保存密码、IP 或 HSBC key。正式切换前需重新核对。
 
 切换主站 release 时特别核对：`DATABASE_URL` 必须继续指向原业务库的绝对位置，不能因工作目录改变而创建空库；现有 uploads/sample_pdfs 的挂载或受控链接也要保留。当前源码的这些目录随 backend 根目录解析，由主站发布者安排持久化映射。助手发布不执行 seed、不复制真实单据进 release、不改变业务账号/JWT 配置。备份与恢复按主站流程完成后，再对同一个库执行助手迁移。
 
@@ -52,6 +52,8 @@ Linux 可执行 `bash scripts/linux-acceptance.sh`：临时安装官方 npm 包�
 参考 ../.env.example，把 AI_BASE_URL、AI_API_KEY、AI_MODEL、ASSISTANT_RUNTIME_TOKEN、AI_REQUEST_TIMEOUT_MS 放入 /etc/hbcn/runtime.env。与主后端的 runtime token 对齐，凭证不进仓库和前端。环境文件属主/权限限制为运行账号所需范围。runtime 的 `/readyz` 返回 `assistant_protocol: 2`，本版主后端要求此精确协议值；同时切换 runtime 与主后端版本，旧 runtime 不会显示就绪，也不接收新问答请求。
 
 使用专用 hbcn 账号；部署者确认该账号和目录已准备好。Bun 放在 /usr/local/bin/bun 或修改 unit 为实际绝对路径；ProtectHome 会阻止从个人 home 执行 Bun。不要为通过启动而直接关闭所有保护，先检查具体写入需求。
+
+systemd 模板通过 `StateDirectory` 准备专属运行目录，并在启动前设置 `HOME`；SDK 初始化会读取用户目录，入口代码内稍后改变 HOME 不足以覆盖提前缓存的路径。保持 release 只读，仅放行 runtime 的私有状态目录。云端预览已真实验证这一写入边界。
 
 ## 3. 复核 systemd unit 后启动
 
@@ -152,7 +154,7 @@ python -m app.assistant_preflight --require-rag --production
 b1529ef07bb7f9d385c06aebcf0a1e733963ccff6db6b862181df26937fb2d8b
 ```
 
-这是一份同仓库接入快照，不能直接覆盖云端 `/home/backend` 或 `/home/frontend`。不含凭证、业务数据库、上传件、RAG 实现/数据、依赖目录和 runtime dist；在目标 Linux 按 Bun 锁文件重新构建。配置中的实际 key/token 值未在包内命中，不替代团队发布评审。包尚未上传，本机临时交付目录不作为团队长期分发渠道。
+这是一份同仓库接入快照，不能直接覆盖云端 `/home/backend` 或 `/home/frontend`。不含凭证、业务数据库、上传件、RAG 实现/数据、依赖目录和 runtime dist；在目标 Linux 按 Bun 锁文件重新构建。配置中的实际 key/token 值未在包内命中，不替代团队发布评审。包已上传至隔离预览目录并核对全部清单及归档 SHA-256；长期交付仍通过仓库版本。
 
 **产物验证：** 本轮前端类型检查/Vite 构建、runtime 类型检查/构建与 3 项/52 断言通过；另将 tar 解至独立目录，直接运行其中 API/契约 28 项及 SDK 8 项，均通过后删除验证目录。没有把该机制检查称为 Linux、真实 RAG 或云端验收。
 
@@ -173,4 +175,4 @@ flowchart LR
   A --> S[主站负责人切换 / 记录回滚证据]
 ```
 
-2026-10-22 本轮重新 SSH 只读确认云站仍无助手页面/API/runtime/助手表；本包没有上传、安装或迁移到该机。已请求用户明确发布执行归属，得到交接前不切换现有主站。
+2026-10-22 后续按用户授权完成[云端隔离预览](preview/README.md)：独立目录/账号/合成数据库，回环 5174/8003/8093；原主站未切换。干净 Linux 后端 90 项、SDK 8 项通过；云端真实汇丰 HTTP 双账号协作 7.29 秒通过，真实 RAG 仍未就绪。正式发布继续走仓库统一部署。
