@@ -149,16 +149,27 @@ describe("OpenCode assistant runtime", () => {
       expect((await fetch(`${baseURL}/readyz`, { headers: { Authorization: 'Bearer wrong-token' } })).status).toBe(401)
       const ready = await fetch(`${baseURL}/readyz`, { headers: { Authorization: 'Bearer runtime-test-token' } })
       expect(ready.status).toBe(200)
-      expect(await ready.json()).toMatchObject({ status: 'ready', configured: true })
+      expect(await ready.json()).toMatchObject({ status: 'ready', configured: true, assistant_protocol: 2 })
       expect(modelRequests).toBe(0)
 
       const unauthorized = await fetch(`${baseURL}/runs`, { method: "POST", body: "{}" })
       expect(unauthorized.status).toBe(401)
 
+      for (const protocol of [undefined, 1, 3]) {
+        const stale = await fetch(`${baseURL}/runs`, {
+          method: "POST",
+          headers: { Authorization: "Bearer runtime-test-token", "Content-Type": "application/json" },
+          body: JSON.stringify({ assistant_protocol: protocol, message: 'old client', instructions: '', conversation: [], evidence: [] }),
+        })
+        expect(stale.status).toBe(422)
+      }
+      expect(modelRequests).toBe(0)
+
       const response = await fetch(`${baseURL}/runs`, {
         method: "POST",
         headers: { Authorization: "Bearer runtime-test-token", "Content-Type": "application/json" },
         body: JSON.stringify({
+          assistant_protocol: 2,
           message: "Summarize the reviewed evidence",
           instructions: "Return a concise evidence-based answer.",
           conversation: [],

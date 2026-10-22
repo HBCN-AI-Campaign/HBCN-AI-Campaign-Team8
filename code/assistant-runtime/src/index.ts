@@ -38,6 +38,7 @@ const MAX_EVIDENCE_TEXT = 4_000
 const MAX_CONVERSATION_ITEMS = 12
 const MAX_CONVERSATION_TEXT = 4_000
 const EVIDENCE_TOOL = "read_authorized_evidence"
+const ASSISTANT_PROTOCOL = 2
 
 function boundedInteger(value: string | undefined, fallback: number, min: number, max: number) {
   const parsed = Number(value)
@@ -75,6 +76,7 @@ function validToken(request: Request) {
 function parseRun(value: unknown): RunInput | null {
   if (!value || typeof value !== "object") return null
   const input = value as Record<string, unknown>
+  if (input.assistant_protocol !== ASSISTANT_PROTOCOL) return null
   if (typeof input.message !== "string" || !input.message.trim() || input.message.length > 8_000) return null
   if (typeof input.instructions !== "string" || input.instructions.length > 24_000) return null
   if (!Array.isArray(input.conversation) || !Array.isArray(input.evidence)) return null
@@ -365,7 +367,7 @@ await cp(join(import.meta.dir, "..", ".opencode", "skills"), join(workspace, ".o
 })
 
 const server = Bun.serve({
-  hostname: Bun.env.ASSISTANT_RUNTIME_HOST || "0.0.0.0",
+  hostname: Bun.env.ASSISTANT_RUNTIME_HOST || "127.0.0.1",
   port,
   idleTimeout: 255,
   async fetch(request) {
@@ -376,6 +378,7 @@ const server = Bun.serve({
         configured: configured(),
         model: modelID || null,
         runtime: "@opencode/sdk@2.0.32",
+        assistant_protocol: ASSISTANT_PROTOCOL,
       })
     }
     if (url.pathname === "/readyz" && request.method === "GET") {
@@ -387,6 +390,7 @@ const server = Bun.serve({
         configured: configured(),
         model: modelID || null,
         runtime: "@opencode/sdk@2.0.32",
+        assistant_protocol: ASSISTANT_PROTOCOL,
       }, { status: configured() ? 200 : 503 })
     }
     if (url.pathname === "/runs" && request.method === "POST") return handleRun(request)
