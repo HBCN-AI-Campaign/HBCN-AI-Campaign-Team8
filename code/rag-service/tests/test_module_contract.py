@@ -14,10 +14,10 @@ class ModuleContractTests(unittest.TestCase):
         try:
             with patch.object(settings, "SERVICE_TOKEN", "synthetic-service-token"):
                 health = client.get("/health")
-                self.assertEqual(health.json()["api_contract_version"], "1.0.0")
+                self.assertEqual(health.json()["api_contract_version"], "1.1.0")
                 rejected = client.get("/api/v1/capabilities")
                 self.assertEqual(rejected.status_code, 401)
-                self.assertEqual(rejected.headers["x-rag-contract-version"], "1.0.0")
+                self.assertEqual(rejected.headers["x-rag-contract-version"], "1.1.0")
                 self.assertEqual(health.headers["x-rag-service-version"], health.json()["service_version"])
                 self.assertNotIn("synthetic-service-token", health.text + rejected.text)
         finally:

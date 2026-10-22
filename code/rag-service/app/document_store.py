@@ -5,12 +5,20 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, Text, UniqueConstraint, select, update
+from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, Text, UniqueConstraint, func, select, update
 from sqlalchemy.dialects.postgresql import JSONB, insert as pg_insert
 from sqlalchemy.schema import CreateSchema
 
 from .config import settings
-from .database import sql_engine
+from .database import ResourceError, sql_engine
+
+
+class DocumentWithdrawn(ResourceError):
+    """A withdrawn source cannot be republished by an in-flight worker."""
+
+
+class DocumentConflict(ResourceError):
+    pass
 
 
 def utc_now():
@@ -26,9 +34,10 @@ def data_root() -> Path:
 
 
 class DocumentStore:
-    def __init__(self):
-        self.engine = sql_engine()
-        metadata = MetaData(schema=settings.RAG_DATABASE_SCHEMA)
+    def __init__(self, *, engine=None, schema=None):
+        self.engine = engine if engine is not None else sql_engine()
+        schema = settings.RAG_DATABASE_SCHEMA if schema is None else schema
+        metadata = MetaData(schema=schema)
         self.table = Table(
             "documents", metadata,
             Column("id", String(36), primary_key=True),
@@ -50,7 +59,7 @@ class DocumentStore:
             UniqueConstraint("scope", "sha256", "embedding_model", name="document_content_version"),
         )
         with self.engine.begin() as connection:
-            connection.execute(CreateSchema(settings.RAG_DATABASE_SCHEMA, if_not_exists=True))
+            connection.execute(CreateSchema(schema, if_not_exists=True))
         metadata.create_all(self.engine)
 
     def create(self, name: str, scope: str, content: bytes, content_type: str, provenance: dict | None = None):
@@ -94,13 +103,40 @@ class DocumentStore:
     def set_stage(self, document_id: str, stage: str, label: str, **values):
         now = utc_now()
         with self.engine.begin() as connection:
-            row = connection.execute(select(self.table.c.events).where(self.table.c.id == document_id).with_for_update()).first()
+            row = connection.execute(select(self.table.c.events, self.table.c.state).where(self.table.c.id == document_id).with_for_update()).first()
             if not row:
                 raise LookupError("文档不存在")
+            if row.state == "withdrawn":
+                raise DocumentWithdrawn("文档已撤回，不能继续发布")
             events = [*row[0], {"stage": stage, "label": label, "at": now.isoformat()}]
             connection.execute(update(self.table).where(self.table.c.id == document_id).values(
                 stage=stage, updated_at=now, events=events, **values,
             ))
+
+    def withdraw(self, document_id, chunks, *, expected_sha256, reason):
+        """Invalidate document and all vector/lexical visibility in one transaction.
+
+        Raw data is retained for an independently authorized retention process.
+        The document lock also fences the worker's final publication transaction.
+        """
+        with self.engine.begin() as connection:
+            connection.execute(select(func.set_config("lock_timeout", "5000", True)))
+            connection.execute(select(func.set_config("statement_timeout", "10000", True)))
+            row = connection.execute(select(self.table).where(self.table.c.id == document_id).with_for_update()).mappings().first()
+            if not row:
+                raise LookupError("文档不存在")
+            if row["sha256"] != expected_sha256:
+                raise DocumentConflict("文档版本不匹配，请重新核对")
+            if row["state"] == "withdrawn":
+                return dict(row)
+            now = utc_now()
+            connection.execute(update(chunks).where(chunks.c.document_id == document_id).values(searchable=False))
+            connection.execute(update(self.table).where(self.table.c.id == document_id).values(
+                state="withdrawn", stage="withdrawn", error=None, updated_at=now,
+                events=[*row["events"], {"stage": "withdrawn", "label": "文档已撤回", "reason": reason,
+                                       "actor": "trusted_service", "at": now.isoformat()}],
+            ))
+            return dict(connection.execute(select(self.table).where(self.table.c.id == document_id)).mappings().one())
 
     def list(self):
         with self.engine.connect() as connection:
@@ -114,10 +150,10 @@ class DocumentStore:
             ))
 
     def public(self, row):
-        fields = ("id", "name", "scope", "state", "stage", "size_bytes", "chunk_count", "error", "events", "provenance", "created_at", "updated_at")
+        fields = ("id", "name", "scope", "sha256", "state", "stage", "size_bytes", "chunk_count", "error", "events", "provenance", "created_at", "updated_at")
         result = {key: row[key] for key in fields}
-        result["run"] = "DONE" if row["state"] == "ready" else "FAILED" if row["state"] == "failed" else "RUNNING"
+        result["run"] = "DONE" if row["state"] == "ready" else "FAILED" if row["state"] in {"failed", "withdrawn"} else "RUNNING"
         result["page_count"] = len(row["pages"]) if row["pages"] and all(page["page"] is not None for page in row["pages"]) else None
         result["section_count"] = len(row["pages"])
-        result["source_available"] = self.original_path(row["id"]).is_file()
+        result["source_available"] = row["state"] != "withdrawn" and self.original_path(row["id"]).is_file()
         return result

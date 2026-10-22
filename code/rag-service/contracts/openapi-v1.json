@@ -443,6 +443,33 @@
         "title": "ConversationMessage",
         "type": "object"
       },
+      "DocumentWithdrawal": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Expected Sha256",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "superseded",
+              "incorrect",
+              "authorization_revoked",
+              "quality_issue",
+              "other"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_sha256",
+          "reason"
+        ],
+        "title": "DocumentWithdrawal",
+        "type": "object"
+      },
       "Evidence": {
         "properties": {
           "content": {
@@ -1121,7 +1148,7 @@
   },
   "info": {
     "title": "HBCN Business Knowledge Service",
-    "version": "0.3.0"
+    "version": "0.3.1"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -1750,6 +1777,85 @@
           }
         },
         "summary": "Document Source"
+      }
+    },
+    "/api/v1/documents/{document_id}/withdraw": {
+      "post": {
+        "operationId": "withdraw_document_api_v1_documents__document_id__withdraw_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "rag_ui_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rag Ui Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentWithdrawal"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Withdraw Document"
       }
     },
     "/api/v1/ingestions": {

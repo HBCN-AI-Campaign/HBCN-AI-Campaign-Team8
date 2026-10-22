@@ -10,6 +10,7 @@ import socket
 import sys
 import time
 import asyncio
+import hashlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -33,7 +34,7 @@ def cancellation_state():
 
 IDS = ["11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"]
 TEXT = "合成规则：金额不一致须暂停处理并核对更正。"
-rows = {identifier: {"id": identifier, "name": f"合成资料{index + 1}.txt", "scope": "business_rules", "state": "ready", "stage": "done", "chunk_count": 1}
+rows = {identifier: {"id": identifier, "name": f"合成资料{index + 1}.txt", "scope": "business_rules", "state": "ready", "stage": "done", "chunk_count": 1, "sha256": hashlib.sha256(TEXT.encode()).hexdigest()}
         for index, identifier in enumerate(IDS)}
 
 
@@ -75,15 +76,26 @@ class FixtureEngine:
 
     def retrieve(self, *, query, **kwargs):
         identifier = IDS[1] if "第二" in query else IDS[0]
+        if rows[identifier]["state"] == "withdrawn":
+            return []
         return [{"document_id": identifier, "chunk_id": identifier, "document_keyword": rows[identifier]["name"], "content": TEXT,
                  "metadata": {"scope": "business_rules"}, "reader_url": f"/api/v1/documents/{identifier}/content?chunk_id={identifier}"}]
 
     def content(self, identifier, chunk_id=None):
+        if rows[identifier]["state"] == "withdrawn":
+            return None
         return {"document": rows[identifier], "pages": [{"page": None, "text": TEXT}], "focus": None}
+
+    def withdraw(self, identifier, *, expected_sha256, reason):
+        from app.document_store import DocumentConflict
+        if expected_sha256 != rows[identifier]["sha256"]:
+            raise DocumentConflict("synthetic version mismatch")
+        rows[identifier].update(state="withdrawn", stage="withdrawn", source_available=False)
+        return rows[identifier]
 
     def submit(self, *, filename, scope, **kwargs):
         identifier = "33333333-3333-3333-3333-333333333333"
-        rows[identifier] = {"id": identifier, "name": filename, "scope": scope, "state": "queued", "stage": "queued", "chunk_count": 0}
+        rows[identifier] = {"id": identifier, "name": filename, "scope": scope, "state": "queued", "stage": "queued", "chunk_count": 0, "sha256": hashlib.sha256(b"synthetic").hexdigest()}
         return rows[identifier], True
 
 

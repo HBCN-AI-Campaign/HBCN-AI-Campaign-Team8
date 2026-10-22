@@ -239,7 +239,7 @@ class BackendContractTests(unittest.TestCase):
             path = Path(directory) / "original"
             path.write_bytes(b"<script>alert(1)</script>")
             engine = Mock()
-            engine.documents.get.return_value = {"name": "unsafe.html"}
+            engine.documents.get.return_value = {"name": "unsafe.html", "state": "ready"}
             engine.documents.original_path.return_value = path
             with patch("app.backend_api.postgres_engine", return_value=engine):
                 response = self.client.get("/api/v1/documents/11111111-1111-4111-8111-111111111111/source", headers=self.headers)

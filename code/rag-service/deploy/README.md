@@ -1,10 +1,10 @@
-# 汇丰云服务器部署交接：独立 RAG 0.3.0
+# 汇丰云服务器部署交接：独立 RAG 0.3.1
 
 这是供同事部署/联调的模块版本，不表示已经迁移到汇丰 ECS 或通过完整业务质量验收。模块只通过 HTTP 与主站、模型 runtime、Embedding、reranker、法宝连接；调用方接口见 [API_CONTRACT.md](../API_CONTRACT.md)，不需要随内部模型或数据库实现改代码。
 
 ## 获取协作版本
 
-发布分支为 `codex/rag-module-v0.3.0`；在独立干净 checkout 获取该分支，部署时固定审核过的 commit，避免直接覆盖同事正在修改的工作区。它是仓库内的协作版本，尚未合入 main。交接范围为 `code/rag-service` 及对应 RAG 规划/验证文档，不包含个人凭证、已建索引或真实资料。
+协作分支为 `codex/rag-module-v0.3.0`（当前源码版本 0.3.1）；在独立干净 checkout 获取该分支，部署时固定审核过的 commit，避免直接覆盖同事正在修改的工作区。它是仓库内的协作版本，尚未合入 main。交接范围为 `code/rag-service` 及对应 RAG 规划/验证文档，不包含个人凭证、已建索引或真实资料。
 
 ```bash
 git fetch origin codex/rag-module-v0.3.0
@@ -58,10 +58,10 @@ cd ..
 模块根目录提供多阶段 Dockerfile：构建 React UI，安装锁定的 Python 直接依赖，以非 root 运行。只复制应用、脚本、接口快照和公开目录说明，排除 .env、data、业务原件和 node_modules。镜像中不内置模型、账号、数据库、个人文件或真实知识库；这些由外部服务和受控存储提供。
 
 ```bash
-docker build -t hbcn-rag:0.3.0 .
+docker build -t hbcn-rag:0.3.1 .
 docker volume create hbcn-rag-data
 docker run --name hbcn-rag --env-file /etc/hbcn-rag/rag.env \
-  -p 127.0.0.1:8011:8011 -v hbcn-rag-data:/var/lib/hbcn-rag hbcn-rag:0.3.0
+  -p 127.0.0.1:8011:8011 -v hbcn-rag-data:/var/lib/hbcn-rag hbcn-rag:0.3.1
 ```
 
 部署方确保数据卷 UID/GID 10001 可写；覆盖 RAG_DATA_DIR 时同步挂载。示例不指定 CPU/内存限额；资源按目标质量与实测容量配置。HEALTHCHECK 仅查存活，发布仍要查就绪和真实提问。当前 Windows 开发机无 Docker，**本轮没有验证 Linux 镜像构建和云端运行**；Dockerfile/原生模板均需部署同事在目标环境验证，不能把模板存在视为部署成功。
@@ -76,3 +76,7 @@ docker run --name hbcn-rag --env-file /etc/hbcn-rag/rag.env \
 6. 切换失败时恢复旧代码/镜像及匹配的配置/索引/原件快照；不要只切回旧程序却继续读不兼容新索引。当前没有自动灰度或一键数据回滚，部署负责人执行并取证。
 
 无模型费用的模块检查：安装 `requirements-dev.txt` 后运行 `python -m unittest discover -s tests -v`、`python scripts/smoke-isolated-api.py`、`python scripts/export-openapi.py --check`、`python -m pip check`；UI 用 `npm test && npm run build`。默认跳过真实 PostgreSQL/外部语料检查；`HBCN_TEST_POSTGRES=1` 才运行随机 schema 的合成隔离 PG 测试，使用部署测试账号，绝不拿正式业务库当评测集。
+
+## v0.3.1 撤回与回滚注意
+
+新增 withdrawn 是已有文档行状态，不需要本轮 DDL；部署前备份并核对契约 1.1。撤回不是删除文件：原件、正文、不可检索的片段仍保留。旧 0.3.0 不识别撤回屏障，不能在已撤回资料存在时直接回滚到旧代码并开放读接口；必须采用保留撤回检查的兼容修复版本，或停读后按批准的一致数据/授权快照恢复并复验。备份中被撤回资料不能因恢复而重新公开。没有多实例队列/租约升级，也没有完整云端回滚演练。

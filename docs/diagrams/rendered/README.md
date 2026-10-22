@@ -12,3 +12,5 @@
 导出方式：Mermaid 11.12.0，在浏览器加载本地 Mermaid 包、执行 parse/render，再保存 SVG 并以浏览器截图导出 PNG；已检查四张图的语法与中文可读性。导出依赖安装在仓库外的临时文档环境，未修改业务依赖。
 
 更新时依次修改图源、同步 [优化规划](../../Agentic-RAG优化规划.md) 与 [模块总览](../../../code/rag-service/README.md) 的 Mermaid 块、重新导出本目录图像，并检查三处一致。当前架构仍以总览的“当前 RAG 架构”一节为准。
+
+- 文档撤回（第十三轮）：[图源](../rag-document-withdrawal.mmd)、[SVG](rag-document-withdrawal.svg)、[PNG](rag-document-withdrawal.png)。逻辑撤回与在途发布/答复屏障；标明未实现的物理/备份清理。

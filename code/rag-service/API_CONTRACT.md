@@ -1,6 +1,6 @@
 # RAG 独立模块接口 v1
 
-服务版本 `0.3.0`，HTTP 契约版本 `1.0.0`。调用方只依赖本文和 [OpenAPI 快照](contracts/openapi-v1.json)，不导入 `app/`、不查 RAG 表、不读取模型凭证。部署方法见 [deploy/README.md](deploy/README.md)；完整现状与优化范围见 [README](README.md)。
+服务版本 `0.3.1`，HTTP 契约版本 `1.1.0`。调用方只依赖本文和 [OpenAPI 快照](contracts/openapi-v1.json)，不导入 `app/`、不查 RAG 表、不读取模型凭证。部署方法见 [deploy/README.md](deploy/README.md)；完整现状与优化范围见 [README](README.md)。
 
 ## 接线约定
 
@@ -54,6 +54,7 @@ python examples/retrieve.py --query '支付指令金额有误如何核查？' --
 | `POST /api/v1/ingestions` | multipart file/scope，可选来源 URL/辖区；202 后按 document.id 查询状态 |
 | `GET /api/v1/documents`、`GET /api/v1/documents/{id}` | 文档列表/实际阶段；仅 ready 才可检索 |
 | `POST /api/v1/documents/{id}/retry` | 失败或中断后的显式重试，不能靠查询触发重复入库 |
+| `POST /api/v1/documents/{id}/withdraw` | 可信管理调用方逻辑撤回；传 `expected_sha256` 和枚举 `reason`，返回 document；未知 404、hash 不匹配 409、重复同版本撤回幂等 |
 | `GET /api/v1/documents/{id}/content?chunk_id=...` | 原文页/章节及焦点；chunk 必须属于该文档 |
 | `GET /api/v1/documents/{id}/source` | 原件存在才返回；PDF inline，其他 attachment，禁止 HTML 脚本执行 |
 | `POST /api/v1/answers` | 独立问答 JSON；grounding=cited 仍不等于审核通过 |
@@ -62,6 +63,10 @@ python examples/retrieve.py --query '支付指令金额有误如何核查？' --
 SSE 事件为 `step`（key/label/status 的简要动作）、`result`（完整 AnswerResponse）或 `error`（message）；仅收到 step 或连接结束不能算完成。没有正文 token 增量承诺、没有事件回放或自动续跑。客户端断开触发本地取消及连接清理，但不能据此宣称供应商已停费；反向代理须关闭缓冲并保留足够超时。
 
 入库/列表/原文当前是可信服务级能力；不是主站用户/任务 ACL。主站不得把这些管理接口作为任意用户公共上传下载网关。真正任务资料、敏感历史数据和公网知识管理仍需主站权限及生命周期验收。
+
+v1.1 新增文档 `sha256`、状态 `withdrawn` 及撤回入口；调用方需容忍新增状态，不能把未知状态当 ready。`reason` 为 superseded/incorrect/authorization_revoked/quality_issue/other，不能传自报 actor/用户权限。调用前读取状态核对版本；模块只记可信服务身份，最终操作者与授权需在主站管理接口审计，不开放给任意用户。撤回不可通过 retry 或同内容重复上传恢复，版本重新批准/替换仍需后续治理流程。
+
+撤回在事务中使文档和所有向量片段不可检索；词法 JOIN 同一 searchable 标记。原文/content 返回 404，状态元数据仍可供管理读取。Agent 跨轮候选、后续模型调用前与返回结果前重新检查本库片段；已失效则停止使用并隐藏生成答复，返回 source_withdrawn/依据缺口。所有 `/api/v1` 响应使用 `Cache-Control: no-store`。这不能召回已交付给调用方的正文、强停正在外部供应商处理的请求或消除复核之后到网络发送之间的竞态；调用方不能继续复用过期答复。外部法宝生命周期、案例/经验引用绑定、物理删除/备份擦除及跨系统缓存通知仍需分别实现。
 
 ## 错误、时限与版本验证
 

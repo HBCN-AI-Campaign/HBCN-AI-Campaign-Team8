@@ -29,6 +29,7 @@ export interface Request {
 export interface Step { key: string; label: string; status: 'running' | 'done' }
 export interface KnowledgeDocument {
   id: string; name: string; scope: Scope; state?: string; stage?: string; error?: string | null
+  sha256?: string
   chunk_count?: number; run?: string
   source_available?: boolean
 }
@@ -68,6 +69,10 @@ function checkedResult(value: unknown): Result {
   return result
 }
 export const getCapabilities = (signal?: AbortSignal) => json<Capabilities>('/api/v1/capabilities', { signal })
+export function withdrawDocument(document: KnowledgeDocument, signal?: AbortSignal) {
+  if (!originalPath(document.id) || !/^[0-9a-f]{64}$/.test(document.sha256 || '')) throw new Error('文档编号或版本无效，请刷新后重试。')
+  return json<{ document: KnowledgeDocument }>(`/api/v1/documents/${document.id}/withdraw`, post({ expected_sha256: document.sha256, reason: 'other' }, signal))
+}
 export async function retrieve(payload: Request, signal?: AbortSignal) {
   return checkedResult(await json<unknown>('/api/v1/retrievals', post(payload, signal)))
 }

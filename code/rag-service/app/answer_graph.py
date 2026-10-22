@@ -65,6 +65,10 @@ def build_answer_graph(engine, runtime=None, *, generate_answer=True, law_source
 
     def complete(state, **kwargs):
         check_cancelled()
+        evidence = kwargs.get("evidence")
+        if evidence and callable(getattr(type(engine), "current_evidence", None)):
+            if len(engine.current_evidence(evidence)) != len(evidence):
+                raise RuntimeErrorResponse("Evidence lifecycle changed; refresh required")
         remaining = state["deadline"] - time.monotonic()
         if remaining <= 0:
             raise RuntimeErrorResponse("RAG request budget exhausted")
@@ -159,6 +163,12 @@ def build_answer_graph(engine, runtime=None, *, generate_answer=True, law_source
         if "pkulaw" in requested_sources:
             pools["pkulaw"] = fuse_query_results(external_batches, top_k=limit)
         evidence = fuse_sources(pools, top_k=limit) if len(pools) > 1 else next(iter(pools.values()), [])
+        if callable(getattr(type(engine), "current_evidence", None)) and evidence:
+            current = engine.current_evidence(evidence)
+            if len(current) != len(evidence):
+                stop_reason = "source_withdrawn"
+                warnings.append("跨轮候选包含已失效来源，已移除；请重新检索当前版本")
+            evidence = current
         try:
             evidence, rerank_status = reranker.rerank(query=state["query"], evidence=evidence,
                                                      timeout_seconds=state["deadline"] - time.monotonic())
@@ -239,6 +249,7 @@ def build_answer_graph(engine, runtime=None, *, generate_answer=True, law_source
         return "generate" if state.get("stop_reason") in {"no_new_evidence", "repeated_query", "time_budget"} else "assess"
 
     def generate(state):
+        state = dict(state)
         warnings = list(state.get("warnings", []))
         grounding = "insufficient"
         answer_verification = {"status": "not_run"}
@@ -249,6 +260,18 @@ def build_answer_graph(engine, runtime=None, *, generate_answer=True, law_source
             evidence = state.get("supported_evidence", [])[:state["top_k"]]
         reason = state.get("stop_reason") or ("round_budget" if state["attempts"] >= settings.RAG_MAX_RETRIEVAL_ROUNDS else "insufficient")
         clarification = state["plan"].get("clarification_question") if reason == "clarification" else None
+        def revalidate(items):
+            # Concrete adapters declare their own lifecycle semantics; external
+            # sources retain their independent freshness/authorization contract.
+            if not callable(getattr(type(engine), "current_evidence", None)) or not items:
+                return items, False
+            current = engine.current_evidence(items)
+            return current, len(current) != len(items)
+
+        evidence, changed = revalidate(evidence)
+        if changed:
+            state["sufficient"] = False
+            reason = "source_withdrawn"
         step("generate", "组织检索证据与来源" if not generate_answer else "基于引用证据生成回答", "running")
         answer = clarification or "当前知识库没有足够证据回答这个问题。请补充相关资料或业务信息，不能据此给出确定性审核结论。"
         if not evidence and not clarification:
@@ -289,6 +312,17 @@ def build_answer_graph(engine, runtime=None, *, generate_answer=True, law_source
                 grounding = "cited"
             if any(item.get("metadata", {}).get("scope") == "law" for item in evidence):
                 warnings.append("法规效力、附件完整性及具体业务适用性仍须复核")
+        evidence, changed_after = revalidate(evidence)
+        if changed or changed_after:
+            state["sufficient"] = False
+            grounding, reason = "insufficient", "source_withdrawn"
+            answer_verification = {"status": "source_withdrawn"}
+            answer = "本轮依据在处理期间已撤回或发生变化，原答复不再展示。请重新检索并核对当前有效资料。"
+            warnings.append("依据状态发生变化，已移除失效片段并阻止确定性答复")
+            state["missing"] = [*state.get("missing", []), "原依据已失效，需要重新检索当前有效版本"]
+            state["legal_applicability"] = {"status": "source_changed"}
+            state["context_coverage"] = {"status": "invalidated_by_source_change", "requires_reassessment": True}
+            state["source_status"] = {**state.get("source_status", {}), "knowledge_base": "changed"}
         sources = [{"citation": index, "content": item["content"], "document_id": item["document_id"],
                     "document_name": item["document_keyword"], "page": item.get("page_num"),
                     "score": item.get("similarity"), "chunk_id": item.get("chunk_id"),

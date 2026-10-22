@@ -123,6 +123,9 @@ class ContractIdentityMiddleware:
                 message = {**message, "headers": [*message.get("headers", []),
                     (b"x-rag-service-version", SERVICE_VERSION.encode()),
                     (b"x-rag-contract-version", API_CONTRACT_VERSION.encode())]}
+                if scope.get("path", "").startswith("/api/v1/"):
+                    message["headers"] = [(key, value) for key, value in message["headers"] if key.lower() != b"cache-control"]
+                    message["headers"].append((b"cache-control", b"no-store"))
             await send(message)
         await self.app(scope, receive, versioned_send)
 

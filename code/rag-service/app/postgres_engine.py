@@ -18,7 +18,7 @@ from pgvector.sqlalchemy import Vector
 
 from .config import settings
 from .database import ResourceError, database_url
-from .document_store import DocumentStore, utc_now
+from .document_store import DocumentStore, DocumentWithdrawn, utc_now
 from .embedding import EmbeddingClient, EmbeddingError
 from .parsing import ParseError, extract_pages
 from .lexical_index import TOKENIZER_VERSION, index_chunk, lexical_table, pending_chunks, query_expression
@@ -150,7 +150,11 @@ class PostgresEngine:
             self.vectors.add_documents(chunks, ids=chunk_ids)
             self.documents.set_stage(document_id, "indexing", "正在提交检索索引")
             with self.documents.engine.begin() as connection:
-                events = connection.execute(select(self.documents.table.c.events).where(self.documents.table.c.id == document_id).with_for_update()).scalar_one()
+                source = connection.execute(select(self.documents.table.c.events, self.documents.table.c.state).where(
+                    self.documents.table.c.id == document_id).with_for_update()).one()
+                if source.state == "withdrawn":
+                    raise DocumentWithdrawn("文档已撤回，不能发布索引")
+                events = source.events
                 if settings.RAG_SEARCH_MODE == "hybrid":
                     for chunk_id, chunk in zip(chunk_ids, chunks):
                         index_chunk(connection, self.lexical, uuid.UUID(chunk_id), chunk.page_content)
@@ -159,9 +163,44 @@ class PostgresEngine:
                     state="ready", stage="ready", chunk_count=len(chunks), updated_at=utc_now(),
                     events=[*events, {"stage": "ready", "label": "已完成，可开始问答", "at": utc_now().isoformat()}],
                 ))
+        except DocumentWithdrawn:
+            return
         except Exception as exc:
             message = str(exc) if isinstance(exc, ParseError) else "处理失败，请检查解析、向量服务或数据库连接后重试"
-            self.documents.set_stage(document_id, "failed", "处理失败", state="failed", error=message)
+            try:
+                self.documents.set_stage(document_id, "failed", "处理失败", state="failed", error=message)
+            except DocumentWithdrawn:
+                pass
+
+    def withdraw(self, document_id, *, expected_sha256, reason):
+        row = self.documents.withdraw(document_id, self.chunks, expected_sha256=expected_sha256, reason=reason)
+        return self.documents.public(row)
+
+    def current_evidence(self, items):
+        """Recheck cached multi-round evidence before publication.
+
+        This guards locally held candidates, not already delivered responses or
+        provider requests already in flight. External sources own their lifecycle.
+        """
+        external, keys = set(), set()
+        for index, item in enumerate(items):
+            if item.get("document_id", "").startswith("pkulaw:") and item.get("metadata", {}).get("source_type") == "pkulaw":
+                external.add(index)
+                continue
+            try:
+                keys.add(uuid.UUID(item["chunk_id"]))
+            except (KeyError, ValueError, TypeError, AttributeError):
+                continue
+        valid = set()
+        if keys:
+            d = self.documents.table
+            with self.documents.engine.begin() as connection:
+                connection.execute(text("SELECT set_config('statement_timeout', '10000', true)"))
+                valid = {(row.document_id, str(row.langchain_id)) for row in connection.execute(
+                    select(self.chunks.c.document_id, self.chunks.c.langchain_id).join(d, d.c.id == self.chunks.c.document_id).where(
+                        self.chunks.c.langchain_id.in_(keys), self.chunks.c.searchable.is_(True),
+                        self.chunks.c.embedding_model == settings.EMBEDDING_MODEL, d.c.state == "ready"))}
+        return [item for index, item in enumerate(items) if index in external or (item.get("document_id"), item.get("chunk_id")) in valid]
 
     def upload(self, *, scope, filename, content, content_type="application/octet-stream"):
         row, created = self.documents.create(filename, scope, content, content_type)
@@ -193,8 +232,8 @@ class PostgresEngine:
                 "reader_url": f"/api/v1/documents/{document_id}/content?chunk_id={document.id}",
             })
         if settings.RAG_SEARCH_MODE == "hybrid":
-            return fuse_channels(results, self._lexical_retrieve(query=query, scope=scope, top_k=top_k), top_k=top_k)
-        return results
+            results = fuse_channels(results, self._lexical_retrieve(query=query, scope=scope, top_k=top_k), top_k=top_k)
+        return self.current_evidence(results)
 
     def _require_lexical_ready(self):
         inspector = inspect(self.documents.engine)
@@ -237,7 +276,7 @@ class PostgresEngine:
 
     def content(self, document_id, chunk_id=None):
         row = self.documents.get(document_id)
-        if not row:
+        if not row or row["state"] == "withdrawn":
             return None
         focus = None
         if chunk_id:

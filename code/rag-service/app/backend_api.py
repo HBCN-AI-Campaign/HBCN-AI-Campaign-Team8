@@ -8,7 +8,8 @@ from typing import Literal
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
+from fastapi.encoders import jsonable_encoder
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
 from starlette.concurrency import run_in_threadpool
 
 from .answer_graph import build_answer_graph
@@ -20,6 +21,7 @@ from .schemas import AnswerResponse, RetrievalResponse
 from .evidence_context import utf16_units
 from .legal_applicability import LegalContext
 from .graph_transport import GraphRun
+from .document_store import DocumentConflict
 
 
 router = APIRouter(prefix="/api/v1")
@@ -141,6 +143,24 @@ def retry_document(document_id: str):
     return {"document": postgres_engine().retry(valid_uuid(document_id))}
 
 
+class DocumentWithdrawal(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    reason: Literal["superseded", "incorrect", "authorization_revoked", "quality_issue", "other"]
+
+
+@router.post("/documents/{document_id}/withdraw")
+def withdraw_document(document_id: str, payload: DocumentWithdrawal):
+    try:
+        document = postgres_engine().withdraw(valid_uuid(document_id), **payload.model_dump())
+    except LookupError:
+        raise HTTPException(404, "文档不存在") from None
+    except DocumentConflict:
+        raise HTTPException(409, "文档版本不匹配，请重新核对") from None
+    return JSONResponse(content=jsonable_encoder({"document": document}),
+                        headers={"Cache-Control": "no-store"})
+
+
 @router.get("/documents/{document_id}/content")
 def document_content(document_id: str, chunk_id: str | None = Query(default=None)):
     try:
@@ -156,7 +176,7 @@ def document_content(document_id: str, chunk_id: str | None = Query(default=None
 def document_source(document_id: str):
     engine = postgres_engine()
     row = engine.documents.get(valid_uuid(document_id))
-    if not row or not engine.documents.original_path(document_id).is_file():
+    if not row or row["state"] == "withdrawn" or not engine.documents.original_path(document_id).is_file():
         raise HTTPException(404, "原件不存在")
     is_pdf = Path(row["name"]).suffix.lower() == ".pdf"
     return FileResponse(

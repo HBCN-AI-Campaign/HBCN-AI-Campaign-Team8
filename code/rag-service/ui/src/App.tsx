@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { Bubble, Sender, ThoughtChain } from '@ant-design/x'
-import { Alert, Button, Checkbox, Collapse, ConfigProvider, Drawer, Empty, Input, Select, Space, Tag } from 'antd'
-import { answer, errorMessage, externalLink, getCapabilities, getContent, getDocument, getDocuments, originalPath, readerPath, retrieve, uploadDocument } from './api'
+import { Alert, Button, Checkbox, Collapse, ConfigProvider, Drawer, Empty, Input, Popconfirm, Select, Space, Tag } from 'antd'
+import { answer, errorMessage, externalLink, getCapabilities, getContent, getDocument, getDocuments, originalPath, readerPath, retrieve, uploadDocument, withdrawDocument } from './api'
 import type { Capabilities, DocumentContent, Evidence, KnowledgeDocument, LegalContext, Purpose, Request, Result, Scope, Step } from './api'
 
 interface Message { id: number; role: 'user' | 'assistant'; content: string; result?: Result; steps: Step[]; pending?: boolean; error?: string }
 const SCOPES = [{ value: 'all', label: '全部资料' }, { value: 'business_rules', label: '内部业务规则' }, { value: 'law', label: '法规' }, { value: 'project_design', label: '项目设计' }]
-const LEGAL_STATUS: Record<string, string> = { not_checked: '尚未核验', not_required: '本轮未要求法规核验', reference_only: '仅资料参考', legal_evidence_required: '缺少法规原文', context_required: '缺少本案条件', review_required: '需要法规复核记录', blocked: '适用条件未通过', reviewed_constraints_match: '已复核条件匹配，仍需业务审批' }
-const SOURCE_STATUS: Record<string, string> = { ok: '本次调用完成', partial: '部分完成', unavailable: '不可用', disabled: '未启用', time_budget: '时间预算耗尽', blocked_scope: '范围未授权' }
+const LEGAL_STATUS: Record<string, string> = { source_changed: '依据已变化，需要重新核验', not_checked: '尚未核验', not_required: '本轮未要求法规核验', reference_only: '仅资料参考', legal_evidence_required: '缺少法规原文', context_required: '缺少本案条件', review_required: '需要法规复核记录', blocked: '适用条件未通过', reviewed_constraints_match: '已复核条件匹配，仍需业务审批' }
+const SOURCE_STATUS: Record<string, string> = { changed: '依据已变化，需要重新检索', ok: '本次调用完成', partial: '部分完成', unavailable: '不可用', disabled: '未启用', time_budget: '时间预算耗尽', blocked_scope: '范围未授权' }
 
 function SourceReader({ source }: { source: Evidence }) {
   const [content, setContent] = useState<DocumentContent>()
@@ -91,6 +91,14 @@ function Library({ capabilities }: { capabilities: Capabilities }) {
     catch (error) { if (!controller.current?.signal.aborted) setError(errorMessage(error)) }
     finally { if (!controller.current?.signal.aborted) setBusy(false) }
   }
+  async function withdraw(document: KnowledgeDocument) {
+    setBusy(true); setError('')
+    try {
+      const result = await withdrawDocument(document, controller.current?.signal)
+      setActive(result.document); await refresh()
+    } catch (error) { if (!controller.current?.signal.aborted) setError(errorMessage(error)) }
+    finally { if (!controller.current?.signal.aborted) setBusy(false) }
+  }
   return <>
     <p>上传到选定共享知识范围；本入口尚不支持任务私有文件或历史案件。请先确认资料可在该知识库使用。</p>
     <Space wrap><Select aria-label="入库范围" value={scope} options={SCOPES.filter(option => option.value !== 'all')} onChange={setScope} disabled={busy} />
@@ -99,7 +107,10 @@ function Library({ capabilities }: { capabilities: Capabilities }) {
       <Button onClick={() => void refresh()}>刷新文档状态</Button></Space>
     {error && <Alert type="error" message={error} />}
     {active && <Alert type={active.state === 'failed' ? 'error' : 'info'} message={`${active.name}：${active.state} / ${active.stage || ''}`} description={active.error || '仅 ready 的文档可用于检索；关闭面板不会撤销已提交的入库任务。'} />}
-    <div className="document-list">{documents.map(doc => <article key={doc.id}><b>{doc.name}</b><p>{doc.scope} · {doc.state || doc.run || '状态未知'} · {doc.chunk_count ?? '未知'} 个片段</p></article>)}</div>
+    <div className="document-list">{documents.map(doc => <article key={doc.id}><b>{doc.name}</b><p>{doc.scope} · {doc.state === 'withdrawn' ? '已撤回' : doc.state || doc.run || '状态未知'} · {doc.chunk_count ?? '未知'} 个片段</p>
+      {doc.sha256 && doc.state !== 'withdrawn' && <Popconfirm title="确认撤回这份资料？" description="停止检索和原文访问，保留存档；恢复使用需要重新复核版本。" okText="确认撤回" cancelText="取消" onConfirm={() => withdraw(doc)}>
+        <Button danger disabled={busy}>撤回资料</Button></Popconfirm>}
+    </article>)}</div>
     {documents.length === 0 && <Empty description="尚无可展示的文档" />}
   </>
 }

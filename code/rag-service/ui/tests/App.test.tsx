@@ -3,10 +3,28 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import App from '../src/App'
 import * as api from '../src/api'
 import type { Result } from '../src/api'
-vi.mock('../src/api', async importOriginal => ({ ...(await importOriginal<typeof api>()), getCapabilities: vi.fn(), answer: vi.fn(), retrieve: vi.fn(), getContent: vi.fn() }))
+vi.mock('../src/api', async importOriginal => ({ ...(await importOriginal<typeof api>()), getCapabilities: vi.fn(), answer: vi.fn(), retrieve: vi.fn(), getContent: vi.fn(), getDocuments: vi.fn(), withdrawDocument: vi.fn() }))
 const caps = { workbench_contract_version: 1, engine: 'postgres', retrieval: true, answer_generation: true, enhanced_retrieval: true, external_law_mcp: true, document_ingestion: true, supported_scopes: ['law', 'business_rules', 'project_design'], max_upload_bytes: 1000, supported_file_extensions: ['.txt'] }
 const result = (name: string): Result => ({ query: name, answer: `${name}须核对[1]。`, sources: [{ citation: 1, document_id: name, document_name: name, content: `${name}原文<script>bad()</script>`, source_url: 'javascript:bad()', metadata: {} }], warnings: [], missing: [], source_status: { knowledge_base: 'ok' }, rerank_status: 'disabled', legal_applicability: { status: 'reference_only' }, retrieval_rounds: 1, stop_reason: 'sufficient', grounding: 'cited' })
 beforeEach(() => { vi.mocked(api.getCapabilities).mockResolvedValue(caps); vi.mocked(api.answer).mockReset(); vi.mocked(api.retrieve).mockReset() })
+
+it('requires confirmation before withdrawal and updates the document status', async () => {
+  const doc = { id: '11111111-1111-1111-1111-111111111111', name: '待撤回资料.txt', scope: 'business_rules' as const, state: 'ready', sha256: 'a'.repeat(64) }
+  vi.mocked(api.getDocuments).mockResolvedValue({ documents: [doc] })
+  vi.mocked(api.withdrawDocument).mockImplementation(async () => {
+    const withdrawn = { ...doc, state: 'withdrawn', stage: 'withdrawn' }
+    vi.mocked(api.getDocuments).mockResolvedValue({ documents: [withdrawn] })
+    return { document: withdrawn }
+  })
+  render(<App />); await screen.findByText(/服务接口可访问/)
+  fireEvent.click(screen.getByRole('button', { name: '资料入库' }))
+  fireEvent.click(await screen.findByRole('button', { name: '撤回资料' }))
+  expect(api.withdrawDocument).not.toHaveBeenCalled()
+  fireEvent.click(await screen.findByRole('button', { name: '确认撤回' }))
+  await screen.findByText(/待撤回资料.txt：withdrawn/)
+  expect(vi.mocked(api.withdrawDocument).mock.calls[0][0]).toEqual(doc)
+  await waitFor(() => expect(screen.queryByRole('button', { name: '撤回资料' })).toBeNull())
+})
 async function submit(text: string) {
   const input = await screen.findByRole('textbox', { name: '' })
   fireEvent.change(input, { target: { value: text } }); fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' })
