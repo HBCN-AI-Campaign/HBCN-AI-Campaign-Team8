@@ -1,0 +1,3 @@
+# Windows clones must keep deployable Linux scripts and units in LF format.
+scripts/*.sh text eol=lf
+deploy/*.service text eol=lf
