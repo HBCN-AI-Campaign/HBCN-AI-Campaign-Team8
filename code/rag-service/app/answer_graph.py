@@ -384,6 +384,7 @@ def build_answer_graph(engine, runtime=None, *, generate_answer=True, law_source
             result.pop("grounding")
             result["evidence_status"] = "sufficient" if state["sufficient"] else ("clarification" if clarification else "insufficient")
             result["missing"] = state.get("missing", [])
+            result["query_context"] = state["plan"].get("query_context", {})
         step("generate", "处理完成", "done")
         return {"result": result}
 

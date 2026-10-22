@@ -39,6 +39,8 @@ v1 保持路径、已有字段含义/类型、scope 和鉴权约定。新增可�
 
 `evidence_status` 为 sufficient/insufficient/clarification，联合查看 missing、stop_reason、clarification_question、warnings、source_status、rerank_status、context_coverage、legal_applicability。HTTP 200 只表示本轮得到业务结果，**不等于可以审批通过**；片段有来源不等于支持全部结论，来源失败不等于无相关法规。调用方保留这些限定，不仅取 content 后丢弃缺口。
 
+`/retrievals` 另返回 `query_context`：`user_statements[]` 为带 `slot/value/source/source_index/quote` 的用户陈述摘录，`unknown_slots[]` 表示未提供或仍不明确的槽位，`ambiguous_slots[]` 表示同一槽位有多个不同陈述。服务端校验每条 quote 是否存在于对应的当前问题或 user 会话消息、value 是否出现在 quote 中；`extraction_status=provenance_checked` 只表示该来源校验通过，不表示语义提取完整、陈述真实或法规适用。`partial` 表示部分摘录未能匹配而已丢弃，`unavailable` 表示规划器未返回该结构；旧兼容规划仍可返回检索结果，但调用方不得假定槽位已抽取。此字段只用于检索背景与澄清，不授予权限，也不代替原文证据。
+
 主站 `retrieve()` 校验消费字段的 v1 类型并接受新增字段；未知/缺失充分性、错误的 sources/missing 类型或“充分但没有原文”视为契约异常，不使用其中共享证据。主站把具体缺口、澄清问题、停止原因、轮次和来源/重排状态传给模型并显示概括限制；这些文字是检索数据，不能成为指令或已确认本案事实。原文引用代理、真实模型遵循和云端链路仍需独立验收。
 
 法宝仅在 scope=law/all、sources 显式包含 pkulaw、服务端授权配置启用时调用；默认关闭。`purpose=case_assessment` 必须提供经授权的 legal_context，并满足服务端法规复核；条件或有效依据不够时阻断本案结论。`case_reference`/`experience_memory` 为独立默认关闭的治理接口，尚不属于本增强来源列表，详见 [治理契约](../../docs/RAG案例与经验治理契约.md)。

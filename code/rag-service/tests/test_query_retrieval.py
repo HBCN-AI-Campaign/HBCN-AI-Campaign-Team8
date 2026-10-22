@@ -13,7 +13,13 @@ from app.retrieval_fusion import fuse_query_results
 
 
 def encoded_plan(*queries, **extra):
-    return json.dumps({"intent": "discrepancy", "queries": [{"text": text, "family": family} for text, family in queries], **extra}, ensure_ascii=False)
+    return json.dumps({
+        "intent": "discrepancy",
+        "queries": [{"text": text, "family": family} for text, family in queries],
+        "user_statements": [],
+        "unknown_slots": ["document_type", "field", "discrepancy_type", "amount", "currency", "subject", "business_date", "jurisdiction"],
+        **extra,
+    }, ensure_ascii=False)
 
 
 def assess(*, selected=(), rewrite="", missing=()):
@@ -71,6 +77,42 @@ class QueryPlanTests(unittest.TestCase):
         for role, expected in [("assistant", 1), ("user", 2)]:
             plan, _ = plan_question(query, [{"role": role, "content": "支付指令USD5000"}], runtime)
             self.assertEqual(len(plan.queries), expected)
+
+    def test_fact_slots_require_user_quotes_and_conflicts_remain_unknown(self):
+        runtime = Mock()
+        runtime.complete.return_value = encoded_plan(
+            user_statements=[
+                {"slot": "document_type", "value": "支付指令", "source": "user_history", "source_index": 0, "quote": "这是支付指令"},
+                {"slot": "amount", "value": "5000", "source": "user_history", "source_index": 0, "quote": "金额是 USD 5000"},
+                {"slot": "currency", "value": "USD", "source": "user_history", "source_index": 0, "quote": "金额是 USD 5000"},
+                {"slot": "currency", "value": "HKD", "source": "user_history", "source_index": 1, "quote": "不是 USD，是 HKD"},
+                {"slot": "subject", "value": "客户甲", "source": "user_history", "source_index": 0, "quote": "助手曾猜客户甲"},
+            ],
+            unknown_slots=["field", "discrepancy_type", "business_date", "jurisdiction"],
+        )
+        history = [
+            {"role": "user", "content": "这是支付指令，金额是 USD 5000"},
+            {"role": "assistant", "content": "我猜是客户甲"},
+            {"role": "user", "content": "不是 USD，是 HKD"},
+        ]
+
+        plan, warnings = plan_question("这笔金额为什么不对？", history, runtime)
+
+        self.assertEqual([item.slot for item in plan.user_statements], ["document_type", "amount", "currency", "currency"])
+        self.assertEqual(plan.query_context.extraction_status, "partial")
+        self.assertEqual(plan.query_context.ambiguous_slots, ["currency"])
+        self.assertIn("currency", plan.query_context.unknown_slots)
+        self.assertTrue(any("事实槽位无法与用户原文对应" in item for item in warnings))
+        self.assertFalse(plan.needs_clarification)
+
+    def test_missing_fact_slot_contract_is_visible_as_unavailable(self):
+        runtime = Mock()
+        runtime.complete.return_value = '{"intent":"rule","queries":[]}'
+
+        plan, warnings = plan_question("金额不一致如何核查？", [], runtime)
+
+        self.assertEqual(plan.query_context.extraction_status, "unavailable")
+        self.assertTrue(any("未返回结构化事实槽位" in item for item in warnings))
 
     def test_plan_is_strict_bounded_and_original_question_is_not_truncated(self):
         runtime = Mock()
@@ -203,12 +245,23 @@ class RetrievalGraphTests(unittest.TestCase):
     def test_authenticated_enhanced_endpoint_has_no_generated_answer(self):
         engine, runtime = Mock(), Mock()
         engine.retrieve.return_value = [evidence("A", "金额错误需重新提交")]
-        runtime.complete.side_effect = [encoded_plan(), assess(selected=[1])]
+        runtime.complete.side_effect = [
+            encoded_plan(user_statements=[{
+                "slot": "document_type", "value": "支付指令", "source": "current_query",
+                "source_index": None, "quote": "支付指令",
+            }]),
+            assess(selected=[1]),
+        ]
         with patch.object(settings, "SERVICE_TOKEN", "test-only"), patch("app.backend_api.postgres_engine", return_value=engine), patch("app.answer_graph.SDKRuntime", return_value=runtime):
             response = TestClient(app).post("/api/v1/retrievals", headers={"Authorization": "Bearer test-only"}, json={"query": "支付指令金额错误如何处理"})
         self.assertEqual(response.status_code, 200, response.text)
         self.assertNotIn("answer", response.json())
         self.assertEqual(response.json()["sources"][0]["content"], "金额错误需重新提交")
+        self.assertEqual(response.json()["query_context"]["extraction_status"], "provenance_checked")
+        statement = response.json()["query_context"]["user_statements"][0]
+        self.assertEqual(statement["source"], "current_query")
+        self.assertIsNone(statement["source_index"])
+        self.assertEqual(statement["quote"], "支付指令")
 
 
 if __name__ == "__main__":

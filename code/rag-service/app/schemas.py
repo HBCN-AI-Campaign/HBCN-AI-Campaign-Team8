@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .query_plan import QueryContext
+
 
 KnowledgeScope = Literal["business_rules", "project_design", "task_documents", "law", "all"]
 
@@ -99,3 +101,4 @@ class RetrievalResponse(BaseModel):
     rerank_status: str = "not_run"
     context_coverage: dict = Field(default_factory=dict)
     legal_applicability: dict = Field(default_factory=dict)
+    query_context: QueryContext = Field(default_factory=QueryContext)

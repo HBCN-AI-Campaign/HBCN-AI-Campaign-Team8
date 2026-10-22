@@ -8,7 +8,7 @@
 
 ## 一页现状
 
-持续优化入口：[优化规划 v3](../../docs/Agentic-RAG优化规划.md) 与 [执行台账](../../docs/RAG持续优化执行台账.md)。用户已授权按需求持续实现、测试、审查与迭代；R01–R17 各项以台账的实际证据为准。北大法宝只读适配源码已完成真实烟测，服务端默认未启用；专用重排契约已接入但模型未部署。下文区分历史已验收后端、本轮源码增量和仍待实现的完整目标。
+持续优化入口：[优化规划 v3](../../docs/Agentic-RAG优化规划.md) 与 [执行台账](../../docs/RAG持续优化执行台账.md)。用户已授权按需求持续实现、测试、审查与迭代；R01–R20 各项以台账的实际证据为准。北大法宝只读适配源码已完成真实烟测，服务端默认未启用；专用重排契约已接入但模型未部署。下文区分历史已验收后端、本轮源码增量和仍待实现的完整目标。
 
 | 项目 | 当前事实 |
 | --- | --- |
@@ -20,7 +20,7 @@
 | 尚未完成 | ECS 常驻部署、真实模型/索引/MCP/UI 完整验收、主站助手部署联调、任务级资料权限、完整法规服务 |
 | 原件位置 | 当前验收环境为本机 `data/originals/`；迁移时必须与数据库记录一起搬迁并备份 |
 
-本轮源码增量：首次结构化问题规划、原始事实查询保留、中英互补表达、查询族归一 RRF、空召回恢复、跨轮候选保留、查询/轮次/时间预算与停止原因；新增 `/api/v1/retrievals` 仅返回原文证据。测试和 2 个真实模型规划冒烟见执行台账，第二轮新增可切换的中文词法/向量混合及显式回填，实际 PostgreSQL 隔离合成测试通过，见 [第二轮验证](../../docs/RAG优化第二轮验证记录.md)。第三轮新增法宝与知识库多源归并、显式来源选择和专用重排契约，见 [第三轮验证](../../docs/RAG优化第三轮验证记录.md)；尚未宣告正式语料检索质量、真实重排模型、完整法规服务、UI 或共享部署验收完成。第四轮增加可追溯长文窗口、按字节分批与联合覆盖核对，真实 SDK 已取回长文末尾限制；具体局限见第四轮记录。第十七轮主站适配接入 `/retrievals` 原文证据和检索充分性状态，保留旧 `/query` 兼容；第十九轮传入最近 12 条 user/assistant 会话背景，支持多轮补充但不扩大权限或把历史消息当作证据；主站/云端联合验收仍待完成。
+本轮源码增量：首次结构化问题规划、原始事实查询保留、中英互补表达、查询族归一 RRF、空召回恢复、跨轮候选保留、查询/轮次/时间预算与停止原因；新增 `/api/v1/retrievals` 仅返回原文证据。测试和 2 个真实模型规划冒烟见执行台账，第二轮新增可切换的中文词法/向量混合及显式回填，实际 PostgreSQL 隔离合成测试通过，见 [第二轮验证](../../docs/RAG优化第二轮验证记录.md)。第三轮新增法宝与知识库多源归并、显式来源选择和专用重排契约，见 [第三轮验证](../../docs/RAG优化第三轮验证记录.md)；尚未宣告正式语料检索质量、真实重排模型、完整法规服务、UI 或共享部署验收完成。第四轮增加可追溯长文窗口、按字节分批与联合覆盖核对，真实 SDK 已取回长文末尾限制；具体局限见第四轮记录。第十七轮主站适配接入 `/retrievals` 原文证据和检索充分性状态，保留旧 `/query` 兼容；第十九轮传入最近 12 条 user/assistant 会话背景；第二十轮增加带用户原文来源索引的事实槽位和未知/歧义输出。真实模型、正式语料及主站/云端联合验收仍待完成。
 
 第十三轮补齐普通知识文档逻辑撤回：HTTP/React 确认、hash 绑定、事务关闭向量/词法可见性、原文拒读、在途入库发布屏障，以及跨轮候选和答复返回前复核。原件保留，未实现物理删除、跨系统缓存通知或案例依赖统一传播；详见[第十三轮验证](../../docs/RAG优化第十三轮验证记录.md)。
 
@@ -66,7 +66,7 @@ flowchart LR
   REFDB --> REFLIMIT[仅历史参考与计划建议<br/>尚未接入问答图 / 主站任务 ACL]
   API -->|切片向量化| EMB[汇丰百炼 Embedding]
   API --> CTRL[请求断开检测与工作线程<br/>连接清理 / 退出后释放名额]
-  CTRL --> GRAPH[LangGraph<br/>问题规划 / 多查询 / 覆盖检查 / 有限重检索]
+  CTRL --> GRAPH[LangGraph<br/>问题规划与用户事实槽位 / 多查询 / 覆盖检查 / 有限重检索]
   GRAPH --> VEC
   GRAPH -.配置 hybrid 且回填后启用.-> LEX[(PostgreSQL FTS + GIN<br/>版本化中文分词 / 同范围过滤)]
   VEC --> FUSION[源内通道 RRF + 查询族归并]
@@ -110,7 +110,7 @@ flowchart LR
 ```mermaid
 flowchart TB
   UI["React 工作台 / 主站助手 / 审核调用方<br/>明确用途与业务条件 / 按消息绑定引用"] --> API["服务入口：用户与任务授权、请求预算、追踪 ID"]
-  API --> PLAN["LangGraph 查询与行动计划<br/>意图 / 澄清 / 精确与泛化 / 多语言 / 子问题"]
+  API --> PLAN["LangGraph 查询与行动计划<br/>意图 / 可追溯用户事实槽位 / 未知与歧义 / 澄清 / 多语言查询"]
   subgraph SOURCES["授权来源：按需并行"]
     KB["内部规则与本地法规<br/>词法 + pgvector"]
     LAW["北大法宝来源适配<br/>MCP SDK / 只读白名单<br/>优先 search_article 与 get_article"]
@@ -137,7 +137,7 @@ flowchart TB
   CHECK -->|"明确缺口且有预算"| PLAN
   CHECK -->|"充分"| DRAFT["结构化结论 + 原文短引<br/>服务端渲染引用 / 局限单列"]
   DRAFT --> ANSWER["逐段原文支持核验<br/>精确短引锚点 / 编号与完整映射<br/>未通过则隐藏答复"]
-  CHECK -->|"增强检索调用"| EOUT["仅返回原文证据 R17<br/>充分性 / 缺口 / 来源 / 停止原因"]
+  CHECK -->|"增强检索调用"| EOUT["仅返回原文证据 R17<br/>充分性 / 缺口 / 来源 / 停止原因<br/>用户陈述摘录 / 未知槽位"]
   CHECK -->|"不充分或停止条件满足"| STOP["说明缺口 / 澄清 / 转人工"]
   MEM["经审批的经验记忆<br/>命名空间 / 版本 / 撤销与期限"] -. "只提供检索与处理建议" .-> PLAN
   RT["既有 OpenCode SDK / 汇丰 LLM<br/>受控调用，不自行开放全部 MCP 工具"] -. "推理与生成" .-> PLAN
@@ -323,7 +323,7 @@ Copy-Item .env.example .env
 
 scope 为 business_rules/project_design/law/all。conversation 最多12条 role(user/assistant) + content，仅用于补全指代，不作为事实依据。sources 返回引用编号、原文、document_id、chunk_id、物理 PDF 页码（Office/文本为 null）、原件/全文相对 URL。
 
-`/retrievals` 使用相同请求字段；返回 sources、evidence_status（sufficient/insufficient/clarification）、missing、stop_reason、retrieval_rounds、warnings 和可选 clarification_question，不返回 answer 或 grounding。部分相关原文可以与 insufficient 状态同时存在，调用方必须处理缺口，不能因 sources 非空就宣告依据充分。该接口用于后续主站接线，现有 `/query` 语义不变。
+`/retrievals` 使用相同请求字段；返回 sources、evidence_status（sufficient/insufficient/clarification）、missing、stop_reason、retrieval_rounds、warnings、可选 clarification_question 和 `query_context`，不返回 answer 或 grounding。`query_context` 保留带原文位置的用户陈述摘录、未知槽位和多值歧义；来源匹配通过不等于陈述真实或提取完整。部分相关原文可以与 insufficient 状态同时存在，调用方必须处理缺口，不能因 sources 非空就宣告依据充分。该接口用于后续主站接线，现有 `/query` 语义不变。
 
 源码默认每次至多 4 个初始表达（原问题＋优先保留通用/翻译分支），全程至多 6 次引擎检索、2 轮，问答总预算 240 秒、单次 SDK 90 秒。配置见 `.env.example` 的 RAG_MAX_QUERY_VARIANTS / RAG_MAX_RETRIEVAL_QUERIES / RAG_MAX_RETRIEVAL_ROUNDS / RAG_TOTAL_TIMEOUT_SECONDS；总预算在阶段边界检查并传给 SDK，不是对数据库驱动的强制取消。词法混合的实现与迁移见下节；跨源 rerank 与完整撤销治理仍在后续阶段。
 

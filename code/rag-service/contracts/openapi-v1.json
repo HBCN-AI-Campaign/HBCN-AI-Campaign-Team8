@@ -740,6 +740,67 @@
         "title": "QualityReview",
         "type": "object"
       },
+      "QueryContext": {
+        "additionalProperties": false,
+        "properties": {
+          "ambiguous_slots": {
+            "items": {
+              "enum": [
+                "document_type",
+                "field",
+                "discrepancy_type",
+                "amount",
+                "currency",
+                "subject",
+                "business_date",
+                "jurisdiction"
+              ],
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Ambiguous Slots",
+            "type": "array"
+          },
+          "extraction_status": {
+            "default": "unavailable",
+            "enum": [
+              "provenance_checked",
+              "partial",
+              "unavailable"
+            ],
+            "title": "Extraction Status",
+            "type": "string"
+          },
+          "unknown_slots": {
+            "items": {
+              "enum": [
+                "document_type",
+                "field",
+                "discrepancy_type",
+                "amount",
+                "currency",
+                "subject",
+                "business_date",
+                "jurisdiction"
+              ],
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Unknown Slots",
+            "type": "array"
+          },
+          "user_statements": {
+            "items": {
+              "$ref": "#/components/schemas/UserFactAssertion"
+            },
+            "maxItems": 16,
+            "title": "User Statements",
+            "type": "array"
+          }
+        },
+        "title": "QueryContext",
+        "type": "object"
+      },
       "QueryRequest": {
         "properties": {
           "query": {
@@ -1139,6 +1200,9 @@
             "title": "Query",
             "type": "string"
           },
+          "query_context": {
+            "$ref": "#/components/schemas/QueryContext"
+          },
           "rerank_status": {
             "default": "not_run",
             "title": "Rerank Status",
@@ -1194,6 +1258,66 @@
           "stop_reason"
         ],
         "title": "RetrievalResponse",
+        "type": "object"
+      },
+      "UserFactAssertion": {
+        "additionalProperties": false,
+        "properties": {
+          "quote": {
+            "maxLength": 400,
+            "minLength": 1,
+            "title": "Quote",
+            "type": "string"
+          },
+          "slot": {
+            "enum": [
+              "document_type",
+              "field",
+              "discrepancy_type",
+              "amount",
+              "currency",
+              "subject",
+              "business_date",
+              "jurisdiction"
+            ],
+            "title": "Slot",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "current_query",
+              "user_history"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "source_index": {
+            "anyOf": [
+              {
+                "maximum": 11.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Index"
+          },
+          "value": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slot",
+          "value",
+          "source",
+          "quote"
+        ],
+        "title": "UserFactAssertion",
         "type": "object"
       },
       "ValidationError": {
