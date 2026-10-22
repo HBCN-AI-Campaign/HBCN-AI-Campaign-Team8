@@ -34,8 +34,12 @@ class AssistantClient:
 
     async def contract(self) -> dict:
         result = await self._json('GET', 'contract')
-        if not str(result.get('contract_version', '')).startswith('1.'):
-            raise RuntimeError('Server does not provide the supported assistant V1 contract')
+        try:
+            version = tuple(int(part) for part in result['contract_version'].split('.'))
+        except (AttributeError, KeyError, TypeError, ValueError):
+            version = ()
+        if len(version) != 3 or any(part < 0 for part in version) or version < (1, 1, 0) or version[0] != 1:
+            raise RuntimeError('Server must provide assistant API >=1.1.0 within V1')
         return result
 
     async def capabilities(self) -> dict:

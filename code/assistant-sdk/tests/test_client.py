@@ -62,6 +62,20 @@ class ClientTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(RuntimeError):
                 await client.contract()
 
+    async def test_contract_check_requires_result_query_support_and_accepts_additive_versions(self):
+        for version in ('1.0.0', '1.invalid.0', '1.2', None, '1.2.-1'):
+            with self.subTest(version=version):
+                async with AssistantClient('https://site.example', 'jwt', transport=httpx.MockTransport(
+                    lambda _: httpx.Response(200, json={'contract_version': version})
+                )) as client:
+                    with self.assertRaises(RuntimeError):
+                        await client.contract()
+        for version in ('1.1.0', '1.2.0', '1.10.0'):
+            async with AssistantClient('https://site.example', 'jwt', transport=httpx.MockTransport(
+                lambda _: httpx.Response(200, json={'contract_version': version})
+            )) as client:
+                self.assertEqual((await client.contract())['contract_version'], version)
+
     async def test_saved_cursor_fetches_completed_result_without_replaying_or_posting(self):
         requests = []
         def handler(request):

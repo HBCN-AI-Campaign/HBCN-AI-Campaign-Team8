@@ -73,8 +73,6 @@ async def verify_site(site: str, owner_jwt: str, expert_jwt: str, task_code: str
         try:
             stage = 'contract'
             contract = await owner.contract()
-            minor = int(contract['contract_version'].split('.')[1])
-            require(minor >= 1, stage)
             stage = 'readiness'
             capabilities = await owner.capabilities()
             require(capabilities.get('configured') is True, stage)
