@@ -9,6 +9,7 @@ R03 通过（1000 万 ≤ 3000 万），R16 通过（汇款人 = 借款人）。
 """
 from .database import Base, SessionLocal, engine
 from .models import (
+    CheckResult,
     Customer,
     Document,
     DocumentType,
@@ -17,6 +18,7 @@ from .models import (
     TaskStatus,
     User,
 )
+from .rule_engine import run_all
 from .security import hash_password
 
 BORROWER = "XX铜版纸制造有限公司"
@@ -31,6 +33,26 @@ CUSTOMERS: list[tuple[str, str]] = [
     ("C0005", "恒通化工材料有限公司"),
     ("C0006", "远东精密机械制造有限公司"),
 ]
+
+
+def persist_initial_check_results(db, task: ReviewTask) -> int:
+    db.query(CheckResult).filter_by(task_id=task.id).delete()
+    persisted = 0
+    for result in run_all(task.documents):
+        if result.status.value == "skip":
+            continue
+        db.add(CheckResult(
+            task_id=task.id,
+            rule_id=result.rule_id,
+            rule_name=result.rule_name,
+            dimension=result.dimension,
+            status=result.status.value,
+            why=result.why,
+            suggestion=result.suggestion,
+            detail=result.detail,
+        ))
+        persisted += 1
+    return persisted
 
 
 def seed():
@@ -58,8 +80,14 @@ def seed():
 
         # --- 样本任务 ---
         code = "2026-0001"
-        if db.query(ReviewTask).filter_by(task_code=code).first():
-            print(f"· 任务 {code} 已存在，跳过")
+        existing_task = db.query(ReviewTask).filter_by(task_code=code).first()
+        if existing_task:
+            if not existing_task.results:
+                count = persist_initial_check_results(db, existing_task)
+                db.commit()
+                print(f"✓ 任务 {code} 已存在，已补齐 {count} 条规则核对结果")
+            else:
+                print(f"· 任务 {code} 已存在，跳过")
             return
 
         # 关联到第一条客户（借款人同名）
@@ -116,8 +144,10 @@ def seed():
                      }),
         ])
         db.add(task)
+        db.flush()
+        result_count = persist_initial_check_results(db, task)
         db.commit()
-        print(f"✓ 已创建样本任务 {code}（提款 USD 1000 万 / 授信段限 CNY → R04 应判不通过）")
+        print(f"✓ 已创建样本任务 {code}（提款 USD 1000 万 / 授信段限 CNY → R04 应判不通过，已生成 {result_count} 条规则核对结果）")
     finally:
         db.close()
 
