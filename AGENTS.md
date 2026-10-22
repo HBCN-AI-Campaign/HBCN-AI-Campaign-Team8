@@ -17,9 +17,9 @@
 
 - 后端：FastAPI + SQLAlchemy（Python）
 - 前端：Vite + React 18 + TypeScript + Ant Design 5；助手使用 Ant Design X
-- 两个核心模块当前是 **Mock 桩**，待协作实现：
-  - `code/backend/app/parse_agent.py` — 文件解析 Agent（OCR/LLM 识别字段 + 定位原文位置）
-  - `code/backend/app/review_agent.py` — 专项审核 Agent（节假日/汇率/提单验真/制裁名单/法规检索）
+- 核心模块当前状态：
+  - `code/backend/app/parse_agent.py` — 已接 OCR 服务 HTTP 接口，提取字段与原文位置；真实识别效果仍需联调验收。
+  - `code/backend/app/review_agent.py` — 专项审核 Agent 当前仍为 Mock 桩（节假日/汇率/提单验真/制裁名单/法规检索）。
 
 ## 技术选型铁律（全项目适用）
 

@@ -47,5 +47,9 @@ class Settings(BaseSettings):
     # Enhanced RAG has a bounded 240s internal budget; allow transport headroom.
     RAG_REQUEST_TIMEOUT: float = 300.0
 
+    # --- OCR 服务 ---
+    # 本地开发时在 .env 里设置为服务器地址；部署到同台服务器后默认值直接可用
+    OCR_BASE_URL: str = "http://127.0.0.1:7888"
+
 
 settings = Settings()

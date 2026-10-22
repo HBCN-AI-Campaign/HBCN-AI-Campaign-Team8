@@ -1,8 +1,13 @@
 """Exercise main's business changes alongside lfc's assistant in the real app."""
+import contextlib
+import io
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+import httpx
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -95,3 +100,46 @@ class MainLfcIntegrationTests(unittest.TestCase):
         self.assertEqual(data["customer_no"], "C0001")
         self.assertEqual(data["status"], "pending")
         self.assertFalse(data["needs_recheck"])
+
+    def test_uploaded_document_uses_ocr_and_keeps_the_parse_contract(self):
+        calls = []
+
+        def ocr(request):
+            calls.append(request)
+            return httpx.Response(200, json={
+                "text": "借款人：Integration Customer\n授信额度：1,000\n允许币种：USD",
+                "blocks": [{"text": "借款人：Integration Customer", "score": 0.98,
+                            "box": [0.1, 0.2, 0.6, 0.3], "page": 1}],
+            })
+
+        with tempfile.TemporaryDirectory(prefix="hbcn-merge-parse-") as temp:
+            uploads = Path(temp) / "uploads"
+            with httpx.Client(transport=httpx.MockTransport(ocr)) as transport, patch(
+                "app.parse_agent.httpx.post", side_effect=transport.post
+            ), patch("app.config.UPLOAD_DIR", uploads), patch("app.parse_agent.UPLOAD_DIR", uploads), patch(
+                "app.parse_agent.settings.OCR_BASE_URL", "http://ocr-service"
+            ):
+                response = self.client.post("/api/tasks/parse", headers=self.operator,
+                    files={"files": ("facility_letter.pdf", b"isolated OCR fixture", "application/pdf")})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(str(calls[0].url), "http://ocr-service/file/detailed")
+        data = response.json()
+        self.assertEqual(data["suggested_customer_no"], "C0001")
+        self.assertEqual(data["suggested_borrower"], "Integration Customer")
+        fields = {field["key"]: field for field in data["documents"][0]["fields"]}
+        self.assertEqual(fields["facility_amount"]["value"], 1000.0)
+        self.assertEqual(fields["borrower"]["source"]["page"], 1)
+        self.assertTrue(data["documents"][0]["pdf_file"].startswith("uploads/"))
+
+    def test_seed_creates_initial_rule_results_and_is_repeatable(self):
+        from app.seed import seed
+
+        with patch("app.seed.engine", self.engine), patch("app.seed.SessionLocal", self.sessions), contextlib.redirect_stdout(io.StringIO()):
+            seed()
+            seed()
+        with self.sessions() as db:
+            tasks = db.query(models.ReviewTask).filter_by(task_code="2026-0001").all()
+            self.assertEqual(len(tasks), 1)
+            self.assertTrue(tasks[0].results)
+            self.assertEqual(tasks[0].status, models.TaskStatus.PENDING)
