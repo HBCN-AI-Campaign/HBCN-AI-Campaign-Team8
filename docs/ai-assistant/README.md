@@ -140,14 +140,16 @@ RAG 按现有接口检索共享资料；任务概要、字段/规则结果先经
 4. code/frontend：npm ci、npm run dev。端口变化在忽略提交的 .env.local 设置 HBCN_API_TARGET；生产 npm run build，静态服务设 SPA 回退及 /api 代理，SSE 关闭缓冲。
 5. **当前单 API 实例/单 worker**：数据库保存事件/唯一运行槽，执行与取消仍是进程内 asyncio 任务。多实例须先引入持久队列及跨进程取消验证。SQLite 用于本机演示；真实 PostgreSQL/ECS 另做环境验收。
 
-Linux 发布者使用[助手部署交付](../../code/assistant-runtime/deploy/README.md)：固定版本构建、systemd 模板、只读预检和回滚。预检 `python -m app.assistant_preflight --require-rag` 检查现有表/迁移/运行唯一约束及内部服务鉴权，不改库、不消耗模型请求。runtime 新增带 token 的 /readyz；capabilities 同时检查 RAG 既有 /api/v1/ready，不再用公开存活接口代替授权就绪。升级后端时需同时发布此版 runtime。
+用户指定继续使用已有汇丰云主站。2026-10-22 SSH 只读核对：Ubuntu 24.04，React 前端监听 80、主业务 API 8000；助手路由、助手表与 runtime 尚未部署。现有网站在线不能据此算助手已上线。[助手部署交付](../../code/assistant-runtime/deploy/README.md)记录了实际环境、增量发布范围、两种本机启动方式和 Linux systemd 模板。未改动云端运行文件或业务库。
+
+预检 `python -m app.assistant_preflight --require-rag` 检查现有表/迁移/运行唯一约束及内部服务鉴权，不改库、不消耗模型请求。首次迁移可从只有业务表的环境创建所有助手表，也兼容已有单人助手数据。runtime 带 token 的 `/readyz` 和每轮请求采用 `assistant_protocol: 2`；capabilities 与实际 AI 运行都会检查该协议，旧进程不能冒充当前就绪。升级后端时需同时发布此版 runtime。RAG 仍使用其既有 `/api/v1/ready`，不拿公开存活接口代替授权就绪。
 
 没有汇丰授权配置的电脑不能直接请求模型；拉取可部署不等于把私密 key 随仓库分发。RAG/OCR/业务审核部署由对应模块负责。
 
 ## 7. 验证与文档维护
 
 ~~~text
-code/backend:           python -m unittest tests.test_assistant_api tests.test_assistant_collaboration
+code/backend:           python -m unittest tests.test_assistant_api tests.test_assistant_collaboration tests.test_assistant_evidence tests.test_assistant_preflight
 code/frontend:          npm test && npm run build
 code/assistant-runtime: bun test && bun run typecheck
 code/backend:           python -m alembic -c assistant-alembic.ini upgrade head
@@ -155,6 +157,6 @@ code/backend:           python -m alembic -c assistant-alembic.ini upgrade head
 
 测试覆盖权限、撤权、幂等、并发拒绝、取消/超时、作者、旧消息、技能和 React 邀请/轨迹/异常；mock 不代替真实链路。本机另用汇丰 qwen3.8-flash 完成真实问答（约 11.6 / 16 秒），以及隔离双 JWT 账号的真实模型协作验收（约 12.9 秒）。后端显式执行 python -m tests.live_assistant_acceptance --live 可重做后一项：仅用临时库与合成数据，直接调用真实 ASGI 路由，模型走真实 HTTP；不等于双浏览器/反向代理验收。结果与待办见[当前修改规划](持续优化实施规划.md)。
 
-最新回归：后端 **43**、前端 **19** 项通过，前端构建通过；runtime 在 Windows 与本机 Ubuntu/Linux 各 **3 项 / 42 断言**通过，包含无项目 node_modules 的独立发布包，类型检查/构建通过。Linux systemd 模板已用临时路径离线校验，未安装服务。本机双登录页面已通过真实 HTTP/汇丰模型的邀请、历史共享、具名讨论、共同问答及撤权清屏。可用 --browser-fixture 重做，步骤见当前修改规划；这仍不等于 Docker、比赛 ECS、真实 PostgreSQL 或两台团队电脑验收。
+最新回归：本轮后端 **56 项**通过，包含仅业务库首次迁移、协议/鉴权与引用校验；前端本轮生产构建通过、上一轮 **20 项分批回归**通过；runtime 在 Windows 与本机 Ubuntu/Linux 各 **3 项 / 52 断言**通过，包含无项目 node_modules 的独立发布包，类型检查/构建通过。最新真实汇丰多人 API 与任务事实/引用复测约 **21.7 秒**通过。Linux systemd 模板已离线校验，未安装服务。本机双登录页面已通过真实 HTTP/汇丰模型的邀请、历史共享、具名讨论、共同问答及撤权清屏，可用 --browser-fixture 重做；仍不等于 Docker、云端助手、真实 PostgreSQL 或两台团队电脑验收。
 
 维护三层：[本文](README.md)说当前是什么；[修改规划](持续优化实施规划.md)记录本轮实现和验证；[决策记录](决策记录.md)解释长期取舍。接口/行为落地时同步，不按日期复制。[早期调研](多人协作AI对话调研与优化方案.md)与[旧交接](开发记录与交接.md)是历史，遇冲突以当前代码和本文为准。
