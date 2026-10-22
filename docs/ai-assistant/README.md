@@ -34,7 +34,7 @@ flowchart LR
   API --> ACL[审核角色 AND 成员身份 AND 现有任务权限]
   ACL --> DB[(会话 / 作者 / 运行 / 事件 / 审计)]
   API --> TASK[获准的任务字段 / 规则结果]
-  API --> RAG[RAGClient · 现有知识库接口]
+  API --> RAG[assistant_knowledge · 业务规则检索]
   API -->|本轮授权上下文 · 私网 token| RT[独立 runtime / OpenCode SDK]
   RT -->|服务端 HSBC key| HSBC[汇丰模型 API]
   RT --> TOOL[只读授权证据工具]
@@ -49,7 +49,7 @@ flowchart LR
 | 页面适配 | useAssistant.ts、collaboration.ts | JWT 请求、状态、断线回放和目录同步；不做权限决策 |
 | 对外边界 | assistant_contract.py、assistant-sdk/hbcn_assistant | V1 版本声明、独立 HTTP SDK、OpenAPI 契约回归；旧路径兼容 |
 | 业务边界 | routers/assistant*.py、assistant_collaboration.py | 会话/任务鉴权、运行调度、持久事件、审计 |
-| 证据与回答 | assistant_service.py、既有 rag_service.py | 任务证据、知识检索、专家候选和答复校验；不修改审核状态 |
+| 证据与回答 | assistant_service.py、assistant_knowledge.py | 任务证据、仅业务规则知识检索、专家候选和答复校验；不修改审核状态或 RAG 实现 |
 | Agent 执行 | code/assistant-runtime、OpenCode SDK 2.0.32 | 仅本轮只读工具；不直接读业务库或任意业务文件 |
 | 数据 | assistant_models.py、独立 Alembic 迁移 | 新增助手专属表，不改队友任务表或 RAG 数据层 |
 
@@ -119,6 +119,8 @@ RAG 按现有接口检索共享资料；任务概要、字段/规则结果先经
 
 ## 5. 同学如何调用
 
+审核知识检索策略：助手侧 `assistant_knowledge.py` 仅调用现有 `POST /api/v1/query` 的 `business_rules` 范围，不混入 `project_design`。响应范围、片段结构不符合契约时保留授权任务证据并显示知识库限制；未声称任务级检索、商业法规或增强 `/retrievals` 已联通。共享 `rag_service.py` 留给其模块维护，本轮只更新该测试文件中针对助手调用的 mock 位置。
+
 页面入口：/assistant?task_code=任务编号，或 /assistant?session_id=会话ID。ID 不授予访问权。所有 API 均要求 Authorization: Bearer 业务JWT。
 
 | API（前缀 /api/assistant/v1；原路径兼容） | 用途 |
@@ -158,7 +160,7 @@ RAG 按现有接口检索共享资料；任务概要、字段/规则结果先经
 ## 7. 验证与文档维护
 
 ~~~text
-code/backend:           python -m unittest tests.test_assistant_api tests.test_assistant_collaboration tests.test_assistant_evidence tests.test_assistant_preflight tests.test_assistant_contract tests.test_rag_service
+code/backend:           python -m unittest tests.test_assistant_api tests.test_assistant_collaboration tests.test_assistant_evidence tests.test_assistant_preflight tests.test_assistant_contract tests.test_assistant_knowledge tests.test_rag_service
 code/backend:           python -m unittest discover -s ../assistant-sdk/tests
 code/frontend:          npm test && npm run build
 code/assistant-runtime: bun test && bun run typecheck
@@ -167,6 +169,6 @@ code/backend:           python -m alembic -c assistant-alembic.ini upgrade head
 
 测试覆盖权限、撤权、幂等、并发拒绝、取消/超时、作者、旧消息、技能和 React 邀请/轨迹/异常；mock 不代替真实链路。本机另用汇丰 qwen3.8-flash 完成真实问答（约 11.6 / 16 秒），以及隔离双 JWT 账号的真实模型协作验收（约 12.9 秒）。后端显式执行 python -m tests.live_assistant_acceptance --live 可重做后一项：仅用临时库与合成数据，直接调用真实 ASGI 路由，模型走真实 HTTP；不等于双浏览器/反向代理验收。结果与待办见[当前修改规划](持续优化实施规划.md)。
 
-最新一轮：后端 **75 项**、独立 SDK **7 项**通过；契约/SDK **1.1.0** 增加只读运行结果与保存游标后的结果恢复，最终事件/历史/查询消息统一 DTO 和 UTC。汇丰 **qwen3.8-flash** 经 V1 与 SDK 的隔离验收约 **18.6 秒**，按运行取回同一答案、游标恢复、幂等、字段/引用及撤权通过。模型走真实 HTTP，业务 API 使用 ASGITransport，不代替浏览器/云端验收。前一轮前端 **26 项 + 构建**和干净环境 SDK wheel 安装已通过，本轮未改前端；此前 Windows/Linux runtime 各 **3 项 / 52 断言**通过，本轮未改 runtime。Linux systemd 模板已离线校验，未安装服务。云端助手、真实 PostgreSQL、多台团队电脑验收仍待完成。
+最新一轮：后端 **81 项**通过，新增业务规则范围/响应校验测试；汇丰模型在知识库未就绪时用授权任务证据完成隔离验收约 **10.7 秒**。本机 8010 缺少 ready、8011 不可达，未宣称真实检索成功。上一轮独立 SDK **7 项**通过；契约/SDK **1.1.0** 增加只读运行结果与保存游标后的结果恢复，最终事件/历史/查询消息统一 DTO 和 UTC。汇丰 **qwen3.8-flash** 经 V1 与 SDK 的隔离验收约 **18.6 秒**，按运行取回同一答案、游标恢复、幂等、字段/引用及撤权通过。模型走真实 HTTP，业务 API 使用 ASGITransport，不代替浏览器/云端验收。前一轮前端 **26 项 + 构建**和干净环境 SDK wheel 安装已通过，本轮未改前端；此前 Windows/Linux runtime 各 **3 项 / 52 断言**通过，本轮未改 runtime。Linux systemd 模板已离线校验，未安装服务。云端助手、真实 PostgreSQL、多台团队电脑验收仍待完成。
 
 维护三层：[本文](README.md)说当前是什么；[修改规划](持续优化实施规划.md)记录本轮实现和验证；[决策记录](决策记录.md)解释长期取舍。接口/行为落地时同步，不按日期复制。[早期调研](多人协作AI对话调研与优化方案.md)与[旧交接](开发记录与交接.md)是历史，遇冲突以当前代码和本文为准。
