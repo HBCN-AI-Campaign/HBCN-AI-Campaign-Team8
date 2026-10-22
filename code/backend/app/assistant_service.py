@@ -17,6 +17,7 @@ from typing import Any
 from . import models
 from .assistant_models import AssistantExpertProfile, AssistantMessageAuthor, AssistantRun
 from .assistant_evidence import cited_sources, prepare_evidence
+from .assistant_readiness import ASSISTANT_PROTOCOL, runtime_readiness, runtime_problem
 from .assistant_skills import get_skill
 from .config import settings
 
@@ -265,25 +266,31 @@ async def run_agent_events(
         yield {"event": "warning", "message": "OpenCode runtime 或汇丰模型 API 配置未完成"}
         yield {"event": "assistant_result", "answer": None, "citations": []}
         return
-    # Retrieval warnings are public evidence limits, never internal reasoning.
-    retrieval_warnings: list[str] = []
-    retrieved = await asyncio.to_thread(_rag_search, context, message, retrieval_warnings)
-    evidence = prepare_evidence(retrieved, context.get("expert_candidates", []))
-    if (len(context.get('documents', [])) + len(context.get('results', [])) > 7
-            or len(evidence) < len(retrieved) + len(context.get('expert_candidates', []))
-            or any(len(str(item.get('text') or '')) > 4000 for item in retrieved)):
-        retrieval_warnings.append("本轮只提供部分授权材料片段；未覆盖全部单据与规则，请缩小问题范围或人工复核遗漏项。")
-    for index, warning in enumerate(retrieval_warnings):
-        yield {"event": "step", "step": {"key": f"retrieval-warning-{index}",
-               "label": "知识库检索提示", "detail": warning, "status": "error"}}
     try:
         timeout = httpx.Timeout(settings.AI_REQUEST_TIMEOUT, connect=5.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
+            readiness = await runtime_readiness(client, settings.ASSISTANT_RUNTIME_URL, settings.ASSISTANT_RUNTIME_TOKEN)
+            if not readiness['ready']:
+                yield {"event": "warning", "message": runtime_problem(readiness['code'])}
+                yield {"event": "assistant_result", "answer": None, "citations": []}
+                return
+            # Check the runtime before starting any external retrieval work.
+            retrieval_warnings: list[str] = []
+            retrieved = await asyncio.to_thread(_rag_search, context, message, retrieval_warnings)
+            evidence = prepare_evidence(retrieved, context.get("expert_candidates", []))
+            if (len(context.get('documents', [])) + len(context.get('results', [])) > 7
+                    or len(evidence) < len(retrieved) + len(context.get('expert_candidates', []))
+                    or any(len(str(item.get('text') or '')) > 4000 for item in retrieved)):
+                retrieval_warnings.append("本轮只提供部分授权材料片段；未覆盖全部单据与规则，请缩小问题范围或人工复核遗漏项。")
+            for index, warning in enumerate(retrieval_warnings):
+                yield {"event": "step", "step": {"key": f"retrieval-warning-{index}",
+                       "label": "知识库检索提示", "detail": warning, "status": "error"}}
             async with client.stream(
                 "POST",
                 f"{settings.ASSISTANT_RUNTIME_URL.rstrip('/')}/runs",
                 headers={"Authorization": f"Bearer {settings.ASSISTANT_RUNTIME_TOKEN}"},
                 json={
+                    "assistant_protocol": ASSISTANT_PROTOCOL,
                     "message": message,
                     "instructions": instructions,
                     "conversation": [
@@ -406,6 +413,7 @@ async def stream_assistant(
                          "status": "completed", "steps": [], "citations": []},
     }
     answer: str | None = None
+    failure_detail: str | None = None
     # One entry per business operation; later events update its persisted state.
     runtime_steps: dict[str, dict[str, Any]] = {}
     tool_steps: dict[str, dict[str, Any]] = {}
@@ -441,6 +449,7 @@ async def stream_assistant(
             }
             yield event
         elif event.get("event") == "warning":
+            failure_detail = event.get("message")
             warning_step = {
                 "key": "model-warning",
                 "label": "模型服务提示",
@@ -454,7 +463,7 @@ async def stream_assistant(
     if not answer:
         yield {
             "event": "error",
-            "message": "助手未能生成答复。请确认 OpenCode runtime 和汇丰模型 API 可用后重试。",
+            "message": failure_detail or "助手未能生成答复。请确认 OpenCode runtime 和汇丰模型 API 可用后重试。",
         }
         return
     disclaimer = "\n\n以上为审核辅助意见，不是贷款最终审批决定，请由有权限的审核人员复核。"

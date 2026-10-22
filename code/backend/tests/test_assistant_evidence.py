@@ -6,6 +6,7 @@ from unittest.mock import patch
 import httpx
 
 from app.assistant_evidence import cited_sources, prepare_evidence
+from app.assistant_readiness import ASSISTANT_PROTOCOL
 from app.assistant_service import run_agent_events, search_evidence
 
 
@@ -42,6 +43,8 @@ class AssistantEvidenceTests(unittest.TestCase):
 
     async def collect(self, answer, *, tool=True, sources=None, warnings=None, context=None):
         async def handler(request):
+            if request.url.path == '/readyz':
+                return httpx.Response(200, json={'status': 'ready', 'configured': True, 'assistant_protocol': ASSISTANT_PROTOCOL})
             self.submitted = json.loads(request.content)
             events = ([{'event': 'tool', 'tool': {'status': 'completed'}}] if tool else []) + [
                 {'event': 'assistant_result', 'answer': answer}]
@@ -55,6 +58,7 @@ class AssistantEvidenceTests(unittest.TestCase):
             'app.assistant_service._rag_search', side_effect=retrieve
         ), patch('app.assistant_service.sdk_configured', return_value=True), patch(
             'app.assistant_service.settings.ASSISTANT_RUNTIME_URL', 'http://runtime'
+        ), patch('app.assistant_service.settings.ASSISTANT_RUNTIME_TOKEN', 'test-runtime-token'
         ):
             return [event async for event in run_agent_events('核对合成资料', context or {})]
 
@@ -92,3 +96,25 @@ class AssistantEvidenceTests(unittest.TestCase):
             context={'expert_candidates': [{'type': 'expert', 'id': 'expert:1', 'text': '个人介绍'}]}))
         self.assertEqual(next(event['tool']['result_count'] for event in events if event['event'] == 'tool'), 1)
         self.assertTrue(any('部分授权材料片段' in event.get('step', {}).get('detail', '') for event in events))
+
+    def test_incompatible_runtime_is_blocked_before_posting_a_model_run(self):
+        for code in ('protocol_mismatch', 'token_rejected', 'contract_missing'):
+            with self.subTest(code=code):
+                requests = []
+                async def handler(request):
+                    requests.append(request.method)
+                    raise AssertionError('No run should be sent to an incompatible runtime')
+                async def collect():
+                    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+                    with patch('app.assistant_service.httpx.AsyncClient', return_value=client), patch(
+                        'app.assistant_service.sdk_configured', return_value=True
+                    ), patch('app.assistant_service._rag_search', return_value=[]) as retrieval, patch(
+                        'app.assistant_service.runtime_readiness', return_value={'ready': False, 'code': code}
+                    ):
+                        events = [event async for event in run_agent_events('test', {})]
+                        retrieval.assert_not_called()
+                        return events
+                events = asyncio.run(collect())
+                self.assertEqual(requests, [])
+                self.assertEqual(events[0]['event'], 'warning')
+                self.assertIsNone(events[-1]['answer'])

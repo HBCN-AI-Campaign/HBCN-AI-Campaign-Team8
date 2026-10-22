@@ -22,7 +22,7 @@ from ..assistant_schemas import (
     AssistantSkillOut,
 )
 from ..assistant_service import _safe_final_answer, sdk_configured, stream_assistant, task_for_user
-from ..assistant_readiness import rag_readiness, runtime_readiness
+from ..assistant_readiness import rag_readiness, runtime_readiness, runtime_problem
 from ..assistant_skills import get_skill, list_skills
 from ..config import settings
 from ..database import get_db
@@ -80,10 +80,8 @@ async def capabilities(user: models.User = Depends(get_current_user)):
     assistant_available = sdk_configured() and runtime_available
     if not sdk_configured():
         message = "OpenCode runtime 或汇丰模型 API 配置未完成"
-    elif runtime_info["code"] == "token_rejected":
-        message = "助手内部服务鉴权失败，请检查后端与 runtime 的令牌是否一致"
     elif not runtime_available:
-        message = "OpenCode runtime 未就绪，请检查运行时和汇丰模型配置"
+        message = runtime_problem(runtime_info['code'])
     elif settings.RAG_BASE_URL and not rag_available:
         message = "助手可用；知识库尚未通过鉴权就绪检查，检索结果可能受限"
     elif rag_available:

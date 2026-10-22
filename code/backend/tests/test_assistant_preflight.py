@@ -11,7 +11,9 @@ from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 
 from app.assistant_preflight import check_database, preflight
+from app.assistant_readiness import ASSISTANT_PROTOCOL, runtime_readiness
 from app.config import settings
+from app import models
 from app.database import Base
 
 
@@ -52,6 +54,26 @@ class AssistantPreflightTests(unittest.TestCase):
         self.assertFalse(absent.exists())
         self.assertNotIn(str(absent), json.dumps(report))
 
+    def test_first_install_on_business_only_database_creates_all_assistant_tables_without_startup(self):
+        Base.metadata.drop_all(self.engine)
+        business = [models.User.__table__, models.ReviewTask.__table__, models.Document.__table__, models.CheckResult.__table__]
+        for table in business:
+            table.create(self.engine)
+        def business_schema():
+            return {table.name: [(col['name'], str(col['type']), col['nullable'], col.get('default'), col.get('primary_key'))
+                                 for col in inspect(self.engine).get_columns(table.name)] for table in business}
+        before = business_schema()
+        with self.engine.begin() as connection:
+            connection.execute(models.User.__table__.insert().values(
+                username='migration-sentinel', display_name='Synthetic', hashed_password='not-a-login', role=models.Role.REVIEWER))
+        self.assertFalse(any(name.startswith('assistant_') for name in inspect(self.engine).get_table_names()))
+        self.migrate()
+        self.migrate()
+        self.assertTrue(check_database(self.url)['ready'])
+        self.assertEqual(before, business_schema())
+        with self.engine.connect() as connection:
+            self.assertEqual(connection.execute(text('SELECT username FROM users')).scalar(), 'migration-sentinel')
+
     def test_existing_migration_stamp_cannot_hide_missing_run_constraints(self):
         self.migrate()
         with self.engine.begin() as conn:
@@ -77,7 +99,7 @@ class AssistantPreflightTests(unittest.TestCase):
         requests = []
         def handler(request):
             requests.append((request.method, request.url.path, request.headers.get('Authorization')))
-            return httpx.Response(200, json={'status': 'ready', 'configured': True, 'model': 'test-model'})
+            return httpx.Response(200, json={'status': 'ready', 'configured': True, 'model': 'test-model', 'assistant_protocol': ASSISTANT_PROTOCOL})
         with patch.object(settings, 'DATABASE_URL', self.url), patch.object(settings, 'ASSISTANT_RUNTIME_URL', 'http://runtime'), patch.object(
             settings, 'ASSISTANT_RUNTIME_TOKEN', 'private-runtime-token'
         ), patch.object(settings, 'RAG_BASE_URL', 'http://rag'), patch.object(settings, 'RAG_SERVICE_TOKEN', 'private-rag-token'):
@@ -98,3 +120,33 @@ class AssistantPreflightTests(unittest.TestCase):
         self.assertFalse(report['ready'])
         self.assertNotIn('private-', json.dumps(report))
         self.assertNotIn(str(self.path), json.dumps(report))
+
+
+class AssistantRuntimeReadinessTests(unittest.TestCase):
+    def test_old_missing_and_invalid_protocols_cannot_claim_ready(self):
+        async def probe(protocol):
+            def handler(request):
+                payload = {'status': 'ready', 'configured': True, 'model': 'private-model'}
+                if protocol is not None:
+                    payload['assistant_protocol'] = protocol
+                return httpx.Response(200, json=payload)
+            async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+                return await runtime_readiness(client, 'http://runtime', 'private-token')
+        for protocol in (None, 1, 3, True, '2', 2.0):
+            with self.subTest(protocol=protocol):
+                self.assertEqual(asyncio.run(probe(protocol)), {'ready': False, 'code': 'protocol_mismatch', 'model': None})
+        self.assertTrue(asyncio.run(probe(ASSISTANT_PROTOCOL))['ready'])
+
+    def test_missing_endpoint_and_invalid_body_have_redacted_diagnostics(self):
+        async def probe(status, body):
+            async with httpx.AsyncClient(transport=httpx.MockTransport(
+                lambda request: httpx.Response(status, text=body)
+            )) as client:
+                return await runtime_readiness(client, 'http://private-endpoint', 'private-token')
+        for status, body, code in ((404, 'private upstream detail', 'contract_missing'),
+                                   (405, '', 'contract_missing'), (200, 'private invalid body', 'unreachable_or_invalid')):
+            with self.subTest(status=status):
+                report = asyncio.run(probe(status, body))
+                self.assertFalse(report['ready'])
+                self.assertEqual(report['code'], code)
+                self.assertNotIn('private', json.dumps(report))

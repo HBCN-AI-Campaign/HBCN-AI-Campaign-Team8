@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from app import models
 from app.assistant_service import _rag_search, _safe_final_answer, _strip_tool_echo, run_agent_events
+from app.assistant_readiness import ASSISTANT_PROTOCOL
 from app.database import Base, get_db
 from app.routers.assistant import router
 from app.security import create_access_token, hash_password
@@ -149,6 +150,8 @@ class AssistantApiTests(unittest.TestCase):
         ]
 
         async def response_handler(request):
+            if request.url.path == '/readyz':
+                return httpx.Response(200, json={'status': 'ready', 'configured': True, 'assistant_protocol': ASSISTANT_PROTOCOL})
             body = "".join(f"data: {json.dumps(item)}\n\n" for item in payloads)
             return httpx.Response(200, content=body.encode())
 
@@ -223,7 +226,7 @@ class AssistantApiTests(unittest.TestCase):
                 self.assertEqual(request.headers.get("Authorization"), "Bearer runtime-token")
                 return httpx.Response(
                     200,
-                    json={"status": "ready", "configured": True, "model": "qwen3.8-flash"},
+                    json={"status": "ready", "configured": True, "model": "qwen3.8-flash", "assistant_protocol": ASSISTANT_PROTOCOL},
                 )
             if request.url.path == "/api/v1/ready":
                 self.assertEqual(request.headers.get("Authorization"), "Bearer rag-token")
@@ -274,7 +277,7 @@ class AssistantApiTests(unittest.TestCase):
         real_client = httpx.AsyncClient
         def handler(request):
             if request.url.path == '/readyz':
-                return httpx.Response(200, json={'status': 'ready', 'configured': True, 'model': 'test-model'})
+                return httpx.Response(200, json={'status': 'ready', 'configured': True, 'model': 'test-model', 'assistant_protocol': ASSISTANT_PROTOCOL})
             if request.url.path == '/health':
                 return httpx.Response(200, json={'status': 'ok'})
             return httpx.Response(401, json={'detail': 'private RAG error'})
@@ -287,6 +290,29 @@ class AssistantApiTests(unittest.TestCase):
         self.assertTrue(response.json()['configured'])
         self.assertFalse(response.json()['rag_available'])
         self.assertNotIn('private RAG error', response.text)
+
+    def test_stale_runtime_is_not_ready_and_send_error_keeps_actionable_diagnosis(self):
+        import httpx
+        real_client = httpx.AsyncClient
+        paths = []
+        def handler(request):
+            paths.append((request.method, request.url.path))
+            return httpx.Response(200, json={'status': 'ready', 'configured': True, 'model': 'old-model'})
+        with patch('app.routers.assistant.httpx.AsyncClient', side_effect=lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw)), patch(
+            'app.routers.assistant.settings.ASSISTANT_RUNTIME_URL', 'http://runtime'
+        ), patch('app.routers.assistant.settings.ASSISTANT_RUNTIME_TOKEN', 'runtime-token'), patch(
+            'app.routers.assistant.settings.RAG_BASE_URL', ''
+        ):
+            capabilities = self.client.get('/api/assistant/capabilities', headers=self.reviewer_headers).json()
+            self.assertFalse(capabilities['configured'])
+            self.assertIn('协议版本不一致', capabilities['message'])
+            room = self.client.post('/api/assistant/sessions', headers=self.reviewer_headers, json={}).json()
+            response = self.client.post(f"/api/assistant/sessions/{room['id']}/messages/stream",
+                                        headers=self.reviewer_headers, json={'content': '你好'})
+        self.assertEqual(paths, [('GET', '/readyz'), ('GET', '/readyz')])
+        events = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith('data: ')]
+        self.assertIn('协议版本不一致', next(event['message'] for event in events if event['event'] == 'error'))
+        self.assertFalse(any(event['event'] == 'delta' for event in events))
 
     def test_skill_catalog_exposes_only_reviewed_metadata(self):
         response = self.client.get("/api/assistant/skills", headers=self.reviewer_headers)
