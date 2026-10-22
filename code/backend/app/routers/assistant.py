@@ -22,6 +22,7 @@ from ..assistant_schemas import (
     AssistantSkillOut,
 )
 from ..assistant_service import _safe_final_answer, sdk_configured, stream_assistant, task_for_user
+from ..assistant_readiness import rag_readiness, runtime_readiness
 from ..assistant_skills import get_skill, list_skills
 from ..config import settings
 from ..database import get_db
@@ -70,38 +71,25 @@ async def capabilities(user: models.User = Depends(get_current_user)):
     runtime_model = None
     rag_available = False
     async with httpx.AsyncClient(timeout=httpx.Timeout(1.5, connect=0.5)) as client:
-        if settings.ASSISTANT_RUNTIME_URL:
-            try:
-                response = await client.get(f"{settings.ASSISTANT_RUNTIME_URL.rstrip('/')}/healthz")
-                runtime_info = response.json()
-                runtime_available = (
-                    response.is_success
-                    and isinstance(runtime_info, dict)
-                    and runtime_info.get("configured") is True
-                )
-                if runtime_available and isinstance(runtime_info.get("model"), str):
-                    runtime_model = runtime_info["model"]
-            except (httpx.HTTPError, ValueError):
-                runtime_available = False
-        if settings.RAG_BASE_URL:
-            try:
-                response = await client.get(f"{settings.RAG_BASE_URL.rstrip('/')}/health")
-                health = response.json()
-                rag_available = response.is_success and health.get("status") == "ok"
-            except (httpx.HTTPError, ValueError):
-                rag_available = False
+        runtime_info = await runtime_readiness(client, settings.ASSISTANT_RUNTIME_URL, settings.ASSISTANT_RUNTIME_TOKEN)
+        runtime_available = runtime_info["ready"]
+        runtime_model = runtime_info["model"]
+        rag_info = await rag_readiness(client, settings.RAG_BASE_URL, settings.RAG_SERVICE_TOKEN)
+        rag_available = rag_info['ready']
 
     assistant_available = sdk_configured() and runtime_available
     if not sdk_configured():
         message = "OpenCode runtime 或汇丰模型 API 配置未完成"
+    elif runtime_info["code"] == "token_rejected":
+        message = "助手内部服务鉴权失败，请检查后端与 runtime 的令牌是否一致"
     elif not runtime_available:
         message = "OpenCode runtime 未就绪，请检查运行时和汇丰模型配置"
     elif settings.RAG_BASE_URL and not rag_available:
-        message = "助手可用；知识库暂不可用，本次仅能使用当前任务证据"
+        message = "助手可用；知识库尚未通过鉴权就绪检查，检索结果可能受限"
     elif rag_available:
-        message = "OpenCode runtime、汇丰模型 API 与知识库均可用"
+        message = "助手内部服务鉴权与模型配置就绪；知识库在线，实际问答以调用结果为准"
     else:
-        message = "OpenCode runtime 与汇丰模型 API 可用，知识库未配置"
+        message = "助手内部服务鉴权与模型配置就绪；知识库未配置，实际问答以调用结果为准"
     return AssistantCapabilities(
         sdk="opencode-sdk@2.0.32",
         configured=assistant_available,

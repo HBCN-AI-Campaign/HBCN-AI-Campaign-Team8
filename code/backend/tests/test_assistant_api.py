@@ -218,13 +218,15 @@ class AssistantApiTests(unittest.TestCase):
         import httpx
 
         async def response_handler(request):
-            if request.url.path == "/healthz":
+            if request.url.path == "/readyz":
+                self.assertEqual(request.headers.get("Authorization"), "Bearer runtime-token")
                 return httpx.Response(
                     200,
-                    json={"status": "ok", "configured": True, "model": "qwen3.8-flash"},
+                    json={"status": "ready", "configured": True, "model": "qwen3.8-flash"},
                 )
-            if request.url.path == "/health":
-                return httpx.Response(200, json={"status": "ok", "service": "hbcn-rag-service"})
+            if request.url.path == "/api/v1/ready":
+                self.assertEqual(request.headers.get("Authorization"), "Bearer rag-token")
+                return httpx.Response(200, json={"status": "ready", "service": "hbcn-rag-service"})
             return httpx.Response(404)
 
         real_async_client = httpx.AsyncClient
@@ -236,13 +238,54 @@ class AssistantApiTests(unittest.TestCase):
             "app.routers.assistant.sdk_configured", return_value=True
         ), patch("app.routers.assistant.settings.RAG_BASE_URL", "http://rag-service"), patch(
             "app.routers.assistant.settings.ASSISTANT_RUNTIME_URL", "http://assistant-runtime"
-        ), patch("app.routers.assistant.settings.ASSISTANT_RUNTIME_TOKEN", "runtime-token"):
+        ), patch("app.routers.assistant.settings.ASSISTANT_RUNTIME_TOKEN", "runtime-token"), patch(
+            "app.routers.assistant.settings.RAG_SERVICE_TOKEN", "rag-token"
+        ):
             response = self.client.get("/api/assistant/capabilities", headers=self.reviewer_headers)
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["configured"])
         self.assertTrue(response.json()["rag_available"])
         self.assertEqual(response.json()["model"], "qwen3.8-flash")
+
+    def test_capabilities_rejects_mismatched_runtime_token_even_when_process_is_alive(self):
+        import httpx
+        real_client = httpx.AsyncClient
+        requests = []
+        def handler(request):
+            requests.append(request.url.path)
+            if request.url.path == '/healthz':
+                return httpx.Response(200, json={"configured": True})
+            return httpx.Response(401, json={"detail": "private upstream content"})
+        with patch('app.routers.assistant.httpx.AsyncClient', side_effect=lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw)), patch(
+            'app.routers.assistant.settings.ASSISTANT_RUNTIME_URL', 'http://runtime'
+        ), patch('app.routers.assistant.settings.ASSISTANT_RUNTIME_TOKEN', 'wrong-token'), patch(
+            'app.routers.assistant.settings.RAG_BASE_URL', ''
+        ):
+            response = self.client.get('/api/assistant/capabilities', headers=self.reviewer_headers)
+        self.assertFalse(response.json()['configured'])
+        self.assertIn('鉴权失败', response.json()['message'])
+        self.assertNotIn('private upstream content', response.text)
+        self.assertEqual(requests, ['/readyz'])
+
+    def test_capabilities_does_not_confuse_rag_liveness_with_authenticated_readiness(self):
+        import httpx
+        real_client = httpx.AsyncClient
+        def handler(request):
+            if request.url.path == '/readyz':
+                return httpx.Response(200, json={'status': 'ready', 'configured': True, 'model': 'test-model'})
+            if request.url.path == '/health':
+                return httpx.Response(200, json={'status': 'ok'})
+            return httpx.Response(401, json={'detail': 'private RAG error'})
+        with patch('app.routers.assistant.httpx.AsyncClient', side_effect=lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw)), patch(
+            'app.routers.assistant.settings.ASSISTANT_RUNTIME_URL', 'http://runtime'
+        ), patch('app.routers.assistant.settings.ASSISTANT_RUNTIME_TOKEN', 'runtime-token'), patch(
+            'app.routers.assistant.settings.RAG_BASE_URL', 'http://rag'
+        ), patch('app.routers.assistant.settings.RAG_SERVICE_TOKEN', 'wrong-token'):
+            response = self.client.get('/api/assistant/capabilities', headers=self.reviewer_headers)
+        self.assertTrue(response.json()['configured'])
+        self.assertFalse(response.json()['rag_available'])
+        self.assertNotIn('private RAG error', response.text)
 
     def test_skill_catalog_exposes_only_reviewed_metadata(self):
         response = self.client.get("/api/assistant/skills", headers=self.reviewer_headers)
