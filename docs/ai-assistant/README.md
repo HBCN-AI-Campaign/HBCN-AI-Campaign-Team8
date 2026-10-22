@@ -203,7 +203,7 @@ code/backend:           python -m alembic -c assistant-alembic.ini upgrade head
 
 此前 PostgreSQL 部署回归：本机 WSL/Linux **PostgreSQL 18.3** 在 **Asia/Shanghai** 会话时区下通过首次/重复迁移、合成业务数据/结构保留、4 连接同键并发、双 JWT 协作/结果恢复/撤权；后端综合回归 **90 项**，已核实验收 schema 为零，临时 PG 已停止且文件已删除。该环境的模型为 mock、业务 API 为 ASGI，不是汇丰云端联合验收。运行方法见[部署验收](../../code/assistant-runtime/deploy/README.md)。
 
-第 27 轮本机验证：助手 CI 对应后端 **87 项**、独立 SDK **8 项**、React **30 项**通过，前端 TypeScript 检查和 Vite 生产构建通过（主站入口仍有约 1.82 MB 警告）；工作流 YAML 解析通过。实际 OpenCode runtime 测试/类型检查/构建未在本机执行：本机没有 Bun，官方 Windows 二进制下载未完成。当前 GitHub 远端尚无此工作流，因此这些 runtime 检查必须等助手提交发布后由 Actions 实跑，不能记为已通过。
+第 27 轮本机验证：助手 CI 对应后端 **87 项**、独立 SDK **8 项**、React **30 项**通过，前端 TypeScript 检查和 Vite 生产构建通过（主站入口仍有约 1.82 MB 警告）；OpenCode runtime 在 Bun **1.4.3** 下冻结安装通过、**3 项 / 52 断言**通过、类型检查和构建通过；工作流 YAML 解析通过。当前 GitHub 远端尚无此工作流，因此 Actions 仍未运行；目标运行器结果和必需检查设置待发布后确认。
 
 另以临时 SQLite/ASGI + 汇丰真实 **qwen3.8-flash** 约 **10.1 秒**通过任务字段/引用、单人转共享同次运行、相同历史/事件、幂等、保存游标恢复和撤权；与上述 PG 验收分开。前轮 React **30 项分批通过**及 TypeScript/Vite 构建通过，本轮未改前端。契约仍为 **1.2.0**，OpenAPI **18 路径 / 23 操作**。
 
