@@ -66,7 +66,6 @@ backend/
   app/
     main.py              FastAPI 入口 + CORS + 建表
     config.py            配置（DB 路径绝对化，默认 SQLite）
-    rag_service.py       RAG 服务适配层（调用独立 hbcn-rag-service）
     database.py          SQLAlchemy engine / session
     models.py            ORM 模型（切片子集 + 权限）
     schemas.py           Pydantic DTO
@@ -84,23 +83,6 @@ backend/
 ```
 
 ---
-
-## 接入 RAG 知识库服务（可选）
-
-助手默认使用任务本地证据（规则结果 + 单据字段）。配置独立 RAG 服务后，
-`app/rag_service.py` 适配层会把 `business_rules` / `project_design` 的检索证据
-追加为「知识库」引用，供证据溯源使用，不会改写规则引擎结论。
-
-1. 先启动独立服务 `../rag-service`（端口 8010，见其 `README.md`）。
-2. 在本目录 `.env` 配置（模板见 `.env.example`）：
-
-   ```
-   RAG_BASE_URL=http://127.0.0.1:8010
-   RAG_SERVICE_TOKEN=<与 rag-service/.env 的 SERVICE_TOKEN 一致>
-   ```
-
-3. 重启后端。`GET /api/assistant/capabilities` 的 `rag_available` 变为 `true`；
-   未配置或服务不可用时，助手自动回退本地证据，不阻断对话。
 
 ## 切换到 PostgreSQL
 
