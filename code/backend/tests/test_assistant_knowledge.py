@@ -1,4 +1,5 @@
 """Assistant-side RAG boundary tests, without altering the RAG team's adapter."""
+import asyncio
 import json
 import unittest
 from unittest.mock import patch
@@ -6,7 +7,8 @@ from unittest.mock import patch
 import httpx
 
 from app.assistant_knowledge import query_business_knowledge
-from app.assistant_service import _rag_search
+from app.assistant_readiness import ASSISTANT_PROTOCOL
+from app.assistant_service import _rag_search, run_agent_events
 
 
 class AssistantKnowledgeTests(unittest.TestCase):
@@ -152,3 +154,44 @@ class AssistantKnowledgeTests(unittest.TestCase):
             hits = _rag_search(context, '核对业务', notices)
         self.assertEqual([row['type'] for row in hits], ['task'])
         self.assertTrue(notices)
+
+    def test_business_retrieval_reaches_runtime_and_returns_resolved_citations(self):
+        requests = []
+
+        def handler(request):
+            requests.append(request)
+            if request.url.host == 'rag-service':
+                self.assertEqual(request.headers['Authorization'], 'Bearer service-test-token')
+                self.assertEqual(json.loads(request.content)['scope'], 'business_rules')
+                return httpx.Response(200, json=self.payload(),
+                                      headers={'X-RAG-Contract-Version': '1.3.0'})
+            self.assertEqual(request.headers['Authorization'], 'Bearer runtime-test-token')
+            if request.url.path == '/readyz':
+                return httpx.Response(200, json={'status': 'ready', 'configured': True,
+                                                'assistant_protocol': ASSISTANT_PROTOCOL})
+            submitted = json.loads(request.content)
+            self.assertEqual([row['id'] for row in submitted['evidence']], ['TASK-1', 'chunk-1'])
+            self.assertEqual(submitted['evidence'][1]['reference_id'], 'E2')
+            events = [{'event': 'tool', 'tool': {'status': 'completed'}},
+                      {'event': 'assistant_result', 'answer': '请核对提款币种 [E2]。'}]
+            return httpx.Response(200, text=''.join('data: ' + json.dumps(row) + '\n\n' for row in events))
+
+        async def collect():
+            transport = httpx.MockTransport(handler)
+            runtime = httpx.AsyncClient(transport=transport)
+            try:
+                with httpx.Client(transport=transport) as rag, patch(
+                    'app.assistant_service.httpx.AsyncClient', return_value=runtime
+                ), patch('app.assistant_knowledge.httpx.post', side_effect=rag.post), patch(
+                    'app.assistant_service.settings.ASSISTANT_RUNTIME_URL', 'http://runtime'
+                ), patch('app.assistant_service.settings.ASSISTANT_RUNTIME_TOKEN', 'runtime-test-token'):
+                    return [event async for event in run_agent_events('提款币种核对',
+                            {'task': {'task_code': 'TASK-1'}, 'documents': [], 'results': []})]
+            finally:
+                await runtime.aclose()
+
+        result = asyncio.run(collect())[-1]
+        self.assertEqual(len(requests), 3)  # readiness, real retrieval adapter, runtime
+        self.assertEqual(result['answer'], '请核对提款币种 [E2]。')
+        self.assertEqual(result['citations'][0]['source_id'], 'chunk-1')
+        self.assertEqual(result['citations'][0]['page'], 2)

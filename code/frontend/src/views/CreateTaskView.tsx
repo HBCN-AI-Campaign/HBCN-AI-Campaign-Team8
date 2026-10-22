@@ -32,7 +32,7 @@ import {
   EyeOutlined,
 } from '@ant-design/icons'
 import { api } from '@/api'
-import type { ParseResult, ParsedDocument, ParsedField, FieldSource } from '@/types'
+import type { ParseResult, ParsedDocument, ParsedField, FieldSource, Customer } from '@/types'
 import { fmt, TYPE_LABEL } from '@/utils'
 import PdfSourceViewer from '@/components/PdfSourceViewer'
 
@@ -67,7 +67,8 @@ const TEMPLATE_FILES: [string, string][] = [
 ]
 
 interface TaskForm {
-  task_code: string
+  customer_no: string | null
+  customer_name: string | null
   borrower: string
   drawdown_currency: string
   drawdown_amount: number
@@ -90,11 +91,16 @@ export default function CreateTaskView() {
   const [parsed, setParsed] = useState<ParseResult | null>(null)
   const [activeDocs, setActiveDocs] = useState<string[]>([])
   const [taskForm, setTaskForm] = useState<TaskForm>({
-    task_code: '',
+    customer_no: null,
+    customer_name: null,
     borrower: '',
     drawdown_currency: '',
     drawdown_amount: 0,
   })
+
+  // 客户搜索下拉（识别后自动选中建议客户，可搜索改选）
+  const [custOptions, setCustOptions] = useState<Customer[]>([])
+  const [custSearching, setCustSearching] = useState(false)
 
   // 定位原文（PDF 预览 + 高亮）
   const [pdfVisible, setPdfVisible] = useState(false)
@@ -144,19 +150,54 @@ export default function CreateTaskView() {
       const res = await api.parseFiles(files)
       setParsed(res)
       setTaskForm({
-        task_code: res.suggested_task_code,
+        customer_no: res.suggested_customer_no ?? null,
+        customer_name: res.suggested_customer_name ?? null,
         borrower: res.suggested_borrower,
         drawdown_currency: res.suggested_currency,
         drawdown_amount: res.suggested_amount,
       })
+      // 预置下拉项：把识别到的客户放入候选，保证下拉能回显名称
+      if (res.suggested_customer_no && res.suggested_customer_name) {
+        setCustOptions([
+          { id: -1, customer_no: res.suggested_customer_no, name: res.suggested_customer_name },
+        ])
+      } else {
+        setCustOptions([])
+      }
       setActiveDocs(res.documents.map((_, i) => String(i)))
       setStep(1)
-      message.success(`识别完成：共 ${res.documents.length} 份单据`)
+      const custHint = res.suggested_customer_no
+        ? `，已匹配客户 ${res.suggested_customer_no}`
+        : '，未匹配到客户请手动选择'
+      message.success(`识别完成：共 ${res.documents.length} 份单据${custHint}`)
     } catch {
       /* 拦截器已提示 */
     } finally {
       setParsing(false)
     }
+  }
+
+  // 客户搜索（防抖交给 antd Select 的 filterOption=false + 手动触发）
+  const searchCustomers = async (keyword: string) => {
+    setCustSearching(true)
+    try {
+      const rows = await api.searchCustomers(keyword, 20)
+      setCustOptions(rows)
+    } catch {
+      /* 拦截器已提示 */
+    } finally {
+      setCustSearching(false)
+    }
+  }
+
+  // 选中某客户
+  const onSelectCustomer = (customerNo: string | undefined) => {
+    const hit = custOptions.find((c) => c.customer_no === customerNo)
+    setTaskForm((s) => ({
+      ...s,
+      customer_no: customerNo ?? null,
+      customer_name: hit?.name ?? null,
+    }))
   }
 
   // 字段编辑：不可变更新 parsed
@@ -187,9 +228,50 @@ export default function CreateTaskView() {
     setPdfVisible(true)
   }
 
-  // 确认创建
+  // 一步到位：上传 → 后端解析 → 直接创建任务（创建时后端自动完成首次规则核对）
+  // 经办人无需复核识别结果；创建后直达规则审核结果页。
+  const uploadAndCreate = async () => {
+    if (!files.length) return
+    setCreating(true)
+    try {
+      // 1) 解析（后端据此生成 documents，并建议关联客户）
+      const res = await api.parseFiles(files)
+      // 2) 组装 documents
+      const documents = res.documents.map((d) => ({
+        doc_code: d.doc_code,
+        type_code: d.type_code,
+        fields: Object.fromEntries(d.fields.map((f) => [f.key, f.value])),
+        pdf_file: d.pdf_file ?? null,
+        field_sources: Object.fromEntries(
+          d.fields.filter((f) => f.source).map((f) => [f.key, f.source]),
+        ),
+      }))
+      // 3) 创建任务（后端自动跑首次规则核对，状态直接进入「审核中」）
+      const created = await api.createTask({
+        customer_no: res.suggested_customer_no ?? null,
+        borrower: res.suggested_borrower,
+        drawdown_currency: res.suggested_currency,
+        drawdown_amount: res.suggested_amount,
+        documents,
+      })
+      message.success(`任务 ${created.task_code} 已创建并完成首次核对`)
+      // 4) 直达规则审核结果页
+      navigate(`/tasks/${encodeURIComponent(created.task_code)}`)
+    } catch {
+      /* 拦截器已提示 */
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  // 确认创建（旧的分步流程保留，当前 UI 未使用）
   const confirmCreate = async () => {
     if (!parsed) return
+    if (!taskForm.customer_no) {
+      message.warning('请先选择客户号')
+      setStep(1)
+      return
+    }
     setCreating(true)
     try {
       const documents = parsed.documents.map((d) => ({
@@ -201,17 +283,17 @@ export default function CreateTaskView() {
           d.fields.filter((f) => f.source).map((f) => [f.key, f.source]),
         ),
       }))
-      await api.createTask({
-        task_code: taskForm.task_code,
+      const created = await api.createTask({
+        customer_no: taskForm.customer_no,
         borrower: taskForm.borrower,
         drawdown_currency: taskForm.drawdown_currency,
         drawdown_amount: taskForm.drawdown_amount,
         documents,
       })
-      message.success('任务已创建，可交审核人员核对')
-      navigate(`/tasks/${encodeURIComponent(taskForm.task_code)}`)
+      message.success(`任务 ${created.task_code} 已创建，可交审核人员核对`)
+      navigate(`/tasks/${encodeURIComponent(created.task_code)}`)
     } catch {
-      /* 拦截器已提示（如任务编号重复 409）*/
+      /* 拦截器已提示 */
     } finally {
       setCreating(false)
     }
@@ -317,7 +399,7 @@ export default function CreateTaskView() {
       >
         <div>
           <h2>发起审核任务</h2>
-          <p>上传材料 → 智能识别字段 → 经办人复核确认 → 创建任务</p>
+          <p>上传材料 → 系统自动识别并完成首次规则核对 → 进入审核结果页核对</p>
         </div>
         <Button icon={<ArrowLeftOutlined />} onClick={goBack}>
           返回工作台
@@ -327,7 +409,7 @@ export default function CreateTaskView() {
       <Steps
         current={step}
         style={{ marginBottom: 20 }}
-        items={[{ title: '上传材料' }, { title: '复核识别结果' }, { title: '确认创建' }]}
+        items={[{ title: '上传材料' }, { title: '自动识别 + 规则核对' }, { title: '进入审核结果' }]}
       />
 
       {/* 步骤 1：上传 */}
@@ -374,16 +456,33 @@ export default function CreateTaskView() {
             />
           )}
 
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginTop: 14 }}
+            message="上传后系统自动识别字段并完成首次规则核对，无需逐项复核即可创建。进入审核结果页后，如发现抓取内容有误，可直接在结果中编辑并重新核对。"
+          />
+
           <div style={{ marginTop: 18, textAlign: 'right' }}>
-            <Button
-              type="primary"
-              icon={<SendOutlined />}
-              loading={parsing}
-              disabled={!files.length}
-              onClick={doParse}
-            >
-              开始智能识别（{files.length} 个文件）
-            </Button>
+            <Space>
+              <Button
+                icon={<ThunderboltOutlined />}
+                loading={parsing}
+                disabled={!files.length || creating}
+                onClick={doParse}
+              >
+                先逐项复核再创建
+              </Button>
+              <Button
+                type="primary"
+                icon={<SendOutlined />}
+                loading={creating || parsing}
+                disabled={!files.length}
+                onClick={uploadAndCreate}
+              >
+                上传并创建任务（{files.length} 个文件）
+              </Button>
+            </Space>
           </div>
         </Card>
       )}
@@ -394,15 +493,41 @@ export default function CreateTaskView() {
           <Card title="任务基本信息（可修改）" style={{ marginBottom: 16 }}>
             <Form layout="inline">
               <Form.Item label="任务编号">
-                <Input
-                  style={{ width: 240 }}
-                  value={taskForm.task_code}
-                  onChange={(e) => setTaskForm((s) => ({ ...s, task_code: e.target.value }))}
+                <Tooltip title="任务编号由系统在创建时自动生成（格式 年份-序号）">
+                  <Tag color="default" style={{ height: 32, lineHeight: '30px', fontSize: 14 }}>
+                    创建时自动生成
+                  </Tag>
+                </Tooltip>
+              </Form.Item>
+              <Form.Item
+                label="客户"
+                required
+                validateStatus={taskForm.customer_no ? 'success' : 'warning'}
+                help={taskForm.customer_no ? undefined : '识别未匹配到客户，请搜索选择'}
+              >
+                <Select
+                  showSearch
+                  allowClear
+                  placeholder="按客户号 / 名称搜索"
+                  style={{ width: 300 }}
+                  value={taskForm.customer_no ?? undefined}
+                  filterOption={false}
+                  loading={custSearching}
+                  onSearch={searchCustomers}
+                  onFocus={() => {
+                    if (custOptions.length === 0) searchCustomers('')
+                  }}
+                  onChange={onSelectCustomer}
+                  notFoundContent={custSearching ? '搜索中…' : '无匹配客户'}
+                  options={custOptions.map((c) => ({
+                    value: c.customer_no,
+                    label: `${c.customer_no} · ${c.name}`,
+                  }))}
                 />
               </Form.Item>
               <Form.Item label="借款人">
                 <Input
-                  style={{ width: 260 }}
+                  style={{ width: 240 }}
                   value={taskForm.borrower}
                   onChange={(e) => setTaskForm((s) => ({ ...s, borrower: e.target.value }))}
                 />
@@ -483,7 +608,14 @@ export default function CreateTaskView() {
       {step === 2 && parsed && (
         <Card title="确认并创建任务">
           <Descriptions column={2} bordered style={{ marginBottom: 16 }}>
-            <Descriptions.Item label="任务编号">{taskForm.task_code}</Descriptions.Item>
+            <Descriptions.Item label="任务编号">
+              <Tag color="default">创建时自动生成</Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="客户">
+              {taskForm.customer_no
+                ? `${taskForm.customer_no} · ${taskForm.customer_name ?? ''}`
+                : '（未选择）'}
+            </Descriptions.Item>
             <Descriptions.Item label="借款人">{taskForm.borrower}</Descriptions.Item>
             <Descriptions.Item label="提款">
               {taskForm.drawdown_currency} {fmt(taskForm.drawdown_amount)}

@@ -14,6 +14,7 @@ from ..schemas import (
     AISession,
     CheckResultOut,
     DashboardStats,
+    DocFieldsUpdateIn,
     ParseResult,
     RunSummary,
     StatusAction,
@@ -29,12 +30,39 @@ def _task_out(task: "models.ReviewTask") -> TaskOut:
     """统一构建 TaskOut DTO，避免各处重复。"""
     return TaskOut(
         id=task.id, task_code=task.task_code, borrower=task.borrower,
+        customer_no=task.customer.customer_no if task.customer else None,
+        customer_name=task.customer.name if task.customer else None,
         drawdown_currency=task.drawdown_currency,
         drawdown_amount=float(task.drawdown_amount), status=task.status.value,
+        needs_recheck=bool(task.needs_recheck),
         created_at=task.created_at,
         review_comment=task.review_comment,
         supplement_note=task.supplement_note,
     )
+
+
+def _next_task_code(db: Session) -> str:
+    """生成自增任务编号，格式 `YYYY-NNNN`（按自然年内序号递增）。
+
+    以当前年份为前缀，取该年已有任务的最大序号 +1。无合同号依赖，纯库内自增。
+    """
+    import datetime as _dt
+
+    year = _dt.datetime.now().year
+    prefix = f"{year}-"
+    last = (
+        db.query(models.ReviewTask)
+        .filter(models.ReviewTask.task_code.like(f"{prefix}%"))
+        .order_by(models.ReviewTask.task_code.desc())
+        .first()
+    )
+    seq = 1
+    if last and last.task_code.startswith(prefix):
+        try:
+            seq = int(last.task_code.split("-", 1)[1]) + 1
+        except (ValueError, IndexError):
+            seq = 1
+    return f"{prefix}{seq:04d}"
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
@@ -42,6 +70,7 @@ router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 @router.post("/parse", response_model=ParseResult)
 async def parse_documents(
     files: list[UploadFile] = File(...),
+    db: Session = Depends(get_db),
     # 仅业务经办人可上传解析
     user: User = Depends(require_role(Role.OPERATOR)),
 ):
@@ -79,7 +108,27 @@ async def parse_documents(
 
     if not saved:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="未收到任何文件")
-    return parse_files(saved)
+    result = parse_files(saved)
+
+    # 按识别出的借款人名称匹配客户主数据，作为客户号建议（经办人可在前端改选）
+    borrower = result.get("suggested_borrower")
+    if borrower:
+        matched = (
+            db.query(models.Customer)
+            .filter(models.Customer.name == borrower)
+            .first()
+        )
+        if not matched:
+            # 名称精确匹配不到时退而求其次：模糊包含
+            matched = (
+                db.query(models.Customer)
+                .filter(models.Customer.name.ilike(f"%{borrower}%"))
+                .first()
+            )
+        if matched:
+            result["suggested_customer_no"] = matched.customer_no
+            result["suggested_customer_name"] = matched.name
+    return result
 
 
 @router.get("/dashboard", response_model=DashboardStats)
@@ -90,10 +139,10 @@ def dashboard(db: Session = Depends(get_db), user: User = Depends(get_current_us
         q = q.filter_by(submitted_by=user.id)
     return DashboardStats(
         total_tasks=q.count(),
-        created=q.filter_by(status=TaskStatus.CREATED).count(),
-        reviewing=q.filter_by(status=TaskStatus.REVIEWING).count(),
+        pending=q.filter_by(status=TaskStatus.PENDING).count(),
+        ai_reviewing=q.filter_by(status=TaskStatus.AI_REVIEWING).count(),
+        to_recheck=q.filter_by(status=TaskStatus.TO_RECHECK).count(),
         need_supplement=q.filter_by(status=TaskStatus.NEED_SUPPLEMENT).count(),
-        supplemented=q.filter_by(status=TaskStatus.SUPPLEMENTED).count(),
         completed=q.filter_by(status=TaskStatus.COMPLETED).count(),
     )
 
@@ -105,11 +154,23 @@ def create_task(
     # 仅业务经办人可创建任务
     user: User = Depends(require_role(Role.OPERATOR)),
 ):
-    if db.query(models.ReviewTask).filter_by(task_code=payload.task_code).first():
-        raise HTTPException(status.HTTP_409_CONFLICT, detail="任务编号已存在")
+    # 任务编号由后端自增生成（YYYY-NNNN），避免依赖贷款合同号
+    task_code = _next_task_code(db)
+
+    # 关联客户（按客户号）。客户号可空：经办人未选定时任务不绑定客户。
+    customer = None
+    if payload.customer_no:
+        customer = (
+            db.query(models.Customer)
+            .filter_by(customer_no=payload.customer_no)
+            .first()
+        )
+        if not customer:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, detail="客户号不存在")
 
     task = models.ReviewTask(
-        task_code=payload.task_code,
+        task_code=task_code,
+        customer_id=customer.id if customer else None,
         borrower=payload.borrower,
         drawdown_currency=payload.drawdown_currency,
         drawdown_amount=payload.drawdown_amount,
@@ -123,6 +184,14 @@ def create_task(
             )
         )
     db.add(task)
+    db.flush()  # 拿到 task.id / documents，便于立即核对
+
+    # 经办人上传即创建：创建后立即执行首次规则核对（基础数据），
+    # 但任务状态为「待处理」，等待审核人启动智能审核。
+    _run_and_persist(db, task)
+    task.status = models.TaskStatus.PENDING
+    task.needs_recheck = False
+
     db.commit()
     db.refresh(task)
     return _task_out(task)
@@ -131,6 +200,7 @@ def create_task(
 @router.get("", response_model=list[TaskOut])
 def list_tasks(
     mine: bool = False,
+    customer_no: str | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -138,6 +208,9 @@ def list_tasks(
     # mine=true：仅返回当前经办人提交的任务（工作台 tab 筛选用）
     if mine:
         q = q.filter_by(submitted_by=user.id)
+    # 按客户号筛选任务
+    if customer_no:
+        q = q.join(models.Customer).filter(models.Customer.customer_no == customer_no)
     tasks = q.order_by(models.ReviewTask.id.desc()).all()
     return [_task_out(t) for t in tasks]
 
@@ -147,6 +220,26 @@ def _get_task(db: Session, task_code: str) -> models.ReviewTask:
     if not task:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="任务不存在")
     return task
+
+
+def _run_and_persist(db: Session, task: "models.ReviewTask") -> list:
+    """对任务执行一次规则核对并落库（清空历史结果后重跑，幂等）。
+
+    返回实际落库（非 skip）的结果对象列表。调用方负责 commit。
+    """
+    db.query(models.CheckResult).filter_by(task_id=task.id).delete()
+    results = run_all(task.documents)
+    persisted = []
+    for r in results:
+        if r.status.value == "skip":
+            continue  # 不落库 skip，仅保留实际判定
+        db.add(models.CheckResult(
+            task_id=task.id, rule_id=r.rule_id, rule_name=r.rule_name,
+            dimension=r.dimension, status=r.status.value,
+            why=r.why, suggestion=r.suggestion, detail=r.detail,
+        ))
+        persisted.append(r)
+    return persisted
 
 
 def _handoff_meta(task: models.ReviewTask, rule_id: str) -> dict | None:
@@ -174,8 +267,11 @@ def get_task_detail(
             counts[key] += 1
     return TaskDetail(
         id=task.id, task_code=task.task_code, borrower=task.borrower,
+        customer_no=task.customer.customer_no if task.customer else None,
+        customer_name=task.customer.name if task.customer else None,
         drawdown_currency=task.drawdown_currency,
         drawdown_amount=float(task.drawdown_amount), status=task.status.value,
+        needs_recheck=bool(task.needs_recheck),
         created_at=task.created_at,
         review_comment=task.review_comment,
         supplement_note=task.supplement_note,
@@ -200,28 +296,15 @@ def run_checks(
 ):
     task = _get_task(db, task_code)
 
-    # 清空历史结果后重跑（幂等）
-    db.query(models.CheckResult).filter_by(task_id=task.id).delete()
+    persisted = _run_and_persist(db, task)
 
-    results = run_all(task.documents)
-    persisted = []
-    for r in results:
-        if r.status.value == "skip":
-            continue  # 不落库 skip，仅保留实际判定
-        row = models.CheckResult(
-            task_id=task.id, rule_id=r.rule_id, rule_name=r.rule_name,
-            dimension=r.dimension, status=r.status.value,
-            why=r.why, suggestion=r.suggestion, detail=r.detail,
-        )
-        db.add(row)
-        persisted.append(r)
-
-    task.status = models.TaskStatus.REVIEWING
+    # 仅重跑规则核对，不改变任务状态（状态由智能审核/退回/完成驱动）
+    task.needs_recheck = False
     db.commit()
 
     return RunSummary(
         task_code=task_code,
-        counts=summarize(results),
+        counts=summarize(persisted),
         results=[
             CheckResultOut(
                 rule_id=r.rule_id, rule_name=r.rule_name, dimension=r.dimension,
@@ -230,6 +313,42 @@ def run_checks(
             for r in persisted
         ],
     )
+
+
+@router.patch("/{task_code}/documents/{doc_id}/fields", response_model=TaskDetail)
+def update_document_fields(
+    task_code: str,
+    doc_id: int,
+    payload: DocFieldsUpdateIn,
+    db: Session = Depends(get_db),
+    # 经办人与审核人均可更正抓取内容
+    user: User = Depends(get_current_user),
+):
+    """更正某单据的字段抓取值（经办人/审核人皆可）。
+
+    修改后：
+    - 重建 fields dict 触发 JSON 列更新；
+    - 立即自动重跑规则核对（无需手动触发），needs_recheck 保持 False；
+    - 返回最新 TaskDetail（含刷新后的核对结果）。
+    """
+    task = _get_task(db, task_code)
+    doc = next((d for d in task.documents if d.id == doc_id), None)
+    if not doc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="单据不存在")
+
+    new_fields = dict(doc.fields or {})
+    for upd in payload.updates:
+        new_fields[upd.field_key] = upd.value
+    doc.fields = new_fields
+
+    # 字段变更 → 立即自动重新核对（改完即触发）；保持当前任务状态不变
+    db.flush()
+    _run_and_persist(db, task)
+    task.needs_recheck = False
+    db.commit()
+    db.refresh(task)
+
+    return get_task_detail(task_code, db=db, user=user)
 
 
 @router.post("/{task_code}/return", response_model=TaskOut)
@@ -273,11 +392,11 @@ def supplement_task(
 ):
     """经办人补件：可更正单据字段值、登记新补充文件，并附补件说明。
 
-    补件后任务状态置为「已补件」(supplemented)，回到审核人的「待复核」列表；
-    同时清空历史规则结果，待审核人重新核对。
+    补件后任务状态置为「待处理」(pending)，回到审核人重新发起智能审核；
+    同时清空历史规则结果，待重新核对。
     """
     task = _get_task(db, task_code)
-    if task.status not in (models.TaskStatus.NEED_SUPPLEMENT, models.TaskStatus.SUPPLEMENTED):
+    if task.status != models.TaskStatus.NEED_SUPPLEMENT:
         raise HTTPException(status.HTTP_409_CONFLICT, detail="仅「待补件」的任务可以补件")
 
     # 1) 字段级更正：按 doc_code 定位单据，重建 fields dict 以触发 JSON 列更新
@@ -296,9 +415,9 @@ def supplement_task(
         extra = f"[补充文件] {note_files}"
         payload.note = f"{payload.note}\n{extra}".strip() if payload.note else extra
 
-    # 3) 记录补件说明 + 状态流转
+    # 3) 记录补件说明 + 状态流转（回到待处理，等待审核人重新智能审核）
     task.supplement_note = payload.note or task.supplement_note
-    task.status = models.TaskStatus.SUPPLEMENTED
+    task.status = models.TaskStatus.PENDING
 
     # 4) 清空历史规则结果，等审核人重新核对
     db.query(models.CheckResult).filter_by(task_id=task.id).delete()
@@ -334,12 +453,37 @@ def ai_start(
                 dimension=r.dimension, status=r.status.value,
                 why=r.why, suggestion=r.suggestion, detail=r.detail,
             ))
-        task.status = models.TaskStatus.REVIEWING
+        task.needs_recheck = False
+        db.commit()
+        db.refresh(task)
+
+    # 启动智能审核 → 任务进入「智能审核中」
+    if task.status != models.TaskStatus.COMPLETED:
+        task.status = models.TaskStatus.AI_REVIEWING
         db.commit()
         db.refresh(task)
 
     session = build_session(task)
     return AISession(task_code=task_code, **session)
+
+
+@router.post("/{task_code}/ai/complete", response_model=TaskOut)
+def ai_complete(
+    task_code: str,
+    db: Session = Depends(get_db),
+    # 智能审核播放完成后，由审核人端触发
+    user: User = Depends(require_role(Role.REVIEWER)),
+):
+    """智能审核完成：生成需处理队列后，任务进入「待复核」。
+
+    无论需处理队列是否为空都停在「待复核」，由审核人手动点「完成」归档。
+    """
+    task = _get_task(db, task_code)
+    if task.status not in (models.TaskStatus.COMPLETED, models.TaskStatus.NEED_SUPPLEMENT):
+        task.status = models.TaskStatus.TO_RECHECK
+        db.commit()
+        db.refresh(task)
+    return _task_out(task)
 
 
 @router.post("/{task_code}/ai/resolve", response_model=AIResolveOut)

@@ -159,11 +159,10 @@ def _rag_search(
         return hits
 
     try:
-        from .rag_service import RAGClient
-
-        # The current RAG service indexes shared business/project knowledge only.
-        # Task documents are already permission-filtered and supplied as local evidence.
-        result = RAGClient().retrieve(query=query, top_k=6)
+        # The assistant owns its evidence policy; the RAG module owns retrieval.
+        # Do not mix project-design documents into business-review evidence.
+        # This adapter also checks query limits and the response contract.
+        result = query_business_knowledge(query, top_k=6)
     except Exception as exc:
         # 网关或 RAG 服务异常时保留本地证据，不阻断助手。
         logger.warning("Assistant RAG retrieval failed (%s)", type(exc).__name__)

@@ -15,7 +15,7 @@ from .config import settings
 from .config import SAMPLE_PDF_DIR as _SAMPLE_PDF_DIR
 from .config import UPLOAD_DIR as _UPLOAD_DIR
 from .database import Base, engine
-from .routers import assistant, auth, tasks
+from .routers import assistant, auth, customers, tasks
 
 
 @asynccontextmanager
@@ -37,6 +37,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(customers.router)
 app.include_router(tasks.router)
 app.include_router(assistant.router)
 

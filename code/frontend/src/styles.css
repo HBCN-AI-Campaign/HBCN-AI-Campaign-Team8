@@ -19,7 +19,6 @@ body,
   height: 100%;
   margin: 0;
 }
-.ant-app { height: 100%; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
     'Microsoft YaHei', sans-serif;
@@ -29,9 +28,6 @@ body {
 
 .mono {
   font-family: 'SF Mono', Menlo, Consolas, monospace;
-}
-@media (max-width: 760px) {
-  .platform-name { display: none; }
 }
 .page-head h2 {
   margin: 0 0 4px;
@@ -276,3 +272,245 @@ body {
   font-size: 13px;
   color: var(--muted);
 }
+
+/* ===== 规则结果字段编辑 + 重新核对高亮 ===== */
+.rule-value-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.rule-edit-btn {
+  opacity: 0;
+  color: var(--blue);
+  transition: opacity 0.15s;
+}
+tr:hover .rule-edit-btn,
+.rule-value-cell:hover .rule-edit-btn {
+  opacity: 1;
+}
+@keyframes recheck-pulse-kf {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(239, 68, 68, 0);
+  }
+}
+.recheck-pulse {
+  animation: recheck-pulse-kf 1.4s ease-out infinite;
+}
+
+/* ===== 详情页表头（图一） ===== */
+.hdr-redline {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-weight: 600;
+}
+.hdr-customer {
+  font-size: 13px;
+  color: var(--muted);
+}
+.hdr-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.hdr-facts .hf b {
+  color: #111827;
+  font-weight: 600;
+  margin-left: 2px;
+}
+.hdr-facts .hf.muted b {
+  color: var(--muted);
+}
+
+/* ===== 对象链路图（图二） ===== */
+.og-card {
+  background: #fafbfc;
+}
+/* 右侧可折叠的对象链路面板：吸顶，避免左侧规则很长时右侧失衡 */
+.og-collapse {
+  position: sticky;
+  top: 12px;
+  background: #fafbfc;
+  border-color: #e5e7eb;
+}
+.og-collapse .og-collapse-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+.og-collapse .ant-collapse-content-box {
+  max-height: 60vh;
+  overflow: auto;
+}
+.og-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+}
+.og-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.og-node {
+  position: relative;
+}
+.og-kind-label {
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  display: block;
+  margin-bottom: 2px;
+}
+.og-node-body {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.og-node-body.clickable {
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.og-node-body.clickable:hover {
+  border-color: var(--blue);
+  box-shadow: 0 1px 4px rgba(37, 99, 235, 0.12);
+}
+.og-drawdown .og-node-body {
+  background: #f5f3ff;
+  border-color: #ddd6fe;
+}
+.og-ico {
+  font-size: 14px;
+}
+.og-title {
+  font-weight: 600;
+  color: #111827;
+}
+.og-sub {
+  color: var(--muted);
+  font-size: 12px;
+}
+.og-eye {
+  color: var(--blue);
+  font-size: 12px;
+  margin-left: 2px;
+}
+.og-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.og-dot-lg {
+  width: 11px;
+  height: 11px;
+  margin-left: auto;
+}
+.og-dots {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.og-match {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0 2px 0;
+  font-size: 12px;
+}
+.og-match-label {
+  color: var(--muted);
+}
+.og-match-tag {
+  font-size: 11px;
+  margin: 0;
+  padding: 0 6px;
+}
+.og-nomatch .og-match-label {
+  color: #b45309;
+  font-style: italic;
+}
+/* 支持性材料作为支付/提款节点的子节点（树枝样式） */
+.og-support-node {
+  position: relative;
+}
+.og-support-node .og-node-body {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  border-style: dashed;
+}
+.og-support-node.clickable .og-node-body {
+  cursor: pointer;
+}
+.og-support-node.clickable:hover .og-node-body {
+  border-color: var(--green);
+  border-style: solid;
+}
+.og-support-node .og-kind-label {
+  color: var(--green);
+}
+.og-orphan-title {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 6px 0 2px 0;
+}
+.og-supports {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.og-support {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.og-support.clickable {
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.og-support.clickable:hover {
+  border-color: var(--blue);
+}
+.og-support.matched {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+.og-support-code {
+  font-weight: 600;
+  color: #111827;
+}
+.og-support-type {
+  color: var(--muted);
+  font-size: 12px;
+}
+.og-support-seller {
+  color: #374151;
+  font-size: 12px;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.og-support .og-match-tag {
+  margin-left: auto;
+}
+

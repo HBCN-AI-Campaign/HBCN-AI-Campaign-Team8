@@ -2,24 +2,35 @@ export function fmt(n: number): string {
   return Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-export function statusText(s: string): string {
-  const map: Record<string, string> = {
-    created: '待受理',
-    reviewing: '审核中',
-    need_supplement: '待补件',
-    supplemented: '已补件',
+// 任务状态文案（按角色区分视角）
+// 审核人：待处理 / 智能审核中 / 待复核 / 待复核(退回) / 已完成
+// 经办人：待处理 / 审核中 / 审核中 / 待我补件 / 已完成
+export function statusText(s: string, role?: string): string {
+  const reviewer: Record<string, string> = {
+    pending: '待处理',
+    ai_reviewing: '智能审核中',
+    to_recheck: '待复核',
+    need_supplement: '待复核',
     completed: '已完成',
   }
+  const operator: Record<string, string> = {
+    pending: '待处理',
+    ai_reviewing: '审核中',
+    to_recheck: '审核中',
+    need_supplement: '待我补件',
+    completed: '已完成',
+  }
+  const map = role === 'operator' ? operator : reviewer
   return map[s] || s
 }
 
 // antd Tag color（替代 Element Plus 的 tag type）
 export function statusType(s: string): string {
   const map: Record<string, string> = {
-    created: 'default',
-    reviewing: 'processing',
-    need_supplement: 'warning',
-    supplemented: 'processing',
+    pending: 'default',
+    ai_reviewing: 'processing',
+    to_recheck: 'warning',
+    need_supplement: 'error',
     completed: 'success',
   }
   return map[s] || 'default'
