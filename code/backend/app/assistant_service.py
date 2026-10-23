@@ -120,7 +120,7 @@ def search_evidence(context: dict[str, Any], query: str) -> list[dict[str, Any]]
             "type": "rule",
             "id": item["rule_id"],
             "text": json.dumps(item, ensure_ascii=False),
-            "source": "规则审核结果",
+            "source": item.get("source") or "规则审核结果",
             "matched": not terms or any(term in haystack for term in terms),
         })
     for item in context.get("documents", []):

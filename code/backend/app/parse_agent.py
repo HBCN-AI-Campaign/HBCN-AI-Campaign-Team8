@@ -73,27 +73,31 @@ def guess_type(filename: str) -> str | None:
 # OCR 服务调用
 # ---------------------------------------------------------------------------
 
-def _ocr_detailed(abs_path: str) -> tuple[str, list[dict]]:
-    """调用 /file/detailed，返回 (全文, blocks)。blocks 每条含 text/score/box/page。"""
+def _ocr_detailed(abs_path: str, type_code: str | None = None) -> tuple[str, list[dict], list[dict]]:
+    """调用 /file/detailed，返回全文、坐标块及可选的同次识别字段。"""
     if not Path(abs_path).is_file():
         log.warning("OCR skip: file not found at %s", abs_path)
-        return "", []
+        return "", [], []
     log.info("OCR /file/detailed  url=%s  path=%s", settings.OCR_BASE_URL, abs_path)
     try:
         with open(abs_path, "rb") as fh:
+            form_data = {"type_code": type_code} if type_code in {
+                "DRAWDOWN_INSTRUCTION", "PAYMENT_INSTRUCTION"
+            } else None
             resp = httpx.post(
                 f"{settings.OCR_BASE_URL}/file/detailed",
+                data=form_data,
                 files={"file": (Path(abs_path).name, fh)},
-                timeout=180.0,
+                timeout=settings.OCR_REQUEST_TIMEOUT_SECONDS,
             )
         log.info("OCR /file/detailed  status=%d", resp.status_code)
         if resp.status_code == 200:
             data = resp.json()
-            return data.get("text", ""), data.get("blocks", [])
+            return data.get("text", ""), data.get("blocks", []), data.get("fields", [])
         log.warning("OCR /file/detailed non-200: %s", resp.text[:200])
     except Exception as exc:
         log.warning("OCR /file/detailed failed: %s", exc)
-    return "", []
+    return "", [], []
 
 
 def _ocr_extract(abs_path: str, type_code: str) -> list[dict]:
@@ -105,7 +109,7 @@ def _ocr_extract(abs_path: str, type_code: str) -> list[dict]:
                 f"{settings.OCR_BASE_URL}/extract",
                 data={"type_code": type_code},
                 files={"file": (Path(abs_path).name, fh)},
-                timeout=180.0,
+                timeout=settings.OCR_REQUEST_TIMEOUT_SECONDS,
             )
         log.info("OCR /extract  status=%d", resp.status_code)
         if resp.status_code == 200:
@@ -144,14 +148,24 @@ def _find_with_source(
                 if value and len(value) > 1:
                     blk = _find_block(blocks, value[:120])
                     conf = round(blk["score"], 4) if blk else 0.82
-                    src = {"bbox": blk["box"], "page": blk.get("page", 1)} if blk else None
+                    src = {
+                        "bbox": blk.get("box") if blk else None,
+                        "page": blk.get("page") if blk else None,
+                        "method": blk.get("method") if blk else None,
+                        "confidence": conf,
+                    }
                     return value[:120], conf, src
                 if i + 1 < len(lines):
                     nxt = lines[i + 1].strip()
                     if nxt and len(nxt) > 1:
                         blk = _find_block(blocks, nxt[:120])
                         conf = round(blk["score"], 4) if blk else 0.75
-                        src = {"bbox": blk["box"], "page": blk.get("page", 1)} if blk else None
+                        src = {
+                            "bbox": blk.get("box") if blk else None,
+                            "page": blk.get("page") if blk else None,
+                            "method": blk.get("method") if blk else None,
+                            "confidence": conf,
+                        }
                         return nxt[:120], conf, src
     return None, 0.0, None
 
@@ -203,7 +217,12 @@ def _from_ocr_field(f: dict, blocks: list[dict]) -> dict:
         blk = _find_block(blocks, str(value)[:40])
         if blk:
             conf = round(blk["score"], 4)
-            src = {"bbox": blk["box"], "page": blk.get("page", 1)}
+            src = {
+                "bbox": blk.get("box"),
+                "page": blk.get("page"),
+                "method": blk.get("method"),
+                "confidence": conf,
+            }
         else:
             conf = f.get("confidence", 0.8)
     return _f(key, f.get("label", key), value, kind, conf, src)
@@ -228,7 +247,11 @@ def _extract_facility_letter(text: str, blocks: list[dict]) -> list[dict]:
     ]
 
 
-def _extract_drawdown(text: str, abs_path: str, blocks: list[dict]) -> list[dict]:
+def _extract_drawdown(
+    text: str, abs_path: str, blocks: list[dict], extracted_fields: list[dict] | None = None
+) -> list[dict]:
+    if extracted_fields and any(field.get("found") for field in extracted_fields):
+        return [_from_ocr_field(field, blocks) for field in extracted_fields]
     for ocr_type in ("DRAWDOWN_CN", "DRAWDOWN_EN", "DRAWDOWN_INSTRUCTION"):
         ocr_fields = _ocr_extract(abs_path, ocr_type)
         if any(f.get("found") for f in ocr_fields):
@@ -246,7 +269,11 @@ def _extract_drawdown(text: str, abs_path: str, blocks: list[dict]) -> list[dict
     ]
 
 
-def _extract_payment(text: str, abs_path: str, blocks: list[dict]) -> list[dict]:
+def _extract_payment(
+    text: str, abs_path: str, blocks: list[dict], extracted_fields: list[dict] | None = None
+) -> list[dict]:
+    if extracted_fields and any(field.get("found") for field in extracted_fields):
+        return [_from_ocr_field(field, blocks) for field in extracted_fields]
     ocr_fields = _ocr_extract(abs_path, "PAYMENT_INSTRUCTION")
     if any(f.get("found") for f in ocr_fields):
         return [_from_ocr_field(f, blocks) for f in ocr_fields]
@@ -337,10 +364,16 @@ def _extract_proforma_invoice(text: str, blocks: list[dict]) -> list[dict]:
     ]
 
 
-def _extract_fields(tcode: str, text: str, abs_path: str, blocks: list[dict]) -> list[dict]:
+def _extract_fields(
+    tcode: str,
+    text: str,
+    abs_path: str,
+    blocks: list[dict],
+    extracted_fields: list[dict] | None = None,
+) -> list[dict]:
     if tcode == "FACILITY_LETTER":       return _extract_facility_letter(text, blocks)
-    if tcode == "DRAWDOWN_INSTRUCTION":  return _extract_drawdown(text, abs_path, blocks)
-    if tcode == "PAYMENT_INSTRUCTION":   return _extract_payment(text, abs_path, blocks)
+    if tcode == "DRAWDOWN_INSTRUCTION":  return _extract_drawdown(text, abs_path, blocks, extracted_fields)
+    if tcode == "PAYMENT_INSTRUCTION":   return _extract_payment(text, abs_path, blocks, extracted_fields)
     if tcode == "COMMERCIAL_CONTRACT":   return _extract_commercial_contract(text, blocks)
     if tcode == "COMMERCIAL_ORDER":      return _extract_commercial_order(text, blocks)
     if tcode == "WAYBILL":               return _extract_waybill(text, blocks)
@@ -406,10 +439,11 @@ def parse_files(uploads: list) -> dict:
 
         text = ""
         blocks: list[dict] = []
+        extracted_fields: list[dict] = []
         if abs_path and Path(abs_path).is_file():
-            text, blocks = _ocr_detailed(abs_path)
+            text, blocks, extracted_fields = _ocr_detailed(abs_path, tcode)
 
-        fields = _extract_fields(tcode, text, abs_path, blocks)
+        fields = _extract_fields(tcode, text, abs_path, blocks, extracted_fields)
 
         documents.append({
             "doc_code": doc_code,

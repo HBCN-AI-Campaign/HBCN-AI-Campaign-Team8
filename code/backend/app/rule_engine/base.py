@@ -61,7 +61,7 @@ class DocBundle:
             return None
         meta = metas[idx]
         src = (meta.get("field_sources") or {}).get(field_key)
-        if not src:
+        if not src or (src.get("page") is None and not src.get("bbox")):
             return None
         return {
             "doc_id": meta.get("doc_id"),

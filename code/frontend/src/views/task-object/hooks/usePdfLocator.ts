@@ -42,7 +42,7 @@ export function usePdfLocator(
   // 规则明细表「定位原文」—— 直接用行里的 source（含 bbox 高亮）
   const locateRow = useCallback(
     (source?: FieldSource | null) => {
-      if (!source?.pdf_file || !source?.bbox) {
+      if (!source?.pdf_file) {
         message.info('该项暂无可定位的原文')
         return
       }
