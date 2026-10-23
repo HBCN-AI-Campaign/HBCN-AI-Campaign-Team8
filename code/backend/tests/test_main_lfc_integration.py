@@ -14,6 +14,7 @@ from sqlalchemy.pool import StaticPool
 from app import models
 from app.database import Base, get_db
 from app.main import app
+from app.schemas import ParsedDocument
 from app.security import create_access_token
 
 
@@ -113,6 +114,14 @@ class MainLfcIntegrationTests(unittest.TestCase):
                         "status": "accepted", "required": True, "issues": [], "candidates": [], "choices": []}],
                     "status": "needs_review", "issues": [], "page_count": 1}]
             }
+            result["documents"][0]["page_diagnostics"] = [{
+                "page": 1, "width": 1191, "height": 1684, "ocr_required": True,
+                "ocr_status": "completed", "block_count": 68,
+                "recognized_character_count": 1319, "valid_box_count": 68,
+                "invalid_box_count": 0,
+                "score_bins": {"lt_085": 0, "085_to_095": 12, "ge_095": 56},
+                "error_codes": [],
+            }]
             with patch("app.routers.parsing.UPLOAD_DIR", uploads), patch(
                 "app.routers.tasks.parse_files", return_value=result
             ) as parse:
@@ -129,6 +138,18 @@ class MainLfcIntegrationTests(unittest.TestCase):
         self.assertEqual(fields["borrower"]["source"]["page"], 1)
         self.assertTrue(data["documents"][0]["pdf_file"].startswith("uploads/"))
         self.assertTrue(data["parse_run_id"])
+        diagnostic = data["documents"][0]["page_diagnostics"][0]
+        self.assertEqual(diagnostic["block_count"], 68)
+        self.assertEqual(diagnostic["valid_box_count"], 68)
+        self.assertNotIn("text", diagnostic)
+        self.assertNotIn("Integration Customer", str(diagnostic))
+
+    def test_legacy_parsed_document_defaults_page_diagnostics(self):
+        document = ParsedDocument.model_validate({
+            "doc_code": "F1", "type_code": "FACILITY_LETTER", "type_label": "授信函",
+            "source_filename": "facility.pdf", "fields": [],
+        })
+        self.assertEqual(document.page_diagnostics, [])
 
     def test_seed_creates_initial_rule_results_and_is_repeatable(self):
         from app.seed import seed

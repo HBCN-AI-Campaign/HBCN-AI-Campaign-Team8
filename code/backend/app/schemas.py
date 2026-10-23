@@ -1,7 +1,7 @@
 """Pydantic DTO。"""
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from .parsing.facility import FacilitySelection
 from .money import TaskMoney
 
@@ -190,6 +190,7 @@ class ParsedDocument(BaseModel):
     unresolved_required: list[str] = []
     regional_attempts: list[dict] = []
     structure_attempts: list[dict] = []
+    page_diagnostics: list[dict] = Field(default_factory=list)
 
 
 class ParseResult(BaseModel):
