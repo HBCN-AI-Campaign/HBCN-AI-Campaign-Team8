@@ -76,9 +76,9 @@ def guess_type(filename: str) -> str | None:
 def _ocr_detailed(abs_path: str, type_code: str | None = None) -> tuple[str, list[dict], list[dict]]:
     """调用 /file/detailed，返回全文、坐标块及可选的同次识别字段。"""
     if not Path(abs_path).is_file():
-        log.warning("OCR skip: file not found at %s", abs_path)
+        log.warning("OCR /file/detailed skipped: input file not found")
         return "", [], []
-    log.info("OCR /file/detailed  url=%s  path=%s", settings.OCR_BASE_URL, abs_path)
+    log.info("OCR /file/detailed request  type=%s", type_code or "unspecified")
     try:
         with open(abs_path, "rb") as fh:
             form_data = {"type_code": type_code} if type_code in {
@@ -94,15 +94,15 @@ def _ocr_detailed(abs_path: str, type_code: str | None = None) -> tuple[str, lis
         if resp.status_code == 200:
             data = resp.json()
             return data.get("text", ""), data.get("blocks", []), data.get("fields", [])
-        log.warning("OCR /file/detailed non-200: %s", resp.text[:200])
+        log.warning("OCR /file/detailed returned non-200 status=%d", resp.status_code)
     except Exception as exc:
-        log.warning("OCR /file/detailed failed: %s", exc)
+        log.warning("OCR /file/detailed failed: error_type=%s", type(exc).__name__)
     return "", [], []
 
 
 def _ocr_extract(abs_path: str, type_code: str) -> list[dict]:
     """调用 OCR 服务 POST /extract（按单据类型提取结构化字段），失败返回空列表。"""
-    log.info("OCR /extract  type=%s  path=%s", type_code, abs_path)
+    log.info("OCR /extract request  type=%s", type_code)
     try:
         with open(abs_path, "rb") as fh:
             resp = httpx.post(
@@ -114,9 +114,9 @@ def _ocr_extract(abs_path: str, type_code: str) -> list[dict]:
         log.info("OCR /extract  status=%d", resp.status_code)
         if resp.status_code == 200:
             return resp.json().get("fields", [])
-        log.warning("OCR /extract non-200: %s", resp.text[:200])
+        log.warning("OCR /extract returned non-200 status=%d", resp.status_code)
     except Exception as exc:
-        log.warning("OCR /extract failed: %s", exc)
+        log.warning("OCR /extract failed: error_type=%s", type(exc).__name__)
     return []
 
 
@@ -147,7 +147,7 @@ def _find_with_source(
                 value = after[-1].strip() if len(after) > 1 else ""
                 if value and len(value) > 1:
                     blk = _find_block(blocks, value[:120])
-                    conf = round(blk["score"], 4) if blk else 0.82
+                    conf = round(blk["score"], 4) if blk else 0.0
                     src = {
                         "bbox": blk.get("box") if blk else None,
                         "page": blk.get("page") if blk else None,
@@ -159,7 +159,7 @@ def _find_with_source(
                     nxt = lines[i + 1].strip()
                     if nxt and len(nxt) > 1:
                         blk = _find_block(blocks, nxt[:120])
-                        conf = round(blk["score"], 4) if blk else 0.75
+                        conf = round(blk["score"], 4) if blk else 0.0
                         src = {
                             "bbox": blk.get("box") if blk else None,
                             "page": blk.get("page") if blk else None,
@@ -224,7 +224,7 @@ def _from_ocr_field(f: dict, blocks: list[dict]) -> dict:
                 "confidence": conf,
             }
         else:
-            conf = f.get("confidence", 0.8)
+            conf = 0.0
     return _f(key, f.get("label", key), value, kind, conf, src)
 
 

@@ -46,6 +46,47 @@ class ParseAgentSinglePassTests(unittest.TestCase):
         self.assertEqual(fields["amount"]["value"], "100")
         self.assertEqual(fields["amount"]["source"]["page"], 1)
 
+    def test_fields_without_matching_text_blocks_do_not_get_high_confidence(self):
+        value, confidence, source = parse_agent._find_with_source("借款人：Borrower Ltd", ["借款人"], [])
+        self.assertEqual(value, "Borrower Ltd")
+        self.assertEqual(confidence, 0.0)
+        self.assertIsNone(source["page"])
+        self.assertIsNone(source["bbox"])
+
+        field = parse_agent._from_ocr_field({
+            "key": "amount", "label": "金额", "value": "100", "found": True, "confidence": 0.99,
+        }, [])
+        self.assertEqual(field["confidence"], 0.0)
+        self.assertIsNone(field["source"])
+
+    def test_ocr_error_logs_exclude_response_body_and_local_path(self):
+        with tempfile.TemporaryDirectory(prefix="private-ocr-log-") as directory:
+            pdf_path = Path(directory) / "sensitive-document.pdf"
+            pdf_path.write_bytes(b"test pdf")
+            response_body = f"private OCR response with customer data at {pdf_path}"
+            transport = httpx.MockTransport(lambda request: httpx.Response(500, text=response_body))
+            with httpx.Client(transport=transport) as client, patch(
+                "app.parse_agent.httpx.post", side_effect=client.post
+            ), self.assertLogs("app.parse_agent", level="INFO") as captured:
+                self.assertEqual(parse_agent._ocr_detailed(str(pdf_path)), ("", [], []))
+                self.assertEqual(parse_agent._ocr_extract(str(pdf_path), "PAYMENT_INSTRUCTION"), [])
+
+            non_200_logs = "\n".join(captured.output)
+            self.assertIn("status=500", non_200_logs)
+            self.assertNotIn(response_body, non_200_logs)
+            self.assertNotIn(str(pdf_path), non_200_logs)
+
+            with patch("app.parse_agent.httpx.post", side_effect=RuntimeError(f"private failure {pdf_path}")), self.assertLogs(
+                "app.parse_agent", level="WARNING"
+            ) as captured:
+                self.assertEqual(parse_agent._ocr_detailed(str(pdf_path)), ("", [], []))
+                self.assertEqual(parse_agent._ocr_extract(str(pdf_path), "PAYMENT_INSTRUCTION"), [])
+
+            exception_logs = "\n".join(captured.output)
+            self.assertIn("error_type=RuntimeError", exception_logs)
+            self.assertNotIn("private failure", exception_logs)
+            self.assertNotIn(str(pdf_path), exception_logs)
+
 
 if __name__ == "__main__":
     unittest.main()
