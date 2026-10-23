@@ -89,7 +89,12 @@ def valid_uuid(value):
 
 
 @router.get("/ready")
-def ready():
+def ready(request: Request):
+    startup_error = getattr(request.app.state, "startup_error", None)
+    if startup_error:
+        return JSONResponse(status_code=503, content={
+            "status": "unavailable", "message": startup_error,
+        })
     try:
         resources = postgres_engine().readiness()
         runtime_ready = SDKRuntime().health()

@@ -99,3 +99,37 @@ RAG UI 在本隔离 worktree 安装锁定依赖后，`pnpm exec vitest run --max
 长期 Goal 工具仍返回既有目标为 `blocked`，并拒绝新建重复目标；当前工具没有把 `blocked` 重新设为 `active` 的操作。本轮按交接要求继续复验，但不伪报 Goal 已激活。此前相关执行记录有远端 compact stream 在完成前断开的失败；当前隔离工作树已正常加载，`lfc-rag` HEAD 为 `ceafa40`，并非代码树未加载或有隐含新提交。
 
 目标服务器状态由只读交接核查提供：`/opt/hbcn-rag` 与 `/etc/hbcn-rag/rag.env` 不存在，8011 连接拒绝。故 Linux/云端启动、health/ready、主站→RAG 请求、持久化和恢复演练全部 **pending**；不执行部署或服务器修改。当前专用 reranker 也没有可用配置/服务证据；接口机制测试通过不代表 rerank 已启用或质量优于 RRF。
+
+## 8. 10月23日补充复验：启动恢复与索引失败
+
+### 跳过项及本机环境
+
+完整 Python 回归为 **211项：198通过、13跳过、0失败**。13项逐项跳过原因如下；启用测试标记仍必须同时提供专用、可丢弃的隔离库或语料，标记本身不是安全证明。
+
+| 测试 | 跳过原因 |
+|---|---|
+| `test_hybrid_retrieval.HybridPostgresTests.test_live_lexical_hybrid_and_lifecycle` | 未设 `HBCN_TEST_POSTGRES=1`；需隔离 PostgreSQL 验证真实 FTS、索引回填与 scope 过滤 |
+| `test_document_lifecycle.DocumentLifecyclePostgresTests.test_withdrawal_atomically_blocks_both_channels_readers_and_stale_vector_results` | 同上；需真实 PG 验证事务撤回、向量/词法读屏障 |
+| `test_document_lifecycle.DocumentLifecyclePostgresTests.test_withdrawal_during_indexing_fences_final_publication` | 同上；需真实 PG 验证撤回与索引发布竞态 |
+| `test_document_lifecycle.DocumentLifecyclePostgresTests.test_ordinary_ingestion_can_publish_then_withdraw_without_erasing_original` | 同上；需真实 PG 验证发布/撤回生命周期 |
+| `test_document_lifecycle.DocumentLifecyclePostgresTests.test_graph_withdrawal_during_generation_suppresses_answer_and_original_evidence` | 同上；需真实 PG 验证生成期间撤回后不发布答案/证据 |
+| `test_document_lifecycle.DocumentLifecyclePostgresTests.test_evidence_only_graph_rechecks_after_assessment_and_cannot_claim_sufficiency` | 同上；需真实 PG 验证证据复核期间撤回 |
+| `test_quality_review.QualityReviewPostgresTests.test_pending_content_not_embedded_until_exact_review_and_uses_reviewed_text_without_reocr` | 未设 `HBCN_TEST_POSTGRES=1`；需真实 PG 验证逐单元批准、复用核验文本再入库 |
+| `test_quality_review.QualityReviewPostgresTests.test_invalid_text_and_changed_original_are_never_embedded_and_withdrawn_review_is_blocked` | 同上；需真实 PG 验证原件变更/撤回对复核和入库的阻断 |
+| `test_quality_review.QualityReviewPostgresTests.test_http_review_requires_separate_live_scope_bound_key_and_rejects_forged_identity` | 同上；需真实 PG 验证 HTTP 复核授权及 scope 绑定 |
+| `test_quality_review.QualityReviewPostgresTests.test_changed_parsed_units_invalidate_approval_and_rejection_never_enqueues` | 同上；需真实 PG 验证解析版本变化和拒绝后的队列状态 |
+| `test_quality_review.QualityReviewPostgresTests.test_legacy_ready_sources_are_hidden_until_explicit_recheck_and_withdrawal_cannot_be_rechecked` | 同上；需真实 PG 验证旧 ready 隔离、显式重检和撤回单调性 |
+| `test_reference_governance.ReferencePostgresTests.test_real_fts_transactions_publication_race_and_source_revocation` | 未设 `HBCN_TEST_POSTGRES=1`；需真实 PG 验证参考治理 FTS 事务、发布竞态和撤销 |
+| `test_ragflow.RAGFlowClientTests.test_external_manifest_corpus_when_explicitly_configured` | 未设 `HBCN_TEST_SOURCE_ROOT`；需调用方显式提供含11份批准测试文件的外部语料根目录 |
+
+隔离 worktree 没有 Docker/Podman、PostgreSQL 服务/客户端或本地 5432 监听；RAG 数据库 URL、数据库资源文件、SSH 隧道资源文件也均未配置。因此本机没有可安全使用的临时 PostgreSQL/容器，本次没有运行上述真实 PG 用例，也没有连接汇丰服务器或其他共享库。第13项外部语料路径未提供，未读取或处理真实业务原件。
+
+### 离线故障注入与结果
+
+发现一个就绪门禁问题：启动恢复 hook 抛错时，lifespan 会保存 `startup_error`，但 `/api/v1/ready` 之前没有检查它；若数据库和 runtime 后续探针成功，可能错误返回 ready。现已让 ready 在该状态下 fail closed，并添加测试验证启动会调用恢复 hook、恢复失败后 ready 返回503且不继续调用资源探针。
+
+另新增一个 SQLite 事务测试夹具，对 `PostgresEngine.process` 注入“首批向量已部分写入后Embedding失败”。验证失败文档仍不可检索，下一次处理尝试先删除残留片段，再发布唯一且完整的一代片段；该夹具只测试应用编排和状态门禁，不模拟 PostgreSQL、pgvector、向量供应商事务或真实崩溃恢复。目标数据库中的 `recover_interrupted()` SQL更新、进程被杀后的磁盘/向量一致性仍须隔离 PostgreSQL 故障演练。
+
+本次验证：`python -m unittest discover -s tests -v` 211项（198通过、13跳过）；`python scripts/smoke-isolated-api.py` 通过（临时本机HTTP服务、无共享数据库/模型调用）；`python scripts/export-openapi.py --check` 通过；`python -m pip check` 通过。UI 源码未变，沿用前节21项 UI 测试与构建结果。本次未运行 Docker/Linux，也未调用真实模型、Embedding、reranker、MCP、外部语料或目标服务器。
+
+部署文档静态版本核对：当前 `app/version.py` 与部署 README / Docker tag 均为服务0.5.1、API 1.3.1，版本号一致，没有版本过期。README 已补入目标机当前未部署证据、systemd 权限待核验项、占位 token 说明、本地可复现命令和13项 skip 的前置条件。服务端部署、身份权限、备份恢复与主站真实联调继续 **pending**。
