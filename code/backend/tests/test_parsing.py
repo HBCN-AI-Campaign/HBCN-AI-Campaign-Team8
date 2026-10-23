@@ -11,7 +11,7 @@ import httpx
 from app.parsing.config import ParserSettings
 from app.parsing.contracts import Block, Page, ParseError
 from app.parsing.normalization import normalize
-from app.parsing.pipeline import ParsingPipeline, page_quality, resolve, validate_candidate
+from app.parsing.pipeline import ParsingPipeline, field_quality, page_quality, resolve, validate_candidate
 from app.parsing.providers import HSBCSemanticProvider, PaddleHttpProvider, safe_endpoint
 from app.parsing.registry import A, FIELDS, guess_type, spec
 from app.rule_engine import run_all
@@ -52,6 +52,26 @@ class NormalizationTests(unittest.TestCase):
 
 
 class EvidenceTests(unittest.TestCase):
+    def test_field_quality_reports_stage_signals_without_candidate_values(self):
+        diagnostic=field_quality({
+            'key':'amount','data_type':'money','status':'needs_review','required':True,
+            'value':None,'source':None,'issues':['NO_VALUE'],
+            'candidates':[{'method':'ocr_semantic','raw_value':'sensitive amount text',
+                'value':'987654321.00','issues':['RAW_VALUE_NOT_GROUNDED','LOW_OCR_SCORE']}],
+        },[{'keys':['amount'],'status':'failed','code':'OCR_REQUEST_FAILED','bbox':[.1,.2,.3,.4]}])
+        self.assertEqual(diagnostic['key'],'amount')
+        self.assertEqual(diagnostic['candidate_method_counts'],{'ocr_semantic':1})
+        self.assertEqual(diagnostic['candidate_issue_counts'],{'LOW_OCR_SCORE':1,'RAW_VALUE_NOT_GROUNDED':1})
+        self.assertEqual(diagnostic['regional_attempt_count'],1)
+        self.assertEqual(diagnostic['regional_attempt_status_counts'],{'failed':1})
+        self.assertEqual(diagnostic['regional_attempt_failure_counts'],{'OCR_REQUEST_FAILED':1})
+        self.assertFalse(diagnostic['value_present'])
+        self.assertFalse(diagnostic['source_box_valid'])
+        serialized=json.dumps(diagnostic,ensure_ascii=False)
+        self.assertNotIn('sensitive amount text',serialized)
+        self.assertNotIn('987654321.00',serialized)
+        self.assertNotIn('bbox',serialized)
+
     def test_page_quality_diagnostics_omit_business_text(self):
         p=Page(2,1000,500,b"png",[Block("p2b0","account-number-123",[.1,.2,.3,.4],.82,"paddle_http")])
         report=page_quality(p)
@@ -204,6 +224,11 @@ class PipelineTests(unittest.TestCase):
                     path,"payment.pdf",type_code="PAYMENT_INSTRUCTION")
         self.assertEqual(doc["status"],"needs_review")
         self.assertIn("SEMANTIC_UNKNOWN_FIELD_KEY",[issue["code"] for issue in doc["issues"]])
+        amount=next(item for item in doc["field_diagnostics"] if item["key"]=="amount")
+        self.assertEqual(amount["data_type"],"money")
+        self.assertEqual(amount["candidate_count"],0)
+        self.assertEqual(amount["regional_attempt_count"],0)
+        self.assertFalse(amount["value_present"])
         self.assertNotIn("secret text",json.dumps(doc,ensure_ascii=False))
 
     def test_malformed_model_field_is_reported(self):

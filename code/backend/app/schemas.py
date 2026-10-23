@@ -191,6 +191,7 @@ class ParsedDocument(BaseModel):
     regional_attempts: list[dict] = []
     structure_attempts: list[dict] = []
     page_diagnostics: list[dict] = Field(default_factory=list)
+    field_diagnostics: list[dict] = Field(default_factory=list)
 
 
 class ParseResult(BaseModel):

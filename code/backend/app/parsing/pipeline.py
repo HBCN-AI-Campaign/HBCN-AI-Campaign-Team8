@@ -46,6 +46,45 @@ def page_quality(page):
         error_codes=list(page.errors))
 
 
+def field_quality(field,regional_attempts=()):
+    candidates=field.get('candidates') or []
+    issue_counts=defaultdict(int)
+    method_counts=defaultdict(int)
+    attempt_status_counts=defaultdict(int)
+    attempt_failure_counts=defaultdict(int)
+    active_count=0
+    key=field.get('key')
+    attempts=[a for a in regional_attempts if isinstance(a,dict) and key in (a.get('keys') or [])]
+    for candidate in candidates:
+        if not isinstance(candidate,dict):continue
+        active_count+=not candidate.get('superseded',False)
+        method=candidate.get('method')
+        if method in {'ocr_semantic','vision','regional_ocr','blind_region_pixels'}:
+            method_counts[method]+=1
+        for code in set(candidate.get('issues') or []):
+            if isinstance(code,str) and code and code==code.upper() and code.replace('_','').isalnum():
+                issue_counts[code]+=1
+    for attempt in attempts:
+        status=attempt.get('status')
+        if status in {'started','completed','accepted','needs_review','failed'}:
+            attempt_status_counts[status]+=1
+        code=attempt.get('code')
+        if isinstance(code,str) and code and code==code.upper() and code.replace('_','').isalnum():
+            attempt_failure_counts[code]+=1
+    source=field.get('source') if isinstance(field.get('source'),dict) else {}
+    page=source.get('page')
+    return dict(key=key,data_type=field.get('data_type'),status=field.get('status'),
+        required=bool(field.get('required')),value_present=field.get('value') not in (None,'',[]),
+        candidate_count=len(candidates),active_candidate_count=active_count,
+        candidate_method_counts=dict(sorted(method_counts.items())),
+        candidate_issue_counts=dict(sorted(issue_counts.items())),
+        regional_attempt_count=len(attempts),regional_attempt_status_counts=dict(sorted(attempt_status_counts.items())),
+        regional_attempt_failure_counts=dict(sorted(attempt_failure_counts.items())),
+        field_issue_codes=sorted(code for code in (field.get('issues') or [])
+            if isinstance(code,str) and code and code==code.upper() and code.replace('_','').isalnum()),
+        source_page_present=type(page) is int and page>0,source_box_valid=_valid_bbox(source.get('bbox')))
+
+
 def validate_candidate(candidate,spec,pages,method):
     """Provider output never supplies source coordinates or a trusted quality score."""
     by_id={b.id:(p,b) for p in pages for b in p.blocks}
@@ -418,6 +457,7 @@ class ParsingPipeline:
             regional_attempts=regional_attempts,
             structure_attempts=structure_attempts,
             page_diagnostics=[page_quality(page) for page in pages],
+            field_diagnostics=[field_quality(field,regional_attempts) for field in fields],
             **({'goods_table_scope':goods_scope} if goods_scope is not None else {}),
             seconds=round(time.monotonic()-start,3))
 

@@ -11,10 +11,22 @@ from app.parsing.config import ParserSettings
 from app.parsing.contracts import Page
 from app.parsing.pipeline import ParsingPipeline
 from app.parsing import jobs
+from app.parsing.registry import A, FIELDS, guess_type
 from app.schemas import DocumentIn
 
 
 class DocumentTypeSelectionTests(unittest.TestCase):
+    def test_commercial_document_types_share_registered_money_amount(self):
+        expected={"商业合同.pdf":"COMMERCIAL_CONTRACT","商业订单.pdf":"COMMERCIAL_ORDER",
+                  "形式发票.pdf":"PROFORMA_INVOICE"}
+        for filename,type_code in expected.items():
+            with self.subTest(filename=filename):
+                self.assertEqual(guess_type(filename),type_code)
+                amounts=[field for field in FIELDS[type_code] if field["key"]=="amount"]
+                self.assertEqual(len(amounts),1)
+                self.assertIs(amounts[0],A)
+                self.assertEqual(amounts[0]["data_type"],"money")
+
     def test_explicit_order_and_duplicate_names_do_not_drive_mapping(self):
         choices=parse_selections('[{"type_code":"DRAWDOWN_INSTRUCTION","reason":"原件标题为提款申请"},{"type_code":"COMMERCIAL_CONTRACT","reason":"原件标题为销售合同"}]',2)
         self.assertEqual([c.type_code for c in choices],['DRAWDOWN_INSTRUCTION','COMMERCIAL_CONTRACT'])

@@ -122,6 +122,16 @@ class MainLfcIntegrationTests(unittest.TestCase):
                 "score_bins": {"lt_085": 0, "085_to_095": 12, "ge_095": 56},
                 "error_codes": [],
             }]
+            result["documents"][0]["field_diagnostics"] = [{
+                "key": "amount", "data_type": "money", "status": "needs_review",
+                "required": True, "value_present": False, "candidate_count": 1,
+                "active_candidate_count": 1, "candidate_method_counts": {"ocr_semantic": 1},
+                "candidate_issue_counts": {"RAW_VALUE_NOT_GROUNDED": 1},
+                "regional_attempt_count": 0, "regional_attempt_status_counts": {},
+                "regional_attempt_failure_counts": {},
+                "field_issue_codes": ["RAW_VALUE_NOT_GROUNDED"],
+                "source_page_present": False, "source_box_valid": False,
+            }]
             with patch("app.routers.parsing.UPLOAD_DIR", uploads), patch(
                 "app.routers.tasks.parse_files", return_value=result
             ) as parse:
@@ -143,6 +153,12 @@ class MainLfcIntegrationTests(unittest.TestCase):
         self.assertEqual(diagnostic["valid_box_count"], 68)
         self.assertNotIn("text", diagnostic)
         self.assertNotIn("Integration Customer", str(diagnostic))
+        field_diagnostic = data["documents"][0]["field_diagnostics"][0]
+        self.assertEqual(field_diagnostic["key"], "amount")
+        self.assertEqual(field_diagnostic["candidate_issue_counts"], {"RAW_VALUE_NOT_GROUNDED": 1})
+        self.assertNotIn("value", field_diagnostic)
+        self.assertNotIn("raw_value", field_diagnostic)
+        self.assertNotIn("OCR body", str(field_diagnostic))
 
     def test_legacy_parsed_document_defaults_page_diagnostics(self):
         document = ParsedDocument.model_validate({
@@ -150,6 +166,7 @@ class MainLfcIntegrationTests(unittest.TestCase):
             "source_filename": "facility.pdf", "fields": [],
         })
         self.assertEqual(document.page_diagnostics, [])
+        self.assertEqual(document.field_diagnostics, [])
 
     def test_seed_creates_initial_rule_results_and_is_repeatable(self):
         from app.seed import seed
