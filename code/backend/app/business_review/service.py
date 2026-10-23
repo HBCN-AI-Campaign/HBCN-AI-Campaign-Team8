@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -62,6 +63,28 @@ def _canonical_decimal(value) -> str:
         return format(Decimal(str(value)).normalize(), "f")
     except (ArithmeticError, TypeError, ValueError):
         return str(value)
+
+
+def _has_complete_source_location(source) -> bool:
+    if not isinstance(source, dict):
+        return False
+    page = source.get("page")
+    if isinstance(page, bool):
+        return False
+    try:
+        page_number = int(page)
+    except (OverflowError, TypeError, ValueError):
+        return False
+    if page_number < 1:
+        return False
+    bbox = source.get("bbox")
+    if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+        return False
+    try:
+        x0, y0, x1, y1 = (float(value) for value in bbox)
+    except (OverflowError, TypeError, ValueError):
+        return False
+    return all(math.isfinite(value) for value in (x0, y0, x1, y1)) and x1 > x0 and y1 > y0
 
 
 def _pdf_content_fingerprint(pdf_file: str | None) -> str | None:
@@ -155,26 +178,34 @@ def _finding(result: RuleResult) -> dict:
 def _parse_quality_findings(task: models.ReviewTask) -> list[dict]:
     findings = []
     for doc in task.documents:
-        for field_key, source in (doc.field_sources or {}).items():
-            if not isinstance(source, dict):
-                continue
-            value = (doc.fields or {}).get(field_key)
+        sources = doc.field_sources or {}
+        for field_key, value in (doc.fields or {}).items():
             if value is None or value == "":
                 continue
+            source = sources.get(field_key)
+            if not isinstance(source, dict):
+                source = {}
             method = source.get("method")
             try:
                 confidence = float(source["confidence"])
             except (KeyError, TypeError, ValueError):
                 confidence = None
+            if confidence is not None and not math.isfinite(confidence):
+                confidence = None
             is_vision_candidate = method == "vision_ocr"
             is_low_confidence = confidence is not None and confidence < 0.8
-            if not is_vision_candidate and not is_low_confidence:
+            is_missing_location = not _has_complete_source_location(source)
+            if not is_missing_location and not is_vision_candidate and not is_low_confidence:
                 continue
             finding_id = f"OCR_QUALITY__{doc.doc_code}__{field_key}"[:96]
-            if is_vision_candidate:
-                why = f"{doc.doc_code} 的“{field_key}”来自多模态 OCR 候选识别，未提供可核验文字坐标。"
-            else:
-                why = f"{doc.doc_code} 的“{field_key}”识别置信度为 {confidence:.0%}，低于人工复核阈值 80%。"
+            reasons = []
+            if is_missing_location:
+                reasons.append("缺少可核验的页码或有效坐标框")
+            elif is_vision_candidate:
+                reasons.append("来自多模态 OCR 候选识别，需要人工核验")
+            if is_low_confidence:
+                reasons.append(f"识别置信度为 {confidence:.0%}，低于人工复核阈值 80%")
+            why = f"{doc.doc_code} 的“{field_key}”" + "；".join(reasons) + "。"
             findings.append({
                 "finding_id": finding_id,
                 "tier": "parse_quality",

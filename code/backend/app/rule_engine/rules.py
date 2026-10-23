@@ -535,7 +535,7 @@ class R_SupportingAmountChain(Rule):
         iv = sum((_dec(item.get("amount")) for item in invoice_docs), Decimal(0))
         payments = docs.all("PAYMENT_INSTRUCTION")
         pay = sum((_dec(p.get("amount")) for p in payments), Decimal(0)) if payments else Decimal(0)
-        if not (ct or po or iv):
+        if not (ct or po or iv) and payments:
             return _skip(self.id, self.name, self.dimension, "缺少合同/订单/发票金额，无法校验金额链。")
         rows = []
         if ct_doc is not None:
@@ -568,11 +568,8 @@ class R_SupportingAmountChain(Rule):
             missing.append("运单金额")
         if payments and any(not item.get("amount") for item in payments):
             missing.append("支付金额")
-        if missing:
-            return RuleResult(self.id, self.name, self.dimension, Status.WARN,
-                              why=f"金额字段不完整，不能判定金额链：{'、'.join(missing)}。",
-                              suggestion="核实原文金额与币种；有分货或多单据时按货品和编号拆分后复核。",
-                              detail=rows)
+        if not payments:
+            missing.append("支付指令（必需文件）")
         chain = [("合同金额", ct), ("订单金额", po), ("发票金额", iv), ("支付合计", pay)]
         present = [(lab, v) for lab, v in chain if v > 0]
         bad = any(present[i][1] < present[i + 1][1] for i in range(len(present) - 1))
@@ -581,6 +578,12 @@ class R_SupportingAmountChain(Rule):
             return RuleResult(self.id, self.name, self.dimension, Status.FAIL,
                               why="金额链出现下游大于上游的情况（应满足 合同 ≥ 订单 ≥ 发票 ≥ 支付）。",
                               suggestion="核实各单据金额，排查超付/拆单异常。", detail=rows)
+        if missing:
+            reason_prefix = "缺少必需支付指令；" if not payments else ""
+            return RuleResult(self.id, self.name, self.dimension, Status.WARN,
+                              why=f"{reason_prefix}金额字段或必需文件不完整，不能判定金额链：{'、'.join(missing)}。",
+                              suggestion="补交缺失单据并核实原文金额与币种；有分货或多单据时按货品和编号拆分后复核。",
+                              detail=rows)
         return RuleResult(self.id, self.name, self.dimension, Status.PASS,
                           why="金额链满足 合同 ≥ 订单 ≥ 发票 ≥ 支付。", detail=rows)
 

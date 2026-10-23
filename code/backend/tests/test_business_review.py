@@ -201,6 +201,79 @@ class BusinessReviewApiTests(unittest.TestCase):
         self.assertEqual(blocked.status_code, 409)
         self.assertIn(finding["finding_id"], blocked.json()["detail"])
 
+    def test_missing_field_location_requires_review_even_at_point_82_confidence(self):
+        incomplete_sources = [
+            {"bbox": [0.1, 0.1, 0.2, 0.2], "confidence": 0.82},
+            {"page": 1, "bbox": None, "confidence": 0.82},
+        ]
+        for source in incomplete_sources:
+            with self.subTest(source=source):
+                code = self.create_task()
+                with self.sessions() as db:
+                    task = db.query(models.ReviewTask).filter_by(task_code=code).first()
+                    task.documents[0].field_sources = {"borrower": source}
+                    db.commit()
+
+                run = self.client.post(f"/api/tasks/{code}/business-review/run", headers=self.reviewer)
+                self.assertEqual(run.status_code, 200, run.text)
+                finding = next(
+                    item for item in run.json()["findings"]
+                    if item["finding_id"] == "OCR_QUALITY__FOL-1__borrower"
+                )
+                self.assertEqual(finding["status"], "needs_review")
+                self.assertTrue(finding["requires_resolution"])
+                self.assertIn("缺少可核验", finding["why"])
+
+                self.assertEqual(self.client.post(f"/api/tasks/{code}/ai/complete", headers=self.reviewer).status_code, 200)
+                for other in run.json()["findings"]:
+                    if not other["requires_resolution"] or other["finding_id"] == finding["finding_id"]:
+                        continue
+                    action = "approve_exception" if other["status"] == "fail" else "acknowledge"
+                    response = self.client.post(f"/api/tasks/{code}/business-review/resolve", headers=self.reviewer, json={
+                        "finding_id": other["finding_id"], "action": action, "reason": "API 回归：只保留目标定位缺口未处置",
+                    })
+                    self.assertEqual(response.status_code, 200, response.text)
+                blocked = self.client.post(f"/api/tasks/{code}/complete", headers=self.reviewer, json={"comment": ""})
+                self.assertEqual(blocked.status_code, 409)
+                self.assertIn(finding["finding_id"], blocked.json()["detail"])
+
+    def test_missing_payment_document_blocks_amount_chain_at_api(self):
+        code = self.create_task()
+        with self.sessions() as db:
+            task = db.query(models.ReviewTask).filter_by(task_code=code).first()
+            task.documents.extend([
+                models.Document(
+                    doc_code="CT-1", type_code=models.DocumentType.COMMERCIAL_CONTRACT,
+                    fields={"amount": 100}, field_sources={},
+                ),
+                models.Document(
+                    doc_code="IV-1", type_code=models.DocumentType.PROFORMA_INVOICE,
+                    fields={"amount": 90}, field_sources={},
+                ),
+            ])
+            db.commit()
+
+        run = self.client.post(f"/api/tasks/{code}/business-review/run", headers=self.reviewer)
+        self.assertEqual(run.status_code, 200, run.text)
+        finding = next(item for item in run.json()["findings"] if item["rule_id"] == "SUPPORTING__AMOUNT")
+        self.assertEqual(finding["raw_status"], "warn")
+        self.assertEqual(finding["status"], "needs_review")
+        self.assertTrue(finding["requires_resolution"])
+        self.assertIn("缺少必需支付指令", finding["why"])
+
+        self.assertEqual(self.client.post(f"/api/tasks/{code}/ai/complete", headers=self.reviewer).status_code, 200)
+        for other in run.json()["findings"]:
+            if not other["requires_resolution"] or other["finding_id"] == finding["finding_id"]:
+                continue
+            action = "approve_exception" if other["status"] == "fail" else "acknowledge"
+            response = self.client.post(f"/api/tasks/{code}/business-review/resolve", headers=self.reviewer, json={
+                "finding_id": other["finding_id"], "action": action, "reason": "API 回归：只保留支付指令缺件未处置",
+            })
+            self.assertEqual(response.status_code, 200, response.text)
+        blocked = self.client.post(f"/api/tasks/{code}/complete", headers=self.reviewer, json={"comment": ""})
+        self.assertEqual(blocked.status_code, 409)
+        self.assertIn(finding["finding_id"], blocked.json()["detail"])
+
     def test_low_confidence_fields_require_review_before_archive(self):
         code = self.create_task()
         with self.sessions() as db:

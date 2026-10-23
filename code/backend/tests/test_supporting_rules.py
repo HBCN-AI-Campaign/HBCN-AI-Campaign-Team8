@@ -25,6 +25,43 @@ class SupportingRuleTests(unittest.TestCase):
         })
         self.assertEqual(R_SupportingAmountChain().evaluate(documents).status, Status.FAIL)
 
+    def test_missing_payment_instruction_cannot_pass_on_upstream_amounts(self):
+        documents = DocBundle(by_type={
+            "COMMERCIAL_CONTRACT": [{"amount": 100}],
+            "COMMERCIAL_ORDER": [{"amount": 95}],
+            "PROFORMA_INVOICE": [{"amount": 90}],
+        })
+        result = R_SupportingAmountChain().evaluate(documents)
+        finding = _finding(result)
+
+        self.assertEqual(result.status, Status.WARN)
+        self.assertIn("缺少必需支付指令", result.why)
+        self.assertEqual(finding["status"], "needs_review")
+        self.assertTrue(finding["requires_resolution"])
+
+    def test_complete_amount_chain_with_payment_instruction_can_pass(self):
+        documents = DocBundle(by_type={
+            "COMMERCIAL_CONTRACT": [{"amount": 100}],
+            "COMMERCIAL_ORDER": [{"amount": 95}],
+            "PROFORMA_INVOICE": [{"amount": 90}],
+            "PAYMENT_INSTRUCTION": [{"amount": 80}],
+        })
+        self.assertEqual(R_SupportingAmountChain().evaluate(documents).status, Status.PASS)
+
+    def test_rule_evidence_requires_both_page_and_bbox(self):
+        for source in (
+            {"bbox": [0.1, 0.1, 0.2, 0.2]},
+            {"page": 1},
+            {"page": 1, "bbox": [0.2, 0.2, 0.1, 0.3]},
+        ):
+            with self.subTest(source=source):
+                documents = DocBundle(by_type={}, meta_by_type={
+                    "COMMERCIAL_CONTRACT": [{
+                        "field_sources": {"amount": source},
+                    }],
+                })
+                self.assertIsNone(documents.locate("COMMERCIAL_CONTRACT", "amount"))
+
     def test_buyer_borrower_source_conflict_is_routed_to_human_review(self):
         documents = DocBundle(by_type={
             "FACILITY_LETTER": [{"borrower": "Borrower Ltd"}],
