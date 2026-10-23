@@ -90,36 +90,44 @@ export function CollaborationPanel({ open, onClose, session, onChanged, context 
   }
 
   return <>
-    <Drawer title={<><TeamOutlined /> 专家与协作</>} width={420} open={open} onClose={onClose}>
+    <Drawer className="hy-collaboration-drawer" title={<><TeamOutlined /> 专家与协作</>} width="min(420px, calc(100vw - 2px))" open={open} onClose={onClose}>
       {error && <Alert type="error" showIcon message={error} />}
       <Tabs activeKey={tab} onChange={setTab} items={[{ key: 'experts', label: '专家库' }, { key: 'members', label: `会话成员 · ${members.length}` }]} />
-      <Spin spinning={loading}>
-        {tab === 'experts' ? <>
+      {tab === 'experts' ? <>
           <Input.Search aria-label="搜索专家" placeholder="搜索姓名、专业方向或技能标签" maxLength={128} value={query} onChange={(event) => setQuery(event.target.value)} allowClear />
           <Typography.Paragraph className="hy-muted">每次最多显示 50 位；输入关键词搜索全部可邀请审核人员。</Typography.Paragraph>
-          {recommended.length > 0 && !query && <Alert className="hy-directory-note" type="info" showIcon message="与当前讨论匹配的专家"
-            description={<><p>依据本人填写的专业标签匹配，供审核人员选择。</p>{recommended.map((expert) => <Tag key={expert.user_id}>{expert.name} · {expert.tags.join(' / ')}</Tag>)}</>} />}
-          <List dataSource={experts} locale={{ emptyText: <Empty description={loading ? '正在搜索专家' : '暂无匹配专家；可请同事维护自己的专业资料'} /> }} renderItem={(expert) => <List.Item>
-            <div className="hy-expert-card">
-              <Space align="start"><Avatar>{expert.name.slice(0, 1)}</Avatar><div><strong>{expert.name}</strong>{expert.is_self && <Tag>你</Tag>}<p className="hy-muted">{expert.specialty || '审核人员 · 尚未填写专业方向'}</p></div></Space>
-              <p>{expert.bio || '暂无个人介绍，不推测该同事的专业资历。'}</p>
-              <div>{expert.tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}</div>
-              <div className="hy-expert-footer"><small className="hy-muted">{expert.profile_source}</small>
-                <Button size="small" icon={<UserAddOutlined />} disabled={busy || expert.joined || expert.is_self || !session?.can_manage || !session.task_code} onClick={() => invite(expert)}>{expert.joined ? '已在会话' : '邀请加入'}</Button>
-              </div>
-            </div>
-          </List.Item>} />
-          {!session?.task_code && <Alert type="info" message="共享前请新建并关联审核任务；普通问答保持个人会话。" />}
-          <Button block disabled={busy || loading} loading={profileLoading} onClick={() => void editProfile()}>维护我的专业资料</Button>
+          <div className="hy-collab-results" role="region" aria-label="专家搜索结果" tabIndex={0}>
+            <Spin spinning={loading}>
+              {recommended.length > 0 && !query && <Alert className="hy-directory-note" type="info" showIcon message="与当前讨论匹配的专家"
+                description={<><p>依据本人填写的专业标签匹配，供审核人员选择。</p>{recommended.map((expert) => <Tag key={expert.user_id}>{expert.name} · {expert.tags.join(' / ')}</Tag>)}</>} />}
+              <List dataSource={experts} locale={{ emptyText: <Empty description={loading ? '正在搜索专家' : '暂无匹配专家；可请同事维护自己的专业资料'} /> }} renderItem={(expert) => <List.Item>
+                <div className="hy-expert-card">
+                  <Space align="start"><Avatar>{expert.name.slice(0, 1)}</Avatar><div><strong>{expert.name}</strong>{expert.is_self && <Tag>你</Tag>}<p className="hy-muted">{expert.specialty || '审核人员 · 尚未填写专业方向'}</p></div></Space>
+                  <p>{expert.bio || '暂无个人介绍，不推测该同事的专业资历。'}</p>
+                  <div>{expert.tags.map((tag) => <Tag key={tag}>{tag}</Tag>)}</div>
+                  <div className="hy-expert-footer"><small className="hy-muted">{expert.profile_source}</small>
+                    <Button size="small" icon={<UserAddOutlined />} disabled={busy || expert.joined || expert.is_self || !session?.can_manage || !session.task_code} onClick={() => invite(expert)}>{expert.joined ? '已在会话' : '邀请加入'}</Button>
+                  </div>
+                </div>
+              </List.Item>} />
+            </Spin>
+          </div>
+          <div className="hy-collab-footer">
+            {!session?.task_code && <Alert type="info" message="共享前请新建并关联审核任务；普通问答保持个人会话。" />}
+            <Button block disabled={busy || loading} loading={profileLoading} onClick={() => void editProfile()}>维护我的专业资料</Button>
+          </div>
         </> : <>
-          <List dataSource={members} renderItem={(member) => <List.Item actions={session?.can_manage && member.role !== 'owner' ? [<Button key="remove" size="small" danger disabled={busy} onClick={() => revoke(member)}>撤销访问</Button>] : []}>
-            <List.Item.Meta avatar={<Avatar>{member.name.slice(0, 1)}</Avatar>} title={<>{member.name} {member.is_self && <Tag>你</Tag>}</>} description={member.role === 'owner' ? '创建审核人员 · 管理成员' : '参与审核讨论 · 可向 AI 提问'} />
-          </List.Item>} />
-          <Typography.Paragraph className="hy-muted">会话成员与任务权限同时生效。最终结论必须由有权限的审核人员确认。</Typography.Paragraph>
+          <div className="hy-collab-results" role="region" aria-label="会话成员列表" tabIndex={0}>
+            <Spin spinning={loading}>
+              <List dataSource={members} renderItem={(member) => <List.Item actions={session?.can_manage && member.role !== 'owner' ? [<Button key="remove" size="small" danger disabled={busy} onClick={() => revoke(member)}>撤销访问</Button>] : []}>
+                <List.Item.Meta avatar={<Avatar>{member.name.slice(0, 1)}</Avatar>} title={<>{member.name} {member.is_self && <Tag>你</Tag>}</>} description={member.role === 'owner' ? '创建审核人员 · 管理成员' : '参与审核讨论 · 可向 AI 提问'} />
+              </List.Item>} />
+            </Spin>
+          </div>
+          <div className="hy-collab-footer"><Typography.Paragraph className="hy-muted">会话成员与任务权限同时生效。最终结论必须由有权限的审核人员确认。</Typography.Paragraph></div>
         </>}
-      </Spin>
     </Drawer>
-    <Modal title="我的专业资料" open={editing} onCancel={() => setEditing(false)} confirmLoading={busy} okText="保存资料" cancelText="取消" onOk={async () => {
+    <Modal className="hy-expert-profile-modal" title="我的专业资料" open={editing} onCancel={() => setEditing(false)} confirmLoading={busy} okText="保存资料" cancelText="取消" onOk={async () => {
       const values = await form.validateFields()
       const saved = await change(() => collaborationApi.profile({ specialty: values.specialty || '', bio: values.bio || '', tags: (values.tags || '').split(/[,，]/).map((tag) => tag.trim()).filter(Boolean) }))
       if (saved) setEditing(false)

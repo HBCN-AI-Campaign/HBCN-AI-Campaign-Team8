@@ -40,7 +40,9 @@ describe('assistant JSON/SSE boundary', () => {
 
   it('keeps login on 403 and reports a misrouted HTML response', async () => {
     const mock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('{"detail":"任务不存在或无权访问"}', { status: 403 }))
-    await expect(assistantApi.session(99)).rejects.toThrow('任务不存在或无权访问')
+    await expect(assistantApi.session(99)).rejects.toMatchObject({
+      name: 'AssistantApiError', status: 403, message: '任务不存在或无权访问',
+    })
     expect(useAuthStore.getState().token).toBe('test-jwt')
     mock.mockResolvedValueOnce(new Response('<html />', { headers: { 'Content-Type': 'text/html' } }))
     await expect(assistantApi.streamMessage(1, 'hello').next()).rejects.toThrow('检查前端代理')

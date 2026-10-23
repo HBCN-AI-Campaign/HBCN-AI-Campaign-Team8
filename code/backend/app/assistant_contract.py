@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-CONTRACT_VERSION = "1.2.0"
+CONTRACT_VERSION = "1.3.0"
 API_BASE = "/api/assistant/v1"
 ASSISTANT_RUN_TIMEOUT_SECONDS = 360
 ASSISTANT_RUN_EXPIRY_SECONDS = 390

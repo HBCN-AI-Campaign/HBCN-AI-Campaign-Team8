@@ -112,7 +112,7 @@ async def verify():
         from hbcn_assistant import AssistantClient
         async with AssistantClient('http://acceptance', owner['Authorization'].removeprefix('Bearer '),
                                    transport=httpx.ASGITransport(app=app)) as sdk:
-            assert (await sdk.contract())['contract_version'] == '1.2.0'
+            assert (await sdk.contract())['contract_version'] == '1.3.0'
             replayed = await sdk.ask(room['id'], payload['content'], client_message_id=payload['client_message_id'])
             assert replayed == final[0]['message'], 'V1 SDK must replay the same canonical answer'
             snapshot = await sdk.run(room['id'], run['id'])
@@ -150,6 +150,14 @@ if __name__ == '__main__':
                 # Public test password for synthetic data in a loopback-only,
                 # disposable process. Never use these accounts in a shared DB.
                 seed_fixture('local-acceptance-only')
+                from app import models
+                from app.database import SessionLocal
+                with SessionLocal() as db:
+                    owner = db.query(models.User).filter_by(username='acceptance-owner').one()
+                    db.add(models.ReviewTask(task_code='SYNTHETIC-COLLAB-2', borrower='第二家合成验收企业',
+                                             drawdown_currency='EUR', drawdown_amount=200,
+                                             submitted_by=owner.id))
+                    db.commit()
                 import uvicorn
                 from app.main import app
                 print('Disposable browser QA: acceptance-owner / acceptance-expert; password: local-acceptance-only', flush=True)

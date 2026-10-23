@@ -25,7 +25,7 @@ from ..assistant_schemas import (
 )
 from ..assistant_service import _safe_final_answer, sdk_configured, stream_assistant, task_for_user
 from ..assistant_readiness import rag_readiness, runtime_readiness, runtime_problem
-from ..assistant_skills import get_skill, list_skills
+from ..assistant_skills import get_skill_for_user, list_available_skills
 from ..config import settings
 from ..database import get_db
 from ..security import get_current_user, require_role
@@ -143,10 +143,11 @@ def list_sessions(db: Session = Depends(get_db), user: models.User = Depends(get
 
 
 @router.get("/skills", response_model=list[AssistantSkillOut])
-def skills(user: models.User = Depends(get_current_user)):
-    del user
-    fields = ("id", "name", "desc", "version", "owner", "license", "permissions")
-    return [{key: skill[key] for key in fields} for skill in list_skills()]
+def skills(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    fields = ("id", "name", "desc", "version", "owner", "license", "permissions",
+              "is_custom", "editable", "revision")
+    return [{key: skill.get(key, False if key in {"is_custom", "editable"} else None)
+             for key in fields} for skill in list_available_skills(db, user.id)]
 
 
 @router.post("/sessions", response_model=AssistantSessionOut, status_code=201)
@@ -223,7 +224,7 @@ async def stream_message(
     task_code = payload.task_code or session.task_code
     if task_code and not task_for_user(db, user, task_code):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="任务不存在或无权访问")
-    if payload.skill_id and not get_skill(payload.skill_id):
+    if payload.skill_id and not get_skill_for_user(db, user.id, payload.skill_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="审核技能不存在或未发布")
     run, created = admit_run(db, user, session, payload)
     if not created:

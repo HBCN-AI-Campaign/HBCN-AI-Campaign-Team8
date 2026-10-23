@@ -7,10 +7,47 @@ import httpx
 
 from app.assistant_evidence import cited_sources, prepare_evidence
 from app.assistant_readiness import ASSISTANT_PROTOCOL
-from app.assistant_service import run_agent_events, search_evidence
+from app.assistant_service import (_attach_task_document_locations, _safe_task_pdf_file,
+                                   _task_pdf_is_available, run_agent_events, search_evidence)
 
 
 class AssistantEvidenceTests(unittest.TestCase):
+    def test_task_document_location_is_attached_only_to_matching_local_evidence(self):
+        citations = [
+            {'id': 'E1', 'reference_id': 'E1', 'source_id': 'F1', 'label': 'F1', 'source': 'F1', 'page': None},
+            {'id': 'E2', 'reference_id': 'E2', 'source_id': 'F1', 'label': '知识库', 'source': '知识库', 'page': 8},
+            {'id': 'E3', 'reference_id': 'E3', 'source_id': 'F2', 'label': 'F2', 'source': 'F2', 'page': None},
+        ]
+        evidence = [
+            {'type': 'document', 'id': 'F1', 'reference_id': 'E1'},
+            {'type': 'knowledge', 'id': 'F1', 'reference_id': 'E2'},
+            {'type': 'document', 'id': 'F2', 'reference_id': 'E3'},
+        ]
+        context = {'documents': [
+            {'doc_code': 'F1', 'pdf_file': 'facility_letter.pdf',
+             'field_sources': {'borrower': {'page': 3, 'bbox': [0, 0, 1, 1]}}},
+            {'doc_code': 'F2', 'pdf_file': '../../private.pdf', 'field_sources': {}},
+        ]}
+
+        located = _attach_task_document_locations(citations, evidence, context)
+
+        self.assertEqual(located[0]['pdf_file'], 'facility_letter.pdf')
+        self.assertEqual(located[0]['doc_code'], 'F1')
+        self.assertEqual(located[0]['page'], 3)
+        self.assertNotIn('pdf_file', located[1])
+        self.assertNotIn('pdf_file', located[2])
+        self.assertNotIn('pdf_file', citations[0])
+
+    def test_pdf_paths_allow_only_sample_file_or_upload_batch_shape(self):
+        self.assertEqual(_safe_task_pdf_file('facility_letter.pdf'), 'facility_letter.pdf')
+        self.assertTrue(_task_pdf_is_available('facility_letter.pdf'))
+        self.assertEqual(_safe_task_pdf_file('uploads/batch-123/invoice.pdf'), 'uploads/batch-123/invoice.pdf')
+        self.assertFalse(_task_pdf_is_available('uploads/batch-123/invoice.pdf'))
+        for path in ('../private.pdf', 'uploads/../private.pdf', '/etc/private.pdf',
+                     'uploads/batch/file.pdf?download=1', 'uploads\\batch\\file.pdf', 'readme.txt'):
+            with self.subTest(path=path):
+                self.assertIsNone(_safe_task_pdf_file(path))
+
     def test_chinese_question_keeps_task_fields_and_rule_status_without_keyword_match(self):
         context = {'task': {'task_code': 'SYNTHETIC', 'currency': 'USD', 'amount': 100},
                    'documents': [{'doc_code': 'F1', 'fields': {'currency': 'CNY'}}],
@@ -68,6 +105,18 @@ class AssistantEvidenceTests(unittest.TestCase):
         self.assertEqual([row['id'] for row in events[-1]['citations']], ['E1'])
         self.assertEqual(events[0]['step']['key'], 'retrieval-warning-0')
         self.assertEqual(events[0]['step']['status'], 'error')
+
+    def test_task_pdf_location_is_added_after_model_payload_and_reference_are_validated(self):
+        events = asyncio.run(self.collect(
+            '查看任务材料 [E1]。',
+            sources=[{'id': 'F1', 'type': 'document', 'text': '授权字段', 'source': 'F1'}],
+            context={'documents': [{'doc_code': 'F1', 'pdf_file': 'facility_letter.pdf',
+                                    'field_sources': {'borrower': {'page': 2}}}]},
+        ))
+
+        self.assertEqual(events[-1]['citations'][0]['pdf_file'], 'facility_letter.pdf')
+        self.assertEqual(events[-1]['citations'][0]['page'], 2)
+        self.assertNotIn('pdf_file', json.dumps(self.submitted))
 
     def test_unknown_reference_is_blocked_before_any_body_delta(self):
         for used in (False, True):

@@ -26,7 +26,7 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(self.client.get(path).status_code, 401)
         self.assertEqual(self.client.get(path, headers=self.operator_headers).status_code, 403)
         info = self.client.get(path, headers=self.reviewer_headers).json()
-        self.assertEqual(info['contract_version'], '1.2.0')
+        self.assertEqual(info['contract_version'], '1.3.0')
         self.assertEqual(info['limits']['content_chars'], 8000)
         self.assertEqual(info['limits']['knowledge_query_chars'], 4000)
         self.assertEqual(info['limits']['run_timeout_seconds'], 360)
@@ -66,7 +66,7 @@ class ContractTests(unittest.TestCase):
         async def invoke():
             jwt = self.reviewer_headers['Authorization'].removeprefix('Bearer ')
             async with AssistantClient('http://business', jwt, transport=httpx.ASGITransport(app=self.client.app)) as sdk:
-                self.assertEqual((await sdk.contract())['contract_version'], '1.2.0')
+                self.assertEqual((await sdk.contract())['contract_version'], '1.3.0')
                 room = await sdk.create_session('REVIEWER-ONLY')
                 payload = {'client_message_id': 'consumer-workflow-001'}
                 run = await sdk.start_run(room['id'], '核对依据', **payload)

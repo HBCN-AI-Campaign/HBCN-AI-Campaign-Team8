@@ -27,6 +27,8 @@ export interface AssistantCitation {
   status?: 'pass' | 'fail' | 'warn'
   reference_id?: string
   source_id?: string
+  doc_code?: string
+  pdf_file?: string
 }
 
 export interface AssistantMessage {
@@ -79,6 +81,9 @@ export interface AssistantSkill {
   owner: string
   license: string
   permissions: string[]
+  is_custom?: boolean
+  editable?: boolean
+  revision?: number | null
 }
 
 export interface AssistantStreamEvent {

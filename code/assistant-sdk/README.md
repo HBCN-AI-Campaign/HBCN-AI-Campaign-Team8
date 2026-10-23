@@ -32,9 +32,9 @@ async def explain(site_url, reviewer_jwt, task_code, request_id):
 
 可用方法：`contract/capabilities`、`create_session/sessions/session`、`start_run/run/events/wait/ask/cancel`、`discuss/experts/members/invite/revoke`、`skills/skill_library`。更多治理/删除接口可按 V1 OpenAPI 直接调用。
 
-完整[对外契约与时序](../../docs/ai-assistant/对外接口V1.md) · [OpenAPI](../../docs/ai-assistant/contracts/assistant-v1.openapi.json)。`httpx.HTTPStatusError` 保留 HTTP 状态；`AssistantRunError` 提供 `run_id/status`；`TimeoutError` 仅表示客户端停止等待，详见契约。
+服务端 API 契约当前为 **1.3.0**；Python SDK 版本独立演进。完整[对外契约与时序](../../docs/ai-assistant/对外接口V1.md) · [OpenAPI](../../docs/ai-assistant/contracts/assistant-v1.openapi.json)。`httpx.HTTPStatusError` 保留 HTTP 状态；`AssistantRunError` 提供 `run_id/status`；`TimeoutError` 仅表示客户端停止等待，详见契约。个人技能 CRUD 可按 OpenAPI 直接调用，当前 SDK 的 `skill_library` 提供目录和安装状态读取。
 
-`contract()` 显式检查服务端至少 1.1.0 且为 V1，接受 1.2.0 等兼容扩展；旧 1.0、不同主版本或格式错误明确失败。调用方应在接入/启动时执行此检查，SDK 不为每次请求重复探测。本人资料 GET/PUT 等治理接口可按 OpenAPI 直接调用，模型凭证仍只在服务端。
+`contract()` 显式检查服务端至少 1.1.0 且为 V1，接受 1.2/1.3 等兼容扩展；旧 1.0、不同主版本或格式错误明确失败。调用方应在接入/启动时执行此检查，SDK 不为每次请求重复探测。本人资料及个人技能 CRUD 等治理接口可按 OpenAPI 直接调用；模型凭证仍只在服务端。
 
 部署验收命令（SDK 1.1.1 新增）：
 

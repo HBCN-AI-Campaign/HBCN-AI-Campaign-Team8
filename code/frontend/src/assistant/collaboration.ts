@@ -11,7 +11,16 @@ export interface Run { id: string; status: string; user_id: number; session_id: 
 export interface RoomEvent extends AssistantStreamEvent { id: number; run_id?: string; user_message?: AssistantMessage; status?: string }
 export interface EventPage { events: RoomEvent[]; cursor: number; has_more: boolean; active_run: Run | null }
 export interface LibrarySkill extends AssistantSkill { source: string; installed: boolean; update_available: boolean }
+export interface CustomSkillInput { name: string; desc: string; instructions: string }
+export interface CustomSkillDetail extends AssistantSkill { instructions: string; revision: number }
 export interface ExpertProfile { specialty: string; bio: string; tags: string[] }
+
+export class CollaborationApiError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message)
+    this.name = 'CollaborationApiError'
+  }
+}
 
 // Aborting a reader (navigation/unmount) must not cancel a durable model run.
 export const STOP_ASSISTANT_RUN = 'stop-assistant-run'
@@ -25,7 +34,7 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
   if (!response.ok) {
     if (response.status === 401 && useAuthStore.getState().token === token) useAuthStore.getState().logout()
     const result = await response.json().catch(() => ({})) as { detail?: string }
-    throw new Error(result.detail || `协作请求失败（${response.status}）`)
+    throw new CollaborationApiError(response.status, result.detail || `协作请求失败（${response.status}）`)
   }
   return response.json() as Promise<T>
 }
@@ -41,6 +50,12 @@ export const collaborationApi = {
   library: () => request<LibrarySkill[]>('/skill-library'),
   installSkill: (skillId: string) => request(`/skill-library/${encodeURIComponent(skillId)}`, 'PUT'),
   uninstallSkill: (skillId: string) => request(`/skill-library/${encodeURIComponent(skillId)}`, 'DELETE'),
+  createCustomSkill: (skill: CustomSkillInput) => request<AssistantSkill>('/skill-library/custom', 'POST', skill),
+  customSkill: (skillId: string) => request<CustomSkillDetail>(`/skill-library/custom/${encodeURIComponent(skillId)}`),
+  updateCustomSkill: (skillId: string, skill: CustomSkillInput, expectedRevision: number) => request<AssistantSkill>(
+    `/skill-library/custom/${encodeURIComponent(skillId)}`, 'PUT', { ...skill, expected_revision: expectedRevision },
+  ),
+  deleteCustomSkill: (skillId: string) => request<{ deleted: boolean }>(`/skill-library/custom/${encodeURIComponent(skillId)}`, 'DELETE'),
   experts: (id: number, q = '') => request<Expert[]>(`/experts?session_id=${id}&q=${encodeURIComponent(q)}`),
   members: (id: number) => request<Member[]>(`/sessions/${id}/members`),
   invite: (id: number, userId: number) => request(`/sessions/${id}/members`, 'POST', { user_id: userId }),

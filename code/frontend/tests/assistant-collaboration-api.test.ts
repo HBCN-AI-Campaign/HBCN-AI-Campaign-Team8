@@ -1,10 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { collaborationApi, STOP_ASSISTANT_RUN } from '@/assistant/collaboration'
+import { CollaborationApiError, collaborationApi, STOP_ASSISTANT_RUN } from '@/assistant/collaboration'
 import { useAuthStore } from '@/stores/auth'
 
 beforeEach(() => useAuthStore.getState().setAuth('reviewer-jwt', 'reviewer', '审核人员'))
 
 describe('durable collaboration event adapter', () => {
+  it('preserves HTTP status for optimistic skill conflicts', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(Response.json({ detail: '技能版本已更新' }, { status: 409 }))
+    await expect(collaborationApi.updateCustomSkill('private-skill', {
+      name: '风险复核', desc: '检查付款背景', instructions: '逐项对照材料',
+    }, 1)).rejects.toMatchObject<Partial<CollaborationApiError>>({
+      name: 'CollaborationApiError', status: 409, message: '技能版本已更新',
+    })
+  })
+
   it('reads a cursor before admission and receives a fast completed run without losing events', async () => {
     const reply = { id: 2, role: 'assistant', content: '审核结论须由有权限人员确认', status: 'completed', steps: [], citations: [] }
     const fetch = vi.spyOn(globalThis, 'fetch')
