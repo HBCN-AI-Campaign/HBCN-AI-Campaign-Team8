@@ -1,0 +1,361 @@
+{
+  "schema": "parser-evaluation/1.0",
+  "annotation_status": "engineering_verified",
+  "scope": "第八套原图人工核对的核心标量子集；计量单位复查1.1；不是全字段或全FOL标注，不是业务签字验收",
+  "documents": [
+    {
+      "filename": "FOL-编造完.pdf",
+      "pages": 45,
+      "sha256": "68eb01adf085e0e713f883728d7117706f11a8004a41ee26d9371a21809aaad7",
+      "fields": [],
+      "must_remain_unresolved": [
+        "borrower",
+        "facility_amount"
+      ],
+      "note": "封面客户不是唯一借款人；多个主体与授信段尚未完成适用关系，不自动套用USD60000000总额度。"
+    },
+    {
+      "filename": "商业合同 - 编造完.pdf",
+      "pages": 1,
+      "sha256": "66df6ee635cdc1bd39f8d8b5626de2639e5cdce11b25f6cd04c8fbc8c6f49332",
+      "fields": [
+        {
+          "key": "contract_no",
+          "value": "AB-CDEF2025-OCT 28",
+          "page": 1
+        },
+        {
+          "key": "date",
+          "value": "2025-10-28",
+          "page": 1
+        },
+        {
+          "key": "seller",
+          "value": "EFG有限公司",
+          "page": 1
+        },
+        {
+          "key": "buyer",
+          "value": "ABCD有限公司",
+          "page": 1
+        },
+        {
+          "key": "amount",
+          "value": "440593.46",
+          "page": 1
+        },
+        {
+          "key": "currency",
+          "value": "CNY",
+          "page": 1
+        },
+        {
+          "key": "quantity",
+          "value": "89.86",
+          "page": 1
+        },
+        {
+          "key": "unit_price",
+          "value": "4903.11",
+          "page": 1
+        }
+      ],
+      "measurements": [
+        {
+          "key": "quantity_unit",
+          "value": "MT",
+          "page": 1
+        },
+        {
+          "key": "price_unit",
+          "value": "MT",
+          "page": 1
+        }
+      ]
+    },
+    {
+      "filename": "形式发票 - 编造完.pdf",
+      "pages": 1,
+      "sha256": "3dd03a1a30f5fd9750732f012343c6ebdfcf78e8b8bd202d00f0a9ff9c163998",
+      "fields": [
+        {
+          "key": "invoice_no",
+          "value": "9000123456",
+          "page": 1
+        },
+        {
+          "key": "contract_no",
+          "value": "AB CDEF2025-OCT 28",
+          "page": 1
+        },
+        {
+          "key": "date",
+          "value": "2025-10-29",
+          "page": 1
+        },
+        {
+          "key": "seller",
+          "value": "EFG有限公司",
+          "page": 1
+        },
+        {
+          "key": "buyer",
+          "value": "ABCD有限公司",
+          "page": 1
+        },
+        {
+          "key": "amount",
+          "value": "440593.46",
+          "page": 1
+        },
+        {
+          "key": "currency",
+          "value": "CNY",
+          "page": 1
+        },
+        {
+          "key": "quantity",
+          "value": "89.860",
+          "page": 1
+        },
+        {
+          "key": "unit_price",
+          "value": "4903.11",
+          "page": 1
+        }
+      ],
+      "measurements": [
+        {
+          "key": "quantity_unit",
+          "value": "MT",
+          "page": 1
+        },
+        {
+          "key": "price_unit",
+          "value": "MT",
+          "page": 1
+        }
+      ]
+    },
+    {
+      "filename": "报关单 - 编造完.pdf",
+      "pages": 1,
+      "sha256": "cd3f5981320b060d2aaf6a38d7f215152d171f26e4a21a563f1ed914121db3fc",
+      "fields": [
+        {
+          "key": "contract_no",
+          "value": "AB-CDEF2025-OCT 28",
+          "page": 1
+        },
+        {
+          "key": "bill_of_lading_no",
+          "value": "HIJKLMN2512301",
+          "page": 1
+        },
+        {
+          "key": "amount",
+          "value": "440593.46",
+          "page": 1
+        },
+        {
+          "key": "currency",
+          "value": "CNY",
+          "page": 1
+        },
+        {
+          "key": "quantity",
+          "value": "89860",
+          "page": 1
+        },
+        {
+          "key": "unit_price",
+          "value": "4.9031",
+          "page": 1
+        }
+      ],
+      "note": "报关单数量单位千克，单价为元/千克；不能与合同元/吨直接比较。",
+      "measurements": [
+        {
+          "key": "quantity_unit",
+          "value": "kg",
+          "page": 1
+        },
+        {
+          "key": "price_unit",
+          "value": "kg",
+          "page": 1
+        }
+      ]
+    },
+    {
+      "filename": "提款指令 - 编造完.pdf",
+      "pages": 4,
+      "sha256": "92b7f929523a2dbe9b100b4546db450cc8b8c398ba5d0d0d9c09c7c50044d1ab",
+      "fields": [
+        {
+          "key": "date",
+          "value": "2026-10-12",
+          "page": 1
+        },
+        {
+          "key": "facility_letter_date",
+          "value": "2026-10-12",
+          "page": 1
+        },
+        {
+          "key": "drawdown_date",
+          "value": "2026-10-12",
+          "page": 1
+        },
+        {
+          "key": "currency",
+          "value": "CNY",
+          "page": 1
+        },
+        {
+          "key": "amount",
+          "value": "12000000.00",
+          "page": 1
+        },
+        {
+          "key": "maturity_date",
+          "value": "2026-11-11",
+          "page": 2
+        },
+        {
+          "key": "payment_account",
+          "value": "012345678901",
+          "page": 2
+        }
+      ],
+      "visual_cases": [
+        {
+          "page": 1,
+          "field": "interest_period",
+          "expected": "1个月",
+          "mark": "方框内X表示所选1个月"
+        },
+        {
+          "page": 2,
+          "field": "disbursement_method",
+          "expected": "银行受托支付",
+          "mark": "受托支付框内X，不能把X固定解释为否"
+        }
+      ],
+      "note": "选项采用单独状态验收；尚未把不同自然语言表述强行算精确标量匹配。"
+    },
+    {
+      "filename": "支付指令 - 编造完.pdf",
+      "pages": 1,
+      "sha256": "cc4c7fe176cc36360ea87b6a300050dc556c4b16db4341c3652772f1a2ed01aa",
+      "fields": [
+        {
+          "key": "amount",
+          "value": "440593.46",
+          "page": 1
+        },
+        {
+          "key": "currency",
+          "value": "CNY",
+          "page": 1
+        },
+        {
+          "key": "remitter_name",
+          "value": "ABCD有限公司",
+          "page": 1
+        },
+        {
+          "key": "payee",
+          "value": "EFG有限公司",
+          "page": 1
+        }
+      ],
+      "must_remain_unresolved": [
+        "payment_date"
+      ],
+      "note": "12/10/2026单独不能确定月日口径；金额大写存在划改，需原图核实。"
+    },
+    {
+      "filename": "运单 - 编造完.pdf",
+      "pages": 1,
+      "sha256": "9a3dbdb951de13dc4763728828c57a02de961ff6afdbd6edf2ecf10787974943",
+      "fields": [
+        {
+          "key": "bill_of_lading_no",
+          "value": "HIJKLMN2512301",
+          "page": 1
+        },
+        {
+          "key": "shipment_date",
+          "value": "2025-10-29",
+          "page": 1
+        },
+        {
+          "key": "seller",
+          "value": "EFG有限公司",
+          "page": 1
+        },
+        {
+          "key": "buyer",
+          "value": "ABCD有限公司",
+          "page": 1
+        },
+        {
+          "key": "quantity",
+          "value": "89.860",
+          "page": 1
+        }
+      ],
+      "note": "净重原图89.860后的单位形似NT，毛重90.832后为MT；不能跨行合并成已确定的净重MT。89.860仍为数量核心预期，单位不足导致未决如实计未覆盖；不能取毛重或12卷。",
+      "measurements": [
+        {
+          "key": "net_weight",
+          "value": "89.860",
+          "page": 1
+        },
+        {
+          "key": "gross_weight",
+          "value": "90.832",
+          "page": 1
+        },
+        {
+          "key": "package_count",
+          "value": "12",
+          "page": 1
+        },
+        {
+          "key": "package_unit",
+          "value": "COILS",
+          "page": 1
+        }
+      ],
+      "must_remain_unresolved": [
+        "quantity_unit",
+        "weight_unit"
+      ]
+    }
+  ],
+  "annotation_version": "set8/1.1",
+  "annotation_revisions": [
+    {
+      "version": "set8/1.1",
+      "reviewed_at": "2026-10-22T21:26:42.746785+00:00",
+      "previous_gold_sha256": "453f2b84081cae8c60d9a8a204689e493c82fef124f7092f2484206d0e0778fa",
+      "change": "放大原件复查：净重单位形似NT，毛重为MT，旧金标把两者统一标MT过度确定；两个单位改列未决保护。核心39项不变，计量分母12改10，歧义保护3改5，不与历史计量覆盖率直接比较。",
+      "previous_expectations": [
+        {
+          "filename": "运单 - 编造完.pdf",
+          "key": "quantity_unit",
+          "value": "MT",
+          "page": 1
+        },
+        {
+          "filename": "运单 - 编造完.pdf",
+          "key": "weight_unit",
+          "value": "MT",
+          "page": 1
+        }
+      ]
+    }
+  ]
+}

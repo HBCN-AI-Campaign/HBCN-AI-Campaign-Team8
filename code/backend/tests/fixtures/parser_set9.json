@@ -1,0 +1,346 @@
+{
+  "schema": "parser-evaluation/1.0",
+  "annotation_status": "engineering_verified",
+  "scope": "第九套同模板业务变体；39个核心标量、10个清晰计量值及6个未决保护，原图核对后在推理前冻结；不是独立模板留出集、不是全字段或业务签字验收",
+  "documents": [
+    {
+      "filename": "FOL-编造完.pdf",
+      "pages": 45,
+      "sha256": "2da8663880f801e1216eaee7bc89f0354f1d205e7b2b49f0c5ae4ae2a1d93e7d",
+      "fields": [],
+      "must_remain_unresolved": [
+        "borrower",
+        "facility_amount"
+      ],
+      "note": "封面客户不是唯一借款人；多个主体与授信段尚未完成适用关系，不自动套用USD60000000总额度。"
+    },
+    {
+      "filename": "商业合同 - 编造完.pdf",
+      "pages": 1,
+      "sha256": "0ee2323cf52281e4e5372da9058efcbf9e82c2278142ce28c38fd760ef01c6d7",
+      "fields": [
+        {
+          "key": "contract_no",
+          "value": "AB-CDEF2025-OCT 28",
+          "page": 1
+        },
+        {
+          "key": "date",
+          "value": "2025-10-28",
+          "page": 1
+        },
+        {
+          "key": "seller",
+          "value": "EFGH有限公司",
+          "page": 1
+        },
+        {
+          "key": "buyer",
+          "value": "ABC有限公司",
+          "page": 1
+        },
+        {
+          "key": "amount",
+          "value": "449300.00",
+          "page": 1
+        },
+        {
+          "key": "currency",
+          "value": "CNY",
+          "page": 1
+        },
+        {
+          "key": "quantity",
+          "value": "89.86",
+          "page": 1
+        },
+        {
+          "key": "unit_price",
+          "value": "5000.00",
+          "page": 1
+        }
+      ],
+      "measurements": [
+        {
+          "key": "quantity_unit",
+          "value": "MT",
+          "page": 1
+        },
+        {
+          "key": "price_unit",
+          "value": "MT",
+          "page": 1
+        }
+      ],
+      "note": "原图TOTAL和行金额均449300.00 CNY，单价5000.00；不得为匹配发票440593.46而改写。"
+    },
+    {
+      "filename": "形式发票 - 编造完.pdf",
+      "pages": 1,
+      "sha256": "d395899a950639bd202c583d85a56e0c0382d731241952af456a1aecfb1051ed",
+      "fields": [
+        {
+          "key": "invoice_no",
+          "value": "9000123456",
+          "page": 1
+        },
+        {
+          "key": "contract_no",
+          "value": "AB CDEF2025-OCT 28",
+          "page": 1
+        },
+        {
+          "key": "date",
+          "value": "2025-10-29",
+          "page": 1
+        },
+        {
+          "key": "seller",
+          "value": "EFGH有限公司",
+          "page": 1
+        },
+        {
+          "key": "buyer",
+          "value": "ABC有限公司",
+          "page": 1
+        },
+        {
+          "key": "amount",
+          "value": "440593.46",
+          "page": 1
+        },
+        {
+          "key": "currency",
+          "value": "CNY",
+          "page": 1
+        },
+        {
+          "key": "quantity",
+          "value": "89.860",
+          "page": 1
+        },
+        {
+          "key": "unit_price",
+          "value": "4903.11",
+          "page": 1
+        }
+      ],
+      "measurements": [
+        {
+          "key": "quantity_unit",
+          "value": "MT",
+          "page": 1
+        },
+        {
+          "key": "price_unit",
+          "value": "MT",
+          "page": 1
+        }
+      ]
+    },
+    {
+      "filename": "报关单 - 编造完.pdf",
+      "pages": 1,
+      "sha256": "b7a4d6e0705c555115d296bfa340fbaa1507d9dffe79ca8823547cb0f184e002",
+      "fields": [
+        {
+          "key": "contract_no",
+          "value": "AB-CDEF2025-OCT 28",
+          "page": 1
+        },
+        {
+          "key": "bill_of_lading_no",
+          "value": "HIJKLMN2512301",
+          "page": 1
+        },
+        {
+          "key": "amount",
+          "value": "440593.46",
+          "page": 1
+        },
+        {
+          "key": "currency",
+          "value": "CNY",
+          "page": 1
+        },
+        {
+          "key": "quantity",
+          "value": "89860",
+          "page": 1
+        },
+        {
+          "key": "unit_price",
+          "value": "4.9031",
+          "page": 1
+        }
+      ],
+      "note": "报关单数量单位千克，单价为元/千克；不能与合同元/吨直接比较。",
+      "measurements": [
+        {
+          "key": "quantity_unit",
+          "value": "kg",
+          "page": 1
+        },
+        {
+          "key": "price_unit",
+          "value": "kg",
+          "page": 1
+        }
+      ]
+    },
+    {
+      "filename": "提款指令 - 编造完.pdf",
+      "pages": 4,
+      "sha256": "92b7f929523a2dbe9b100b4546db450cc8b8c398ba5d0d0d9c09c7c50044d1ab",
+      "fields": [
+        {
+          "key": "date",
+          "value": "2026-10-12",
+          "page": 1
+        },
+        {
+          "key": "facility_letter_date",
+          "value": "2026-10-12",
+          "page": 1
+        },
+        {
+          "key": "drawdown_date",
+          "value": "2026-10-12",
+          "page": 1
+        },
+        {
+          "key": "currency",
+          "value": "CNY",
+          "page": 1
+        },
+        {
+          "key": "amount",
+          "value": "12000000.00",
+          "page": 1
+        },
+        {
+          "key": "maturity_date",
+          "value": "2026-11-11",
+          "page": 2
+        },
+        {
+          "key": "payment_account",
+          "value": "012345678901",
+          "page": 2
+        }
+      ],
+      "visual_cases": [
+        {
+          "page": 1,
+          "field": "interest_period",
+          "expected": "1个月",
+          "mark": "方框内X表示所选1个月"
+        },
+        {
+          "page": 2,
+          "field": "disbursement_method",
+          "expected": "银行受托支付",
+          "mark": "受托支付框内X，不能把X固定解释为否"
+        }
+      ],
+      "note": "与第八套同一字节，不能计作新的独立样本；原件借款人缺失，不能从其他单据补填。",
+      "duplicate_of": "第八套/提款指令 - 编造完.pdf",
+      "must_remain_unresolved": [
+        "borrower"
+      ]
+    },
+    {
+      "filename": "支付指令 - 编造完.pdf",
+      "pages": 1,
+      "sha256": "9815dda81f8de1fff05e6923d65c797d00d724e0440f4c0a58c53a74f5feb3b6",
+      "fields": [
+        {
+          "key": "amount",
+          "value": "440593.46",
+          "page": 1
+        },
+        {
+          "key": "currency",
+          "value": "CNY",
+          "page": 1
+        },
+        {
+          "key": "remitter_name",
+          "value": "ABC有限公司",
+          "page": 1
+        },
+        {
+          "key": "payee",
+          "value": "EFGH有限公司",
+          "page": 1
+        }
+      ],
+      "must_remain_unresolved": [
+        "payment_date"
+      ],
+      "note": "12/10/2026单独不能确定月日口径；金额大写存在划改，需原图核实。"
+    },
+    {
+      "filename": "运单 - 编造完.pdf",
+      "pages": 1,
+      "sha256": "b40ff50afcd713dcbaa1f5b0f193ba26f3b83020ffd6e86e9a0ecf14751bdec6",
+      "fields": [
+        {
+          "key": "bill_of_lading_no",
+          "value": "HIJKLMN2512301",
+          "page": 1
+        },
+        {
+          "key": "shipment_date",
+          "value": "2025-10-29",
+          "page": 1
+        },
+        {
+          "key": "seller",
+          "value": "EFGH有限公司",
+          "page": 1
+        },
+        {
+          "key": "buyer",
+          "value": "ABC有限公司",
+          "page": 1
+        },
+        {
+          "key": "quantity",
+          "value": "89.860",
+          "page": 1
+        }
+      ],
+      "note": "原图放大：NET WEIGHT后单位形似NT，GROSS WEIGHT后为MT；净重单位保留歧义，不以别单据推成MT。数量89.860仍列核心预期，若配对单位不足导致未决则如实降低覆盖率。计量金标不纳入这两个不确定单位，改列未决保护，故计量分母10不可与第八套12直接比较。",
+      "measurements": [
+        {
+          "key": "net_weight",
+          "value": "89.860",
+          "page": 1
+        },
+        {
+          "key": "gross_weight",
+          "value": "90.832",
+          "page": 1
+        },
+        {
+          "key": "package_count",
+          "value": "12",
+          "page": 1
+        },
+        {
+          "key": "package_unit",
+          "value": "COILS",
+          "page": 1
+        }
+      ],
+      "must_remain_unresolved": [
+        "quantity_unit",
+        "weight_unit"
+      ]
+    }
+  ],
+  "annotation_version": "set9/1.0",
+  "split": "related_variant",
+  "annotation_method": "六份不同PDF在任何第九套模型调用前逐图核对；提款指令SHA256与第八套完全相同，复用已核对金标并单独标明重复"
+}

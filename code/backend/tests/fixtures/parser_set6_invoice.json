@@ -1,0 +1,403 @@
+{
+  "schema": "parser-evaluation/1.0",
+  "annotation_version": "set6-invoice/1.0",
+  "annotation_status": "engineering_verified",
+  "scope": "第六套德语发票：与第八套不同的多页服装发票版式，单一文件家族，非独立完整业务包或业务签字验收；所有值先看原图冻结",
+  "documents": [
+    {
+      "filename": "发票（已编造）.pdf",
+      "pages": 3,
+      "sha256": "2238b62b01de0b3e4775fb8c7d85aefba6c86ab0551f393e7d7be27d3e827c45",
+      "type_code": "PROFORMA_INVOICE",
+      "fields": [
+        {
+          "key": "invoice_no",
+          "value": "PI-2023-8843",
+          "page": 1
+        },
+        {
+          "key": "seller",
+          "value": "PHY",
+          "page": 1
+        },
+        {
+          "key": "buyer",
+          "value": "YOR",
+          "page": 1
+        },
+        {
+          "key": "date",
+          "value": "2023-10-24",
+          "page": 1
+        },
+        {
+          "key": "currency",
+          "value": "USD",
+          "page": 1
+        },
+        {
+          "key": "amount",
+          "value": "550000.00",
+          "page": 3
+        },
+        {
+          "key": "quantity",
+          "value": "40600",
+          "page": 3
+        }
+      ],
+      "measurements": [
+        {
+          "key": "quantity_unit",
+          "value": "PCS",
+          "page": 3
+        }
+      ],
+      "must_remain_unresolved": [
+        "unit_price"
+      ],
+      "line_items": [
+        {
+          "style": "M-TS-01",
+          "quantity": "2000",
+          "unit_price": "4.50",
+          "amount": "9000.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            1
+          ]
+        },
+        {
+          "style": "M-TS-02",
+          "quantity": "2000",
+          "unit_price": "4.80",
+          "amount": "9600.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            1
+          ]
+        },
+        {
+          "style": "M-TS-03",
+          "quantity": "1500",
+          "unit_price": "5.20",
+          "amount": "7800.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            1
+          ]
+        },
+        {
+          "style": "W-BL-01",
+          "quantity": "1200",
+          "unit_price": "12.50",
+          "amount": "15000.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            1
+          ]
+        },
+        {
+          "style": "W-BL-02",
+          "quantity": "1000",
+          "unit_price": "13.00",
+          "amount": "13000.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            1
+          ]
+        },
+        {
+          "style": "W-JN-01",
+          "quantity": "1800",
+          "unit_price": "14.00",
+          "amount": "25200.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            1
+          ]
+        },
+        {
+          "style": "W-JN-02",
+          "quantity": "1500",
+          "unit_price": "15.50",
+          "amount": "23250.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            1
+          ]
+        },
+        {
+          "style": "K-JK-01",
+          "quantity": "1000",
+          "unit_price": "18.00",
+          "amount": "18000.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            1
+          ]
+        },
+        {
+          "style": "K-JK-02",
+          "quantity": "800",
+          "unit_price": "19.50",
+          "amount": "15600.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            1
+          ]
+        },
+        {
+          "style": "M-SU-01",
+          "quantity": "500",
+          "unit_price": "85.00",
+          "amount": "42500.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            1
+          ]
+        },
+        {
+          "style": "M-SU-02",
+          "quantity": "400",
+          "unit_price": "90.00",
+          "amount": "36000.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            1
+          ]
+        },
+        {
+          "style": "W-DR-01",
+          "quantity": "1500",
+          "unit_price": "22.00",
+          "amount": "33000.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            1
+          ]
+        },
+        {
+          "style": "W-DR-02",
+          "quantity": "1200",
+          "unit_price": "24.50",
+          "amount": "29400.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            1,
+            2
+          ]
+        },
+        {
+          "style": "M-CS-01",
+          "quantity": "2000",
+          "unit_price": "8.50",
+          "amount": "17000.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            2
+          ]
+        },
+        {
+          "style": "M-CS-02",
+          "quantity": "1800",
+          "unit_price": "9.00",
+          "amount": "16200.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            2
+          ]
+        },
+        {
+          "style": "W-SW-01",
+          "quantity": "1000",
+          "unit_price": "25.00",
+          "amount": "25000.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            2
+          ]
+        },
+        {
+          "style": "W-SW-02",
+          "quantity": "900",
+          "unit_price": "26.50",
+          "amount": "23850.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            2
+          ]
+        },
+        {
+          "style": "M-CP-01",
+          "quantity": "1500",
+          "unit_price": "16.00",
+          "amount": "24000.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            2
+          ]
+        },
+        {
+          "style": "M-CP-02",
+          "quantity": "1200",
+          "unit_price": "17.50",
+          "amount": "21000.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            2
+          ]
+        },
+        {
+          "style": "K-DR-01",
+          "quantity": "800",
+          "unit_price": "14.00",
+          "amount": "11200.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            2
+          ]
+        },
+        {
+          "style": "K-DR-02",
+          "quantity": "700",
+          "unit_price": "15.00",
+          "amount": "10500.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            2
+          ]
+        },
+        {
+          "style": "M-WB-01",
+          "quantity": "600",
+          "unit_price": "35.00",
+          "amount": "21000.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            2
+          ]
+        },
+        {
+          "style": "W-TC-01",
+          "quantity": "400",
+          "unit_price": "65.00",
+          "amount": "26000.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            2
+          ]
+        },
+        {
+          "style": "M-SP-01",
+          "quantity": "1000",
+          "unit_price": "12.00",
+          "amount": "12000.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            2
+          ]
+        },
+        {
+          "style": "W-LG-01",
+          "quantity": "2000",
+          "unit_price": "6.50",
+          "amount": "13000.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            2
+          ]
+        },
+        {
+          "style": "K-SU-01",
+          "quantity": "500",
+          "unit_price": "20.00",
+          "amount": "10000.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            2
+          ]
+        },
+        {
+          "style": "M-SH-01",
+          "quantity": "800",
+          "unit_price": "11.00",
+          "amount": "8800.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            2
+          ]
+        },
+        {
+          "style": "W-SK-01",
+          "quantity": "600",
+          "unit_price": "18.00",
+          "amount": "10800.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            3
+          ]
+        },
+        {
+          "style": "U-HD-01",
+          "quantity": "1200",
+          "unit_price": "15.00",
+          "amount": "18000.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            3
+          ]
+        },
+        {
+          "style": "M-TI-01",
+          "quantity": "5000",
+          "unit_price": "2.50",
+          "amount": "12500.00",
+          "unit": "PCS",
+          "currency": "USD",
+          "pages": [
+            3
+          ]
+        }
+      ],
+      "printed_total_quantity": "40600",
+      "printed_total_amount": "550000.00",
+      "observations": [
+        "30行多商品不能把第一行单价或平均价写入标量unit_price",
+        "第13行款式在第2页续行，数量/单价/行金额在第1页",
+        "原件印刷合计与逐行加总不一致：行数量38400而印刷40600，行金额558200.00而印刷550000.00。两套值各自保留；不可通过合计改写行或通过行改写印刷合计。",
+        "日期原文24. Oktober 2023，不应按英文月份或两数字月日格式猜测",
+        "与第四套发票同一服装模板家族，此次仅与第八/九套钢卷发票区分，不能视为多种独立模板"
+      ]
+    }
+  ]
+}

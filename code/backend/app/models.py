@@ -6,6 +6,7 @@ R04（提款币种校验）所需的最小实体 + 鉴权所需的用户/角色�
 """
 import datetime as dt
 import enum
+from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
@@ -129,7 +130,7 @@ class ReviewTask(Base):
     )
     borrower: Mapped[str] = mapped_column(String(256))
     drawdown_currency: Mapped[str] = mapped_column(String(8))
-    drawdown_amount: Mapped[float] = mapped_column(Numeric(18, 2))
+    drawdown_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2))
     status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), default=TaskStatus.PENDING)
 
     # 字段被编辑（经办人/审核人修改抓取内容）后置 True，提示需重新核对；

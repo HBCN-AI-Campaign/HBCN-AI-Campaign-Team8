@@ -8,6 +8,7 @@ import type {
   DashboardStats,
   LoginResp,
   ParseResult,
+  DocumentTypeSelection,
   RunSummary,
   TaskCreate,
   TaskDetail,
@@ -15,6 +16,9 @@ import type {
   AISession,
   AIResolveOut,
   SupplementIn,
+  FacilityContext,
+  FacilitySelection,
+  DocumentIn,
 } from '@/types'
 
 const http = axios.create({ baseURL: '/', timeout: 20000 })
@@ -29,6 +33,31 @@ export function bindNavigate(fn: (path: string) => void) {
 let message: MessageInstance = staticMessage
 export function bindMessage(instance: MessageInstance) {
   message = instance
+}
+
+async function waitForParsingRun(runId: string, onProgress?: (text: string) => void): Promise<ParseResult> {
+  if (!/^[a-f0-9]{32}$/.test(runId)) throw new Error('解析编号格式不正确')
+  const deadline = Date.now() + 30 * 60 * 1000
+  while (Date.now() < deadline) {
+    const { data: run } = await http.get<{
+      state: string; result?: ParseResult; error?: string
+      progress?: { stage?: string; filename?: string; page?: number; total_pages?: number }
+    }>(`/api/parsing/runs/${runId}`)
+    if (run.state === 'completed' && run.result) return run.result
+    if (['failed', 'interrupted'].includes(run.state)) {
+      const error = run.error || '解析未完成，请重新提交'
+      message.error(error)
+      throw new Error(error)
+    }
+    const p = run.progress
+    const stage = p?.stage === 'ocr' || p?.stage === 'ocr_region' ? '文字识别'
+      : p?.stage === 'vision' || p?.stage === 'vision_region' || p?.stage === 'vision_correction' ? '原件复核'
+        : p?.stage === 'structure' ? '整理跨页明细' : p?.stage === 'mapping' ? '整理业务字段' : '排队准备'
+    onProgress?.(`${stage}${p?.filename ? ` · ${p.filename}` : ''}${p?.page ? ` · 第 ${p.page}/${p.total_pages} 页` : ''}`)
+    await new Promise(resolve => setTimeout(resolve, 1500))
+  }
+  message.warning(`解析仍可能在后台进行，可用编号 ${runId} 恢复结果`)
+  throw new Error('解析等待超时')
 }
 
 // 请求拦截：注入 Bearer token
@@ -60,6 +89,15 @@ http.interceptors.response.use(
 )
 
 export const api = {
+  async checkFacilityContext(payload: { documents: DocumentIn[]; facility_selection?: FacilitySelection | null;
+    borrower: string; drawdown_currency: string; drawdown_amount: string | null }): Promise<FacilityContext> {
+    const { data } = await http.post<FacilityContext>('/api/parsing/facility-context', payload)
+    return data
+  },
+  async businessReviewAudit(code: string): Promise<import('@/business-review/types').ReviewAudit[]> {
+    const { data } = await http.get(`/api/tasks/${encodeURIComponent(code)}/business-review/audit`)
+    return data
+  },
   async login(username: string, password: string): Promise<LoginResp> {
     const form = new URLSearchParams()
     form.append('username', username)
@@ -119,14 +157,36 @@ export const api = {
   },
 
   // 上传材料 → 文件解析 Agent
-  async parseFiles(files: File[]): Promise<ParseResult> {
+  async parseFiles(files: File[], onProgress?: (text: string) => void, onStarted?: (runId: string) => void,
+    documentTypes?: DocumentTypeSelection[]): Promise<ParseResult> {
     const form = new FormData()
     files.forEach((f) => form.append('files', f))
-    const { data } = await http.post<ParseResult>('/api/tasks/parse', form, {
+    if (documentTypes) form.append('document_types', JSON.stringify(documentTypes))
+    const { data } = await http.post<{ run_id: string }>('/api/parsing/runs', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 60000,
     })
-    return data
+    onStarted?.(data.run_id)
+    const result = await waitForParsingRun(data.run_id, onProgress)
+    if (documentTypes?.some(choice => choice.type_code)) {
+      const applied = result.documents.length === files.length && documentTypes.every((choice, index) => {
+        if (!choice.type_code) return true
+        const doc = result.documents[index]
+        return doc.source_filename === files[index].name && doc.type_code === choice.type_code &&
+          doc.classification?.method === 'operator_selected' && doc.classification.type_code === choice.type_code &&
+          doc.classification.reason === choice.reason.trim()
+      })
+      if (!applied) {
+        const text = '服务器未按本次文件类别选择完成识别，请核对服务版本后重新识别'
+        message.error(text)
+        throw new Error(text)
+      }
+    }
+    return result
+  },
+
+  async resumeParsing(runId: string, onProgress?: (text: string) => void): Promise<ParseResult> {
+    return waitForParsingRun(runId, onProgress)
   },
 
   // 经办人确认无误 → 写库创建任务

@@ -14,7 +14,7 @@ export interface TaskOut {
   customer_name?: string | null
   borrower: string
   drawdown_currency: string
-  drawdown_amount: number
+  drawdown_amount: string | number // 新接口返回十进制字符串；兼容已有数值响应
   status: string
   needs_recheck?: boolean // 字段被编辑后待重新核对
   created_at?: string | null
@@ -40,6 +40,12 @@ export interface SupplementIn {
   note?: string
   field_updates?: SupplementFieldUpdate[]
   added_files?: string[]
+  input_digest?: string
+  documents?: SupplementDocumentInput[]
+}
+
+export interface SupplementDocumentInput extends DocumentIn {
+  replaces_doc_code?: string | null
 }
 
 export interface FieldSource {
@@ -95,13 +101,34 @@ export interface DashboardStats {
 }
 
 // --- 文件解析 Agent ---
+export interface ParsedRowResult {
+  value: Record<string, unknown> | null
+  status: 'accepted' | 'needs_review' | 'conflict'
+  issues: string[]
+  cells: Record<string, {
+    value: unknown
+    raw_value?: string
+    issues: string[]
+    sources: { block_id: string; page: number; bbox: number[]; text: string; method: string; score: number }[]
+  }>
+}
+
 export interface ParsedField {
   key: string
   label: string
-  value: string | number | string[] | null
-  kind: 'text' | 'number' | 'currency' | 'list'
+  value: string | number | string[] | Record<string, unknown>[] | null
+  kind: 'text' | 'number' | 'currency' | 'list' | 'json'
   confidence: number
   source?: { page: number; bbox: number[] } | null
+  status?: 'accepted' | 'missing' | 'needs_review' | 'conflict'
+  required?: boolean
+  candidates?: Record<string, unknown>[]
+  choices?: string[]
+  confirmation_reason?: string
+  row_results?: ParsedRowResult[]
+  issues?: string[]
+  margin_blocks?: { block_id: string; page: number; bbox: number[]; text: string }[]
+  term_facts?: { schema_version: string; facilities: FacilityTermApplication[] }
 }
 
 export interface ParsedDocument {
@@ -111,16 +138,89 @@ export interface ParsedDocument {
   source_filename: string
   pdf_file?: string | null
   fields: ParsedField[]
+  status?: string
+  issues?: unknown[]
+  page_count?: number
+  classification?: { method: 'operator_selected'; type_code: string; reason: string; selected_by: number; selected_at: string }
+}
+
+export interface DocumentTypeSelection {
+  type_code: string | null
+  reason: string
 }
 
 export interface ParseResult {
   suggested_task_code: string
   suggested_borrower: string
   suggested_currency: string
-  suggested_amount: number
+  suggested_amount: string | number | null
   suggested_customer_no?: string | null
   suggested_customer_name?: string | null
   documents: ParsedDocument[]
+  parse_run_id?: string
+  status?: string
+  facility_context?: FacilityContext | null
+}
+
+export interface FacilitySelection {
+  borrower_id: string
+  allocation_id: string
+  reason: string
+}
+
+export interface FacilityRecord extends Omit<ParsedRowResult, 'status'> {
+  status: ParsedRowResult['status'] | 'confirmed'
+  id: string
+  doc_code: string
+  field_key: string
+  row_index: number
+  borrower_ids?: string[]
+}
+
+export interface FacilityContext {
+  status: 'ready' | 'needs_review'
+  issues: { code: string; message: string }[]
+  request: Record<string, { value: string | null; doc_code: string; source?: { page: number; bbox: number[] } | null }>
+  borrowers: FacilityRecord[]
+  allocations: FacilityRecord[]
+  selected_borrower_id: string | null
+  selected_allocation_id: string | null
+  association_method: string | null
+  nominal_limit: { amount: string; currency: string; facility_name: string; doc_code: string } | null
+  comparison: 'within_nominal_limit' | 'exceeds_nominal_limit' | null
+  available_balance: null
+  selection?: FacilitySelection | null
+  confirmed_by?: number | null
+  confirmed_at?: string | null
+  term_application?: FacilityTermApplication | null
+}
+
+export interface TermPeriod { count: number; unit: 'days' | 'months' }
+export interface TermFact<T> {
+  status: 'accepted' | 'needs_review'
+  value: T | null
+  issues: string[]
+  clause_heading: string | null
+  evidence: ParsedRowResult['cells']
+}
+export interface FacilityTermApplication {
+  schema_version?: string
+  doc_code?: string
+  facility_name: string
+  schedule_name?: string
+  scope_method?: string
+  status: 'accepted' | 'needs_review'
+  issues: string[]
+  facts: {
+    permitted_currencies?: TermFact<{ currencies: string[]; aggregate_limit_currency: string | null; aggregate_limit_condition: string }>
+    loan_tenor?: TermFact<{ standard_periods: TermPeriod[]; other_period_requires_lender_agreement: boolean | null;
+      absolute_maximum: TermPeriod | null; maximum_includes_extensions_and_rollovers: boolean | null;
+      maximum_scope: 'each_loan' | 'each_utilization' | 'each_draft'; instrument_maxima: Record<string, TermPeriod> }>
+    purpose?: TermFact<{ clause_text: string }>
+    interest?: TermFact<{ clause_text: string }>
+    default_interest?: TermFact<{ clause_text: string }>
+  }
+  date_span?: { status: 'needs_review'; elapsed_days: number | null; drawdown_date?: string; maturity_date?: string; issue: string }
 }
 
 // --- 智能审核 Agent ---
@@ -170,6 +270,10 @@ export interface DocumentIn {
   doc_code: string
   type_code: string
   fields: Record<string, any>
+  pdf_file?: string | null
+  field_sources?: Record<string, { page: number; bbox: number[] } | null | undefined>
+  parse_run_id?: string
+  field_confirmations?: Record<string, string | undefined>
 }
 
 export interface TaskCreate {
@@ -177,6 +281,7 @@ export interface TaskCreate {
   customer_no?: string | null
   borrower: string
   drawdown_currency: string
-  drawdown_amount: number
+  drawdown_amount: string
   documents: DocumentIn[]
+  facility_selection?: FacilitySelection | null
 }
