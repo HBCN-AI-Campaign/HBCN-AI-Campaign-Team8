@@ -146,6 +146,6 @@ RAG UI 在本隔离 worktree 安装锁定依赖后，`pnpm exec vitest run --max
 
 ## 10. 10月23日 422 校验响应脱敏复验
 
-审查发现 FastAPI 默认 `RequestValidationError` 响应可能包含 `input`，因此 `/answers` 等接口的额外字段或格式错误可能回显请求原文。现增加统一安全处理器，422 只返回每项的 `loc` 与 `category`，不含 `msg`、`input` 或 `ctx`；未知字段的任意键名统一替换为 `<unknown_field>`。API 契约升至服务 `0.5.3`、HTTP `1.3.3`，文档要求调用方按 OpenAPI 清理未定义字段。
+审查发现 FastAPI 默认 `RequestValidationError` 响应可能包含 `input`，因此 `/answers` 等接口的额外字段或格式错误可能回显请求原文。现增加统一安全处理器，422 只返回每项的 `loc` 与 `category`，不含 `msg`、`input` 或 `ctx`；未知字段的任意键名统一替换为 `<unknown_field>`。三个问答/检索端点的 OpenAPI 422 schema 也显式引用同一 `RequestValidationResponse`，schema 仅定义 `loc/category`，并有测试对照 schema 与运行时字段。API 契约为服务 `0.5.3`、HTTP `1.3.3`，文档要求调用方按 OpenAPI 清理未定义字段。
 
-新增敏感哨兵回归：提交超长 query、伪造会话值和恶意未知字段名，断言三者均不出现在响应体，且校验项只含 `loc/category`。最终验证：`py_compile` 通过；定向契约测试4项通过；`python -m unittest discover -s tests` 214项（201通过、13跳过、0失败）；OpenAPI 快照重导出后 `--check` 通过；`pip check` 与 `git diff --check` 通过。13项跳过仍需隔离 PostgreSQL/外部语料。修复只在 `lfc-rag`，不会直接合并。
+新增敏感哨兵回归：提交超长 query、伪造会话值和恶意未知字段名，断言三者均不出现在响应体，且校验项只含 `loc/category`；同时断言 answers、answers/stream、retrievals 的 OpenAPI 422 响应引用脱敏模型。最终验证：`py_compile` 通过；定向契约测试4项通过；`python -m unittest discover -s tests` 214项（201通过、13跳过、0失败）；OpenAPI 快照重导出后 `--check` 通过；`pip check` 与 `git diff --check` 通过。13项跳过仍需隔离 PostgreSQL/外部语料。修复只在 `lfc-rag`，不会直接合并。

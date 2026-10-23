@@ -77,6 +77,17 @@ class AnswerRequest(BaseModel):
         return value.strip()
 
 
+class RequestValidationIssue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    loc: list[str | int]
+    category: str
+
+
+class RequestValidationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    detail: list[RequestValidationIssue]
+
+
 def postgres_engine():
     if engine_kind() != "postgres":
         raise HTTPException(503, "此接口需要 PostgreSQL 引擎，请检查服务配置")
@@ -271,12 +282,16 @@ def answer_state(payload):
     return {**payload.model_dump(exclude={"web_context"}), "attempts": 0, "warnings": []}
 
 
-@router.post("/answers", response_model=AnswerResponse)
+@router.post("/answers", response_model=AnswerResponse, responses={
+    422: {"model": RequestValidationResponse, "description": "请求格式错误；只返回字段位置和错误类别"},
+})
 async def answer(payload: AnswerRequest, request: Request, web_key: str | None = Header(default=None, alias="X-Web-Context-Key")):
     return await graph_response(payload, request, generate_answer=True, web_key=web_key)
 
 
-@router.post("/retrievals", response_model=RetrievalResponse)
+@router.post("/retrievals", response_model=RetrievalResponse, responses={
+    422: {"model": RequestValidationResponse, "description": "请求格式错误；只返回字段位置和错误类别"},
+})
 async def enhanced_retrieval(payload: AnswerRequest, request: Request, web_key: str | None = Header(default=None, alias="X-Web-Context-Key")):
     """Return original evidence after query planning; never generate an answer."""
     return await graph_response(payload, request, generate_answer=False, web_key=web_key)
@@ -325,7 +340,9 @@ class GraphStreamingResponse(StreamingResponse):
             self.run.cancel()
 
 
-@router.post("/answers/stream")
+@router.post("/answers/stream", responses={
+    422: {"model": RequestValidationResponse, "description": "请求格式错误；只返回字段位置和错误类别"},
+})
 async def answer_stream(payload: AnswerRequest, web_key: str | None = Header(default=None, alias="X-Web-Context-Key")):
     run = await start_graph(payload, stream=True, web_key=web_key)
 

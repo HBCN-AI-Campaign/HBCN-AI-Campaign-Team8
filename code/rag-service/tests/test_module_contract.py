@@ -61,6 +61,15 @@ class ModuleContractTests(unittest.TestCase):
                 self.assertEqual({item["category"] for item in details}, {"extra_forbidden", "string_too_long"})
                 self.assertTrue(all("msg" not in item and "input" not in item and "ctx" not in item for item in details))
                 self.assertTrue(any("<unknown_field>" in item["loc"] for item in details))
+                schema = app.openapi()
+                response_model_ref = "#/components/schemas/RequestValidationResponse"
+                issue_schema = schema["components"]["schemas"]["RequestValidationIssue"]
+                self.assertEqual(set(issue_schema["properties"]), {"loc", "category"})
+                for path in ("/api/v1/answers", "/api/v1/answers/stream", "/api/v1/retrievals"):
+                    response_schema = schema["paths"][path]["post"]["responses"]["422"]["content"]["application/json"]["schema"]
+                    self.assertEqual(response_schema["$ref"], response_model_ref)
+                runtime_keys = set(details[0])
+                self.assertTrue(runtime_keys <= set(issue_schema["properties"]))
         finally:
             client.close()
 
