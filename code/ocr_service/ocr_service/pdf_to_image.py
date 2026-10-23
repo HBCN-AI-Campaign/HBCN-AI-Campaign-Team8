@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from tempfile import mkdtemp
 
@@ -17,11 +18,18 @@ def pdf_to_images(pdf_path: Path, dpi: int = 200) -> list[Path]:
     out_dir = Path(mkdtemp(prefix="ocr_pdf_"))
     image_paths: list[Path] = []
 
-    with pdfplumber.open(str(pdf_path)) as pdf:
-        for idx, page in enumerate(pdf.pages, start=1):
-            img = page.to_image(resolution=dpi)
-            out_path = out_dir / f"page_{idx:03d}.png"
-            img.save(str(out_path))
-            image_paths.append(out_path)
+    try:
+        with pdfplumber.open(str(pdf_path)) as pdf:
+            for idx, page in enumerate(pdf.pages, start=1):
+                img = page.to_image(resolution=dpi)
+                out_path = out_dir / f"page_{idx:03d}.png"
+                img.save(str(out_path))
+                image_paths.append(out_path)
+    except Exception:
+        shutil.rmtree(out_dir, ignore_errors=True)
+        raise
+
+    if not image_paths:
+        shutil.rmtree(out_dir, ignore_errors=True)
 
     return image_paths
