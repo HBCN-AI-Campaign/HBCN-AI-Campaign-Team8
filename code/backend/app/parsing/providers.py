@@ -54,7 +54,11 @@ class PaddleHttpProvider:
                 box = b.get("box")
                 text = b.get("text")
                 score = b.get("score")
-                if not isinstance(text,str) or not isinstance(box,list) or len(box)!=4:
+                if not isinstance(text,str):
+                    raise ParseError("OCR_INVALID_BLOCK")
+                if not text.strip():
+                    continue
+                if not isinstance(box,list) or len(box)!=4:
                     raise ParseError("OCR_INVALID_BLOCK")
                 if not all(isinstance(v,(float,int)) and not isinstance(v,bool) and math.isfinite(v) for v in box+[score]):
                     raise ParseError("OCR_INVALID_BLOCK")
@@ -62,6 +66,8 @@ class PaddleHttpProvider:
                 if not (0<=x0<x1<=page.width and 0<=y0<y1<=page.height and 0<=score<=1):
                     raise ParseError("OCR_INVALID_COORDINATES")
                 blocks.append(Block(f"p{page.number}b{i}",text,[x0/page.width,y0/page.height,x1/page.width,y1/page.height],score,"paddle_http"))
+            if not blocks:
+                raise ParseError("OCR_NO_TEXT")
             return blocks
         except ParseError:
             raise

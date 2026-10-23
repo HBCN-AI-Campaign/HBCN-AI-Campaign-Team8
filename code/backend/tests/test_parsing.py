@@ -128,6 +128,24 @@ class ProviderTests(unittest.TestCase):
         with httpx.Client(transport=httpx.MockTransport(handle)) as client:
             provider=PaddleHttpProvider(ParserSettings(ocr_base_url="http://127.0.0.1:7888"),client)
             self.assertEqual(provider.analyze(page())[0].bbox,[.1,.2,.5,.25])
+    def test_empty_ocr_result_is_explicit_no_text(self):
+        response=httpx.Response(200,json={"blocks":[dict(text="  ",score=.99,box=[100,200,500,250])]})
+        with httpx.Client(transport=httpx.MockTransport(lambda r:response)) as client:
+            provider=PaddleHttpProvider(ParserSettings(ocr_base_url="http://127.0.0.1"),client)
+            with self.assertRaisesRegex(ParseError,"OCR_NO_TEXT"):
+                provider.analyze(page())
+    def test_second_page_ocr_box_maps_to_page_scoped_field_evidence(self):
+        p=Page(2,1000,500,b"png")
+        response=httpx.Response(200,json={"blocks":[dict(text="123,456.78",score=.99,box=[250,100,750,150])]})
+        with httpx.Client(transport=httpx.MockTransport(lambda r:response)) as client:
+            provider=PaddleHttpProvider(ParserSettings(ocr_base_url="http://127.0.0.1"),client)
+            block=provider.analyze(p)[0]
+        self.assertEqual(block.id,"p2b0")
+        self.assertEqual(block.bbox,[.25,.2,.75,.3])
+        candidate=validate_candidate(dict(key="amount",value="123456.78",raw_value="123,456.78",
+            visual_state="clear",block_ids=[block.id]),A,[Page(2,p.width,p.height,p.image,[block])],"vision")
+        self.assertEqual(candidate["issues"],[])
+        self.assertEqual(candidate["source"],dict(page=2,bbox=[.25,.2,.75,.3]))
     def test_invalid_coordinate_and_nan(self):
         for box in [[0,0,1001,50],[20,30,10,40],[float('nan'),0,10,20]]:
             response=json.dumps(dict(blocks=[dict(text="123",score=.9,box=box)]))
