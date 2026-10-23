@@ -70,6 +70,15 @@ class ModuleContractTests(unittest.TestCase):
                     self.assertEqual(response_schema["$ref"], response_model_ref)
                 runtime_keys = set(details[0])
                 self.assertTrue(runtime_keys <= set(issue_schema["properties"]))
+                self.assertFalse(any(
+                    response.get("content", {}).get("application/json", {}).get("schema", {}).get("$ref")
+                    == "#/components/schemas/HTTPValidationError"
+                    for path_item in schema["paths"].values()
+                    for operation in path_item.values() if isinstance(operation, dict)
+                    for response in operation.get("responses", {}).values()
+                ))
+                self.assertNotIn("HTTPValidationError", schema["components"]["schemas"])
+                self.assertNotIn("ValidationError", schema["components"]["schemas"])
         finally:
             client.close()
 

@@ -149,3 +149,15 @@ RAG UI 在本隔离 worktree 安装锁定依赖后，`pnpm exec vitest run --max
 审查发现 FastAPI 默认 `RequestValidationError` 响应可能包含 `input`，因此 `/answers` 等接口的额外字段或格式错误可能回显请求原文。现增加统一安全处理器，422 只返回每项的 `loc` 与 `category`，不含 `msg`、`input` 或 `ctx`；未知字段的任意键名统一替换为 `<unknown_field>`。三个问答/检索端点的 OpenAPI 422 schema 也显式引用同一 `RequestValidationResponse`，schema 仅定义 `loc/category`，并有测试对照 schema 与运行时字段。API 契约为服务 `0.5.3`、HTTP `1.3.3`，文档要求调用方按 OpenAPI 清理未定义字段。
 
 新增敏感哨兵回归：提交超长 query、伪造会话值和恶意未知字段名，断言三者均不出现在响应体，且校验项只含 `loc/category`；同时断言 answers、answers/stream、retrievals 的 OpenAPI 422 响应引用脱敏模型。最终验证：`py_compile` 通过；定向契约测试4项通过；`python -m unittest discover -s tests` 214项（201通过、13跳过、0失败）；OpenAPI 快照重导出后 `--check` 通过；`pip check` 与 `git diff --check` 通过。13项跳过仍需隔离 PostgreSQL/外部语料。修复只在 `lfc-rag`，不会直接合并。
+
+## 11. 10月23日隔离 PostgreSQL、语料与检索基线审计
+
+资源盘点：工作区无 Docker/Podman/PostgreSQL 可执行文件或服务，`127.0.0.1:5432` 未监听；RAG_DATABASE_URL、数据库资源文件和 SSH tunnel 文件均未配置。RAG 目录只含 `knowledge-base/catalog.json` 和说明，没有 SAFE_MANIFEST 的11个批准资料文件；`BUSINESS_SOURCE_ROOT` 与 `HBCN_TEST_SOURCE_ROOT` 均不可用。因此本轮没有启用 skip 标记，也没有连接共享/生产数据库；12项 PostgreSQL、1项批准语料测试仍未实测。
+
+新增 `.github/workflows/rag-ci.yml`：用一次性 PostgreSQL 16 容器运行完整后端套件并显式启用 12 项 PostgreSQL 集成。新增 `scripts/postgres_test_prereqs.py` 和 `scripts/run-postgres-tests.ps1`，本机入口拒绝远端、非 loopback、数据库名不等于 `hbcn_rag_test`、缺 CREATE 权限或非 PostgreSQL 16 的目标。前置脚本只检查并连接，不创建/删除数据库；测试只创建带随机名的 schema 并在 teardown 删除。已补 URL 白名单单元测试。该 CI workflow 尚未由 GitHub 实际执行；本机没有 PostgreSQL，不能据静态/合成测试称这12项已通过。
+
+批准语料最小复现仍需授权方准备根目录：设置 `HBCN_TEST_SOURCE_ROOT` 后运行 `python -m unittest discover -s tests -p test_ragflow.py`；这仅验证 11 个 manifest 文件存在和范围，不做业务检索评测。当前检索质量程序要求逐题审核的固定 exact/general/translated 查询与证据分级；holdout 至少六类各20题是代表性下限检查，不等于统计功效。已核对 reranker 实验共用同一最多20候选集合，所以 Recall@20 不会因重排而改善，排序变化看 nDCG@10。真实候选召回、指标门槛、置信区间分析计划和业务基线均缺批准金标/冻结结果，不能宣称过线；需要业务/法律审核人先定义 relevance 等级、通过/非劣阈值、案件族隔离与 holdout 使用规则。评测 schema 的审核人字段是声明，不具备身份签名；受控数据环境的签名、访问审计仍待完成。
+
+契约审查：1.3.3 是 API-only，无数据库迁移；回退到 1.3.2/0.5.2 会恢复默认 422 input 回显，因此旧代码不可直接重新对外服务。已在 API 契约与部署文档加入口限制、补等效脱敏/网关后才恢复的回退步骤。本轮检索基线审查未使用真实业务数据，也没有更改任何排序/召回参数。
+
+本次续验使用项目 `.venv`（Python 3.13）：全量套件 **218项，205通过、13跳过、0失败**；新增数据库前置/模块契约定向测试8项通过。OpenAPI 快照按当前脱敏422契约重生成后 `--check` 通过，`pip check`、Python 编译、GitHub Actions YAML 解析、PowerShell 脚本语法和 `git diff --check` 均通过。13项仍因本机没有 PostgreSQL/DSN及外部批准语料而跳过；GitHub workflow 已配置但尚未实际运行，不能据此关闭这些验收缺口。

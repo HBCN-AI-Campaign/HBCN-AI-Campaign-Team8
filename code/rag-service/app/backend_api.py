@@ -17,7 +17,7 @@ from .config import settings
 from .engine import engine_kind, get_engine
 from .postgres_engine import SUPPORTED_EXTENSIONS
 from .runtime_client import SDKRuntime
-from .schemas import AnswerResponse, RetrievalResponse
+from .schemas import AnswerResponse, RequestValidationResponse, RetrievalResponse
 from .evidence_context import utf16_units
 from .legal_applicability import LegalContext
 from .graph_transport import GraphRun
@@ -75,17 +75,6 @@ class AnswerRequest(BaseModel):
         if not value.strip():
             raise ValueError("问题不能为空")
         return value.strip()
-
-
-class RequestValidationIssue(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    loc: list[str | int]
-    category: str
-
-
-class RequestValidationResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    detail: list[RequestValidationIssue]
 
 
 def postgres_engine():

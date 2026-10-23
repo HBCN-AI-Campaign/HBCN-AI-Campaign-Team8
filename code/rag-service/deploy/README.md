@@ -85,7 +85,11 @@ docker run --name hbcn-rag --env-file /etc/hbcn-rag/rag.env \
 5. 验证鉴权、错误/空结果、缺口、取消、备份恢复、进程重启、真实任务 ACL 和实际 UI。引用原文不能通过绕过主站鉴权的公网 `/api/v1` 暴露。
 6. 切换失败时恢复旧代码/镜像及匹配的配置/索引/原件快照；不要只切回旧程序却继续读不兼容新索引。当前没有自动灰度或一键数据回滚，部署负责人执行并取证。
 
-无模型费用的模块检查：在隔离环境安装 `requirements-dev.txt` 后运行 `python -m unittest discover -s tests -v`、`python scripts/smoke-isolated-api.py`、`python scripts/export-openapi.py --check`、`python -m pip check`；UI 在 `ui/` 下运行 `npm ci`、`npm test -- --maxWorkers=1`、`npm run build`。默认跳过 12 个需 PostgreSQL 的用例：混合 FTS 1、文档生命周期 5、质量复核 5、参考治理 1；分别需 `HBCN_TEST_POSTGRES=1` 并配置专用、可丢弃的隔离 PostgreSQL 测试库。另有 1 个外部语料清单用例需显式设置 `HBCN_TEST_SOURCE_ROOT`。环境未配置时，跳过不计通过；不得把测试指向共享/生产数据库，也不得把外部模型/MCP 模拟计为真实联通。
+CI workflow [`.github/workflows/rag-ci.yml`](../../.github/workflows/rag-ci.yml) 每次启动一次性 PostgreSQL 16 服务，并以 `HBCN_TEST_POSTGRES=1` 运行完整后端套件；随机测试 schema 执行 FTS、事务、撤回和复核流程，无需真实向量/模型服务。开发机可运行 `scripts/run-postgres-tests.ps1`，但须自行准备 loopback 数据库 `hbcn_rag_test`、PostgreSQL 16+、`CREATE` schema 权限，并设置 `RAG_DATABASE_URL` 为该本地实例；脚本拒绝远端、其他数据库名和非 `sslmode=disable` 目标。它只检查并连接，不创建数据库或启动服务。本工作区当前没有 PostgreSQL 工具/服务/连接配置，不能本机实测这12项。
+
+另1项外部语料清单验收需先获得授权的11文件根目录，再设置 `HBCN_TEST_SOURCE_ROOT` 并运行 `python -m unittest discover -s tests -p test_ragflow.py`。本仓库/工作区不包含这些文件，CI 不拉取真实业务文档；缺少获授权目录时该项保持 skipped，不计通过。所有 13 个原跳过项及补测入口详见[验收报告](../RAG模块流程验收报告.md)和[评测指南](../evaluation/README.md)。
+
+契约 `1.3.3` 是 API-only 更新，无 DDL/数据迁移。回滚到 `0.5.2` 会恢复默认 FastAPI 422，可能回显请求 input；不能直接将旧版重新暴露。若必须回滚，先停/限流服务入口，并在旧代码上应用等效脱敏补丁或由经审查的网关保证清洗，再验证 OpenAPI 与敏感输入测试后恢复流量。回滚处置见 [API 契约升级说明](../API_CONTRACT.md#133-升级与回退)。
 
 ## v0.3.1 撤回与回滚注意
 

@@ -1,11 +1,22 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .query_plan import QueryContext
 
 
 KnowledgeScope = Literal["business_rules", "project_design", "task_documents", "law", "all"]
+
+
+class RequestValidationIssue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    loc: list[str | int]
+    category: str
+
+
+class RequestValidationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    detail: list[RequestValidationIssue]
 
 
 class QueryRequest(BaseModel):

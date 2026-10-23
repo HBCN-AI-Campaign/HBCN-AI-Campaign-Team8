@@ -156,6 +156,20 @@ RAG 不在服务端维护会话；调用方按单次请求显式传入获准的 
 
 ## 6. 验收报告模板与当前差距
 
+### 隔离 PostgreSQL / 语料前置条件
+
+仓库 CI 已配置为每次任务启动临时 PostgreSQL 16 `hbcn_rag_test` 并设置 `HBCN_TEST_POSTGRES=1` 后跑完整后端套件；GitHub 实际执行结果尚待 workflow run。12 个随机 schema 的 PostgreSQL FTS/事务/撤回/质量复核测试不依赖 pgvector 服务或真实模型。开发机可用 `scripts/run-postgres-tests.ps1`，但只接受 loopback、数据库名严格为 `hbcn_rag_test`、`sslmode=disable` 且当前角色可 CREATE schema；脚本运行前置检查后再跑全套，避免误碰共享/生产库。它不会创建数据库或启动服务。
+
+CI 方案按 [GitHub Actions PostgreSQL service container 官方文档](https://docs.github.com/en/actions/tutorials/use-containerized-services/create-postgresql-service-containers) 使用按 job 生命周期的 PostgreSQL service 与健康检查，不维护共享 runner 数据库。选原生 `postgres:16` 而非 RAG 应用镜像：该12项集成覆盖 PostgreSQL JSONB、全文检索、schema 隔离和事务；向量查询接口在这些夹具中 mock，不声称验证 pgvector 扩展/生产向量算子。服务卷和测试资料均为临时合成数据。
+
+当前已盘点的 RAG 工作区无 Docker/Podman/PostgreSQL 工具或服务，5432 无监听，未配置 DSN/DB 资源/SSH tunnel；本地不能声称已跑 PostgreSQL 用例。批准语料 11 文件 manifest 用例独立运行：获授权地提供根目录后设置 `HBCN_TEST_SOURCE_ROOT`，运行 `python -m unittest discover -s tests -p test_ragflow.py`。工作区只有 catalog/README，没有真实资料；不得把仓库内合成 fixture 当业务金标。CI 不取用或复制真实贷款文件。
+
+### 检索质量基线边界
+
+当前离线指标是冻结题集上的 Recall@20 与 nDCG@10、按 leakage group 的配对 bootstrap 区间。holdout 至少每组六类各20题（最少120个独立审题记录），只做覆盖约束，不证明统计功效或代表性。当前在线 collector 比较固定同一候选集上的 RRF 与 reranker；因此 Recall@20 按设计不变，只有排序指标能体现重排收益。检索策略改造需单独设计允许候选集变化的配对实验，不能复用 reranker 对照结论。
+
+仓库没有经业务审核的金标题集、冻结模型/索引排名结果或经批准的发布阈值，故现阶段只能验证评测机制，不能报告业务检索基线、达到上线门槛或宣称 reranker 有提升。先由业务/法律审核人确定证据相关性分级与通过阈值、题集授权/来源快照和案件族隔离，再固定开发/holdout；“审核人/批准”字段目前是数据声明，不是签名身份认证，受控存储、签名、访问审计仍须由评测环境负责。
+
 每份报告至少写：代码/配置版本（不含密钥）、测试环境与索引/文档版本、场景ID、数据是合成/脱敏/真实、操作、预期、实际、通过/失败/跳过、时延和上游调用、失败原因、修复与复测结果。单元/HTTP/浏览器/真实依赖分栏计数，跳过不得记通过。真实正文与运行日志保留在忽略目录，公共报告只写必要摘要。
 
 | 完成门槛 | 本轮要求 |

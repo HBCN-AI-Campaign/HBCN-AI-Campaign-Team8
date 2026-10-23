@@ -8,6 +8,7 @@ from pathlib import Path
 
 from fastapi import Cookie, Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
 from fastapi.exceptions import RequestValidationError
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
@@ -354,6 +355,28 @@ app.include_router(backend_router, dependencies=[Depends(require_service_token)]
 from .reference_api import router as reference_router
 
 app.include_router(reference_router, dependencies=[Depends(require_service_token)])
+
+
+def safe_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
+    components = schema.setdefault("components", {}).setdefault("schemas", {})
+    for path_item in schema.get("paths", {}).values():
+        for operation in path_item.values():
+            if not isinstance(operation, dict):
+                continue
+            response = operation.get("responses", {}).get("422", {})
+            response_schema = response.get("content", {}).get("application/json", {}).get("schema", {})
+            if response_schema.get("$ref") == "#/components/schemas/HTTPValidationError":
+                response_schema["$ref"] = "#/components/schemas/RequestValidationResponse"
+    components.pop("HTTPValidationError", None)
+    components.pop("ValidationError", None)
+    app.openapi_schema = schema
+    return schema
+
+
+app.openapi = safe_openapi
 
 
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
