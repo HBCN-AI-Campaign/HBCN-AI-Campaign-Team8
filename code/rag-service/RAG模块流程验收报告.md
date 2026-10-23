@@ -143,3 +143,9 @@ RAG UI 在本隔离 worktree 安装锁定依赖后，`pnpm exec vitest run --max
 并发合成测试让两个 GraphRun 使用不同 query/conversation，同时取消其中一个；通过验证取消请求不发布结果、另一个请求只返回自己的状态且容量正确释放。测试没有使用真实数据库或模型。
 
 本轮回归：`python -m unittest discover -s tests` 213项（200通过、13跳过、0失败）；OpenAPI `--check` 通过。13项跳过条件仍见第8节，真实 PostgreSQL、外部批准语料、汇丰服务器联调及真实业务金标仍为 **pending**。本轮只更新独立 `lfc-rag` 工作区，尚未提交或合并。
+
+## 10. 10月23日 422 校验响应脱敏复验
+
+审查发现 FastAPI 默认 `RequestValidationError` 响应可能包含 `input`，因此 `/answers` 等接口的额外字段或格式错误可能回显请求原文。现增加统一安全处理器，422 只返回每项的 `loc` 与 `category`，不含 `msg`、`input` 或 `ctx`；未知字段的任意键名统一替换为 `<unknown_field>`。API 契约升至服务 `0.5.3`、HTTP `1.3.3`，文档要求调用方按 OpenAPI 清理未定义字段。
+
+新增敏感哨兵回归：提交超长 query、伪造会话值和恶意未知字段名，断言三者均不出现在响应体，且校验项只含 `loc/category`。最终验证：`py_compile` 通过；定向契约测试4项通过；`python -m unittest discover -s tests` 214项（201通过、13跳过、0失败）；OpenAPI 快照重导出后 `--check` 通过；`pip check` 与 `git diff --check` 通过。13项跳过仍需隔离 PostgreSQL/外部语料。修复只在 `lfc-rag`，不会直接合并。

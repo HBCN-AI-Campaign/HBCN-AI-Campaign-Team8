@@ -14,10 +14,10 @@ class ModuleContractTests(unittest.TestCase):
         try:
             with patch.object(settings, "SERVICE_TOKEN", "synthetic-service-token"):
                 health = client.get("/health")
-                self.assertEqual(health.json()["api_contract_version"], "1.3.2")
+                self.assertEqual(health.json()["api_contract_version"], "1.3.3")
                 rejected = client.get("/api/v1/capabilities")
                 self.assertEqual(rejected.status_code, 401)
-                self.assertEqual(rejected.headers["x-rag-contract-version"], "1.3.2")
+                self.assertEqual(rejected.headers["x-rag-contract-version"], "1.3.3")
                 self.assertEqual(health.headers["x-rag-service-version"], health.json()["service_version"])
                 self.assertNotIn("synthetic-service-token", health.text + rejected.text)
         finally:
@@ -35,8 +35,32 @@ class ModuleContractTests(unittest.TestCase):
                             "request_id": "synthetic-request",
                         })
                         self.assertEqual(response.status_code, 422)
-                        self.assertIn("session_id", response.text)
-                        self.assertIn("request_id", response.text)
+                        self.assertNotIn("synthetic-session", response.text)
+                        self.assertNotIn("synthetic-request", response.text)
+                        detail = response.json()["detail"]
+                        self.assertEqual({item["category"] for item in detail}, {"extra_forbidden"})
+                        self.assertTrue(all("msg" not in item and "input" not in item for item in detail))
+        finally:
+            client.close()
+
+    def test_validation_errors_never_echo_query_values_or_unknown_field_names(self):
+        client = TestClient(app)
+        headers = {"Authorization": "Bearer synthetic-service-token"}
+        query_marker = "SENSITIVE-QUERY-MARKER"
+        field_marker = "SENSITIVE-FIELD-NAME-MARKER"
+        value_marker = "SENSITIVE-SESSION-VALUE-MARKER"
+        try:
+            with patch.object(settings, "SERVICE_TOKEN", "synthetic-service-token"):
+                response = client.post("/api/v1/retrievals", headers=headers, json={
+                    "query": query_marker + ("x" * 4000), field_marker: value_marker,
+                })
+                self.assertEqual(response.status_code, 422)
+                for marker in (query_marker, field_marker, value_marker):
+                    self.assertNotIn(marker, response.text)
+                details = response.json()["detail"]
+                self.assertEqual({item["category"] for item in details}, {"extra_forbidden", "string_too_long"})
+                self.assertTrue(all("msg" not in item and "input" not in item and "ctx" not in item for item in details))
+                self.assertTrue(any("<unknown_field>" in item["loc"] for item in details))
         finally:
             client.close()
 

@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Cookie, Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
@@ -47,6 +48,22 @@ ALLOWED_EXTENSIONS = {
     ".txt", ".md", ".html", ".htm", ".csv", ".json", ".mmd",
     ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif",
 }
+
+
+@app.exception_handler(RequestValidationError)
+async def safe_validation_error(request: Request, exc: RequestValidationError):
+    """Return schema locations and error categories without echoing request data."""
+    safe_errors = []
+    for error in exc.errors():
+        category = error.get("type", "invalid")
+        location = list(error.get("loc", ()))
+        if category == "extra_forbidden" and location:
+            location[-1] = "<unknown_field>"
+        safe_errors.append({
+            "loc": [part for part in location[:12] if isinstance(part, (str, int))],
+            "category": category if isinstance(category, str) else "invalid",
+        })
+    return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content={"detail": safe_errors})
 
 
 def _is_loopback(host: str) -> bool:

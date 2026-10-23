@@ -115,7 +115,7 @@ sequenceDiagram
 
 ### HTTP 请求兼容与会话边界
 
-RAG 不在服务端维护会话；调用方按单次请求显式传入获准的 `conversation`。`/answers`、`/answers/stream`、`/retrievals` 请求体采用明确字段校验，未知字段返回 422 并指出字段名，避免把 `session_id`/`request_id` 误当成已保存会话或授权。服务版本/契约版本随兼容行为变化同步发布。调用方迁移：删除未定义请求字段，继续传 `query/scope/top_k/sources/purpose/conversation` 等正式字段；如需关联 ID，由调用方自行记录；若收到422，依据 detail 定位并移除未知字段后重试。assistant 适配已验证只发送正式字段，兼容所有 `1.x >= 1.2.0`，无需同步改动。
+RAG 不在服务端维护会话；调用方按单次请求显式传入获准的 `conversation`。`/answers`、`/answers/stream`、`/retrievals` 请求体采用明确字段校验，未知字段返回 422；校验响应只含位置和类别，未知字段名显示为 `<unknown_field>`，不回显消息、值或任意字段键。调用方迁移：按 OpenAPI 对照并删除非契约字段，若仍有未知字段，依据 422 的 `<unknown_field>` 定位请求体后修正；如需关联 ID，由调用方自行记录。assistant 适配已验证只发送正式字段，兼容所有 `1.x >= 1.2.0`，无需同步改动。
 
 | 能力 | 当前机制 / 需要继续完成 | 验收要点 |
 |---|---|---|
