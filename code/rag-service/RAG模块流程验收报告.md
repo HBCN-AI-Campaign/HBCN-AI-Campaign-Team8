@@ -89,3 +89,13 @@ flowchart LR
 本轮隔离HTTP烟测通过：实际服务启动、health/docs/OpenAPI、来源/重排契约和鉴权；该烟测不调用共享数据库或真实模型，不能替代上表的真实依赖失败结果。
 
 **复杂业务题仍未通过。** 当前presented_windows/batch_count只累计成功核对的批次，0不表示从未向模型提交原文；本次确有核对调用，但未取得可校验输出。源码可见runtime的空answer可能来自超时、执行失败或成功后无最终文本；RAG目前仅报通用空答。必须取得上游安全终止状态后再修改预算或接口，不能仅凭约49秒推断根因。本轮未改共享assistant-runtime或放松覆盖、引用、撤回检查。
+
+## 7. 10月23日隔离分支复验：ceafa40
+
+本次在 `lfc-rag` 独立 worktree、基线 `ceafa40` 复验；工作区起始干净。Python 3.13 虚拟环境按 `requirements-dev.txt` 安装依赖后执行 `python -m unittest discover -s tests -v`：**208项，195通过、13跳过、0失败**。跳过项需要 opt-in 的隔离 PostgreSQL schema 或显式外部语料路径；因此 PostgreSQL FTS/并发撤回真实数据库测试仍未执行。此套测试主要是合成数据、Mock/故障注入，不代表业务金标准、真实模型或法宝调用。
+
+RAG UI 在本隔离 worktree 安装锁定依赖后，`pnpm exec vitest run --maxWorkers=1` 通过：2个文件、21项、0失败，耗时130秒。`pnpm build` 通过（TypeScript 与 Vite）；产物主 JS 约696 KB，Vite 提示超过500 KB拆包建议，记为非阻断优化项。默认并行 worker 首轮超过40秒无输出后中断；单 worker 完整复验通过，保留时延供后续诊断。
+
+长期 Goal 工具仍返回既有目标为 `blocked`，并拒绝新建重复目标；当前工具没有把 `blocked` 重新设为 `active` 的操作。本轮按交接要求继续复验，但不伪报 Goal 已激活。此前相关执行记录有远端 compact stream 在完成前断开的失败；当前隔离工作树已正常加载，`lfc-rag` HEAD 为 `ceafa40`，并非代码树未加载或有隐含新提交。
+
+目标服务器状态由只读交接核查提供：`/opt/hbcn-rag` 与 `/etc/hbcn-rag/rag.env` 不存在，8011 连接拒绝。故 Linux/云端启动、health/ready、主站→RAG 请求、持久化和恢复演练全部 **pending**；不执行部署或服务器修改。当前专用 reranker 也没有可用配置/服务证据；接口机制测试通过不代表 rerank 已启用或质量优于 RRF。
