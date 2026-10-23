@@ -97,7 +97,7 @@ def task_context(task: models.ReviewTask | None) -> dict[str, Any]:
             "task_code": task.task_code,
             "borrower": task.borrower,
             "currency": task.drawdown_currency,
-            "amount": float(task.drawdown_amount),
+            "amount": format(task.drawdown_amount, ".2f"),
             "status": getattr(task.status, "value", task.status),
         },
         "documents": documents,

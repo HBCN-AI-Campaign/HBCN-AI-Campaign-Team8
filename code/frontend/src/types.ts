@@ -41,11 +41,6 @@ export interface SupplementIn {
   field_updates?: SupplementFieldUpdate[]
   added_files?: string[]
   input_digest?: string
-  documents?: SupplementDocumentInput[]
-}
-
-export interface SupplementDocumentInput extends DocumentIn {
-  replaces_doc_code?: string | null
 }
 
 export interface FieldSource {
