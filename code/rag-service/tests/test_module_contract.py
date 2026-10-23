@@ -14,12 +14,29 @@ class ModuleContractTests(unittest.TestCase):
         try:
             with patch.object(settings, "SERVICE_TOKEN", "synthetic-service-token"):
                 health = client.get("/health")
-                self.assertEqual(health.json()["api_contract_version"], "1.3.1")
+                self.assertEqual(health.json()["api_contract_version"], "1.3.2")
                 rejected = client.get("/api/v1/capabilities")
                 self.assertEqual(rejected.status_code, 401)
-                self.assertEqual(rejected.headers["x-rag-contract-version"], "1.3.1")
+                self.assertEqual(rejected.headers["x-rag-contract-version"], "1.3.2")
                 self.assertEqual(health.headers["x-rag-service-version"], health.json()["service_version"])
                 self.assertNotIn("synthetic-service-token", health.text + rejected.text)
+        finally:
+            client.close()
+
+    def test_answer_and_retrieval_requests_reject_implicit_session_identity(self):
+        client = TestClient(app)
+        headers = {"Authorization": "Bearer synthetic-service-token"}
+        try:
+            with patch.object(settings, "SERVICE_TOKEN", "synthetic-service-token"):
+                for path in ("/api/v1/answers", "/api/v1/answers/stream", "/api/v1/retrievals"):
+                    with self.subTest(path=path):
+                        response = client.post(path, headers=headers, json={
+                            "query": "合成查询", "session_id": "synthetic-session",
+                            "request_id": "synthetic-request",
+                        })
+                        self.assertEqual(response.status_code, 422)
+                        self.assertIn("session_id", response.text)
+                        self.assertIn("request_id", response.text)
         finally:
             client.close()
 

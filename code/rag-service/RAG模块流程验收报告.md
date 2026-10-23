@@ -133,3 +133,13 @@ RAG UI 在本隔离 worktree 安装锁定依赖后，`pnpm exec vitest run --max
 本次验证：`python -m unittest discover -s tests -v` 211项（198通过、13跳过）；`python scripts/smoke-isolated-api.py` 通过（临时本机HTTP服务、无共享数据库/模型调用）；`python scripts/export-openapi.py --check` 通过；`python -m pip check` 通过。UI 源码未变，沿用前节21项 UI 测试与构建结果。本次未运行 Docker/Linux，也未调用真实模型、Embedding、reranker、MCP、外部语料或目标服务器。
 
 部署文档静态版本核对：当前 `app/version.py` 与部署 README / Docker tag 均为服务0.5.1、API 1.3.1，版本号一致，没有版本过期。README 已补入目标机当前未部署证据、systemd 权限待核验项、占位 token 说明、本地可复现命令和13项 skip 的前置条件。服务端部署、身份权限、备份恢复与主站真实联调继续 **pending**。
+
+## 9. 10月23日接口边界与并发隔离复验
+
+发布候选版本更新为服务 `0.5.2`、HTTP 契约 `1.3.2`。`/answers`、`/answers/stream`、`/retrievals` 现在拒绝请求体中的未知字段并返回422，防止调用方误以为 `session_id`/`request_id` 会建立RAG会话或赋予身份。RAG仍无服务端会话存储，调用方每次显式传 `conversation`；迁移要求及assistant兼容核对已写入[优化规划](RAG模块优化规划.md)和[API契约](API_CONTRACT.md)。
+
+已检查 `lfc-assistant` 调用适配和测试：当前调用只发送正式字段，契约门禁接受 `1.x >= 1.2.0`，因此无需改 assistant 分支。面向其他旧调用方，收到422时按 detail 移除未定义请求字段；需要请求关联 ID 的由调用方本身记录。接口变更摘要已发至 AI助手会话，供联调引用。
+
+并发合成测试让两个 GraphRun 使用不同 query/conversation，同时取消其中一个；通过验证取消请求不发布结果、另一个请求只返回自己的状态且容量正确释放。测试没有使用真实数据库或模型。
+
+本轮回归：`python -m unittest discover -s tests` 213项（200通过、13跳过、0失败）；OpenAPI `--check` 通过。13项跳过条件仍见第8节，真实 PostgreSQL、外部批准语料、汇丰服务器联调及真实业务金标仍为 **pending**。本轮只更新独立 `lfc-rag` 工作区，尚未提交或合并。

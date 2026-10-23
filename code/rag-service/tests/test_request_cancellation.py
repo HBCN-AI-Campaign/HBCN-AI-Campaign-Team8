@@ -19,6 +19,42 @@ from app.backend_api import GraphStreamingResponse
 
 
 class CancellationTests(unittest.TestCase):
+    def test_concurrent_graph_runs_keep_request_state_and_cancellation_isolated(self):
+        both_entered, release = threading.Barrier(3), threading.Event()
+
+        class EchoGraph:
+            def invoke(self, state, _config):
+                both_entered.wait(timeout=5)
+                if not release.wait(5):
+                    raise TimeoutError("synthetic graph release timeout")
+                return {"result": {"query": state["query"], "conversation": state["conversation"]}}
+
+        slots = threading.BoundedSemaphore(2)
+        self.assertTrue(slots.acquire(False))
+        self.assertTrue(slots.acquire(False))
+        first = GraphRun(EchoGraph(), {"query": "查询甲", "conversation": [{"content": "金额甲"}]}, slots)
+        second = GraphRun(EchoGraph(), {"query": "查询乙", "conversation": [{"content": "金额乙"}]}, slots)
+        try:
+            both_entered.wait(timeout=5)
+            first.cancel()
+            release.set()
+            self.assertTrue(first.done.wait(5))
+            self.assertTrue(second.done.wait(5))
+        finally:
+            first.cancel()
+            second.cancel()
+            release.set()
+            first.worker.join(5)
+            second.worker.join(5)
+
+        self.assertTrue(first.queue.empty(), "cancelled run must not publish a result")
+        self.assertEqual(second.queue.get_nowait(), ("result", {"query": "查询乙", "conversation": [{"content": "金额乙"}]}))
+        self.assertTrue(second.queue.empty())
+        self.assertTrue(slots.acquire(False), "request capacity leaked")
+        self.assertTrue(slots.acquire(False), "request capacity leaked")
+        slots.release()
+        slots.release()
+
     def test_cancel_inflight_model_closes_stream_and_never_retrieves(self):
         started, closed = threading.Event(), threading.Event()
 

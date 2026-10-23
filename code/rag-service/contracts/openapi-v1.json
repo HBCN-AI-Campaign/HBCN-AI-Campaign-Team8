@@ -2,6 +2,7 @@
   "components": {
     "schemas": {
       "AnswerRequest": {
+        "additionalProperties": false,
         "properties": {
           "conversation": {
             "items": {
@@ -1441,7 +1442,7 @@
   },
   "info": {
     "title": "HBCN Business Knowledge Service",
-    "version": "0.5.1"
+    "version": "0.5.2"
   },
   "openapi": "3.1.0",
   "paths": {

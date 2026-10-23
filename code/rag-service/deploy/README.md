@@ -1,16 +1,16 @@
-# 汇丰云服务器部署交接：独立 RAG 0.5.1
+# 汇丰云服务器部署交接：独立 RAG 0.5.2
 
 这是供同事部署/联调的模块版本，不表示已经迁移到汇丰 ECS 或通过完整业务质量验收。模块只通过 HTTP 与主站、模型 runtime、Embedding、reranker、法宝连接；调用方接口见 [API_CONTRACT.md](../API_CONTRACT.md)，不需要随内部模型或数据库实现改代码。
 
 ## 2026-10-23 版本与环境状态
 
-当前源码 `app/version.py`、本文件标题与容器示例一致：服务 `0.5.1`、API 契约 `1.3.1`；本次静态复核未发现版本号过期，不因测试记录变更服务版本。目标机只读核查显示 `/opt/hbcn-rag` 和 `/etc/hbcn-rag/rag.env` 均不存在，8011 连接被拒绝；因此 RAG 尚未在目标机部署，云端 `/health`、`/api/v1/ready`、主站调用、数据持久化及恢复演练仍为 **pending**。
+当前源码 `app/version.py`、本文件标题与容器示例一致：服务 `0.5.2`、API 契约 `1.3.2`。目标机只读核查显示 `/opt/hbcn-rag` 和 `/etc/hbcn-rag/rag.env` 均不存在，8011 连接被拒绝；因此 RAG 尚未在目标机部署，云端 `/health`、`/api/v1/ready`、主站调用、数据持久化及恢复演练仍为 **pending**。
 
 `hbcn-rag.service` 模板静态包含非 root、回环监听、`ProtectSystem=strict` 和受限写目录；目标机上的服务账号、环境文件属主/权限、数据目录权限与 systemd 实际生效配置均未核验。`.env.example` 中的凭证仅为占位符。当前没有 Docker/Podman 或本机 PostgreSQL 服务，故本机不能据此构建 Linux 镜像或运行真实 PostgreSQL 集成用例；不连接共享/生产数据库补测。
 
 ## 获取协作分支版本
 
-RAG 协作版本以审核过的 `lfc` commit为准，**不要从 main 部署本版本**。当前源码版本0.5.1；本轮工作区是否已提交/推送以[流程验收报告](../RAG模块流程验收报告.md)为准，不把文件已修改当成GitHub已更新。部署时固定审核过的lfc commit，避免覆盖同事工作区；交接范围为`code/rag-service`及对应RAG文档，不包含个人凭证、已建索引或真实资料。
+RAG 协作版本以审核过的 `lfc` commit为准，**不要从 main 部署本版本**。当前源码版本0.5.2；本轮工作区是否已提交/推送以[流程验收报告](../RAG模块流程验收报告.md)为准，不把文件已修改当成GitHub已更新。部署时固定审核过的lfc commit，避免覆盖同事工作区；交接范围为`code/rag-service`及对应RAG文档，不包含个人凭证、已建索引或真实资料。
 
 ```bash
 git fetch origin lfc
@@ -68,10 +68,10 @@ cd ..
 模块根目录提供多阶段 Dockerfile：构建 React UI，安装锁定的 Python 直接依赖，以非 root 运行。只复制应用、脚本、接口快照和公开目录说明，排除 .env、data、业务原件和 node_modules。镜像中不内置模型、账号、数据库、个人文件或真实知识库；这些由外部服务和受控存储提供。
 
 ```bash
-docker build -t hbcn-rag:0.5.1 .
+docker build -t hbcn-rag:0.5.2 .
 docker volume create hbcn-rag-data
 docker run --name hbcn-rag --env-file /etc/hbcn-rag/rag.env \
-  -p 127.0.0.1:8011:8011 -v hbcn-rag-data:/var/lib/hbcn-rag hbcn-rag:0.5.1
+  -p 127.0.0.1:8011:8011 -v hbcn-rag-data:/var/lib/hbcn-rag hbcn-rag:0.5.2
 ```
 
 部署方确保数据卷 UID/GID 10001 可写；覆盖 RAG_DATA_DIR 时同步挂载。示例不指定 CPU/内存限额；资源按目标质量与实测容量配置。HEALTHCHECK 仅查存活，发布仍要查就绪和真实提问。当前 Windows 开发机无 Docker，**本轮没有验证 Linux 镜像构建和云端运行**；Dockerfile/原生模板均需部署同事在目标环境验证，不能把模板存在视为部署成功。
