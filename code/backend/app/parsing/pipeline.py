@@ -2,6 +2,7 @@
 from collections import defaultdict
 from pathlib import Path
 import hashlib
+import math
 import time
 import uuid
 
@@ -21,6 +22,30 @@ def _chunks(items,size):
     return [items[i:i+size] for i in range(0,len(items),size)]
 
 
+def _valid_bbox(box):
+    return (isinstance(box,list) and len(box)==4 and
+        all(isinstance(v,(int,float)) and not isinstance(v,bool) and math.isfinite(v) for v in box) and
+        0<=box[0]<box[2]<=1 and 0<=box[1]<box[3]<=1)
+
+
+def page_quality(page):
+    bins={'lt_085':0,'085_to_095':0,'ge_095':0}
+    valid_boxes=0
+    for block in page.blocks:
+        valid_boxes+=_valid_bbox(block.bbox)
+        if block.score<.85:bins['lt_085']+=1
+        elif block.score<.95:bins['085_to_095']+=1
+        else:bins['ge_095']+=1
+    if not page.needs_ocr:status='not_requested'
+    elif page.errors:status='failed'
+    elif page.blocks:status='completed'
+    else:status='empty'
+    return dict(page=page.number,width=page.width,height=page.height,ocr_required=page.needs_ocr,
+        ocr_status=status,block_count=len(page.blocks),recognized_character_count=sum(len(b.text.strip()) for b in page.blocks),
+        valid_box_count=valid_boxes,invalid_box_count=len(page.blocks)-valid_boxes,score_bins=bins,
+        error_codes=list(page.errors))
+
+
 def validate_candidate(candidate,spec,pages,method):
     """Provider output never supplies source coordinates or a trusted quality score."""
     by_id={b.id:(p,b) for p in pages for b in p.blocks}
@@ -33,6 +58,12 @@ def validate_candidate(candidate,spec,pages,method):
         result["issues"].append("EVIDENCE_MISSING_OR_UNKNOWN")
         ids=[]
     result["block_ids"]=ids
+    source_pages={by_id[i][0].number for i in ids}
+    invalid_coordinates=any(not _valid_bbox(by_id[i][1].bbox) for i in ids)
+    if invalid_coordinates:
+        result["issues"].append("INVALID_EVIDENCE_COORDINATES")
+    if spec["data_type"]!="rows" and len(source_pages)>1:
+        result["issues"].append("EVIDENCE_SPANS_MULTIPLE_PAGES")
     state=result.get("visual_state","not_checked")
     if not isinstance(state,str): state="ambiguous"
     if state not in {"clear","selected","unselected","deleted","ambiguous","not_checked"}:
@@ -114,7 +145,7 @@ def validate_candidate(candidate,spec,pages,method):
     result["evidence"]=[dict(block_id=i,page=by_id[i][0].number,bbox=by_id[i][1].bbox,
         text=by_id[i][1].text,score=by_id[i][1].score,method=by_id[i][1].method) for i in ids]
     result["source"]=None
-    if ids:
+    if ids and not invalid_coordinates and len(source_pages)==1:
         page=by_id[ids[0]][0].number
         boxes=[by_id[i][1].bbox for i in ids if by_id[i][0].number==page]
         result["source"]=dict(page=page,bbox=[min(b[0] for b in boxes),min(b[1] for b in boxes),max(b[2] for b in boxes),max(b[3] for b in boxes)])
@@ -281,9 +312,13 @@ class ParsingPipeline:
             try:
                 raw=self.semantic.extract(chunk,tcode,specs,visual=False)
                 for candidate in raw:
-                    if not isinstance(candidate,dict): continue
+                    if not isinstance(candidate,dict):
+                        errors.append(dict(page=chunk[0].number,code='SEMANTIC_INVALID_FIELD'))
+                        continue
                     spec=next((s for s in specs if s["key"]==candidate.get("key")),None)
-                    if spec is None: continue
+                    if spec is None:
+                        errors.append(dict(page=chunk[0].number,code='SEMANTIC_UNKNOWN_FIELD_KEY'))
+                        continue
                     c=validate_candidate(candidate,spec,chunk,"ocr_semantic")
                     candidates[spec["key"]].append(c)
                     # Pixel verification of every page supporting a business field. This catches
@@ -298,10 +333,14 @@ class ParsingPipeline:
                 raw=self.semantic.extract(chunk,tcode,specs,visual=True)
                 visual_by_key=defaultdict(list)
                 for candidate in raw:
-                    if not isinstance(candidate,dict): continue
+                    if not isinstance(candidate,dict):
+                        errors.append(dict(page=chunk[0].number,code='SEMANTIC_INVALID_FIELD'))
+                        continue
                     spec=next((s for s in specs if s["key"]==candidate.get("key")),None)
-                    if spec:
-                        visual_by_key[spec["key"]].append(validate_candidate(candidate,spec,chunk,"vision"))
+                    if spec is None:
+                        errors.append(dict(page=chunk[0].number,code='SEMANTIC_UNKNOWN_FIELD_KEY'))
+                        continue
+                    visual_by_key[spec["key"]].append(validate_candidate(candidate,spec,chunk,"vision"))
                 for key,items in visual_by_key.items():
                     key_spec=next(s for s in specs if s['key']==key)
                     # Keep both channels when values differ. Otherwise a pixel verification
@@ -378,6 +417,7 @@ class ParsingPipeline:
             source_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),schema_version=SCHEMA_VERSION,
             regional_attempts=regional_attempts,
             structure_attempts=structure_attempts,
+            page_diagnostics=[page_quality(page) for page in pages],
             **({'goods_table_scope':goods_scope} if goods_scope is not None else {}),
             seconds=round(time.monotonic()-start,3))
 

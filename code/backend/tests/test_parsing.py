@@ -11,7 +11,7 @@ import httpx
 from app.parsing.config import ParserSettings
 from app.parsing.contracts import Block, Page, ParseError
 from app.parsing.normalization import normalize
-from app.parsing.pipeline import ParsingPipeline, resolve, validate_candidate
+from app.parsing.pipeline import ParsingPipeline, page_quality, resolve, validate_candidate
 from app.parsing.providers import HSBCSemanticProvider, PaddleHttpProvider, safe_endpoint
 from app.parsing.registry import A, FIELDS, guess_type, spec
 from app.rule_engine import run_all
@@ -52,11 +52,34 @@ class NormalizationTests(unittest.TestCase):
 
 
 class EvidenceTests(unittest.TestCase):
+    def test_page_quality_diagnostics_omit_business_text(self):
+        p=Page(2,1000,500,b"png",[Block("p2b0","account-number-123",[.1,.2,.3,.4],.82,"paddle_http")])
+        report=page_quality(p)
+        self.assertEqual(report["ocr_status"],"completed")
+        self.assertEqual(report["score_bins"],{'lt_085':1,'085_to_095':0,'ge_095':0})
+        self.assertEqual((report["block_count"],report["recognized_character_count"],report["valid_box_count"]),(1,18,1))
+        self.assertNotIn("text",report)
+        self.assertNotIn("account-number-123",json.dumps(report))
+
     def test_value_source_and_normalized_box(self):
         c=validate_candidate(candidate(),A,[page()],"vision")
         self.assertEqual(c["issues"],[])
         self.assertEqual(c["source"],dict(page=1,bbox=[.1,.2,.5,.25]))
         self.assertEqual(resolve(A,[c])["value"],"123456.78")
+    def test_invalid_native_text_box_cannot_be_a_field_location(self):
+        p=page();p.blocks[0].bbox=[.9,.2,1.1,.25]
+        c=validate_candidate(candidate(),A,[p],"vision")
+        self.assertIn("INVALID_EVIDENCE_COORDINATES",c["issues"])
+        self.assertIsNone(c["source"])
+        self.assertIsNone(resolve(A,[c])["value"])
+    def test_scalar_evidence_across_pages_is_not_collapsed_to_first_page_box(self):
+        first=page(1,"123,456")
+        second=page(2,".78")
+        second.blocks[0].id="p2b0"
+        c=validate_candidate(candidate(ids=["p1b0","p2b0"]),A,[first,second],"vision")
+        self.assertIn("EVIDENCE_SPANS_MULTIPLE_PAGES",c["issues"])
+        self.assertIsNone(c["source"])
+        self.assertIsNone(resolve(A,[c])["value"])
     def test_model_cannot_override_amount(self):
         c=validate_candidate(candidate("999999"),A,[page()],"vision")
         self.assertIn("VALUE_SOURCE_MISMATCH",c["issues"])
@@ -167,6 +190,34 @@ class ProviderTests(unittest.TestCase):
 
 
 class PipelineTests(unittest.TestCase):
+    def test_unknown_model_field_key_is_reported_without_logging_content(self):
+        class OCR:
+            def analyze(self,p): return p.blocks
+        class Model:
+            def extract(self,pages,tcode,specs,*,visual):
+                return [dict(key="unregistered-model-output",value="secret text",raw_value="secret text",
+                    block_ids=["p1b0"],visual_state="clear")]
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/"payment.pdf";path.write_bytes(b"test")
+            with patch("app.parsing.pipeline.prepare",return_value=[page()]):
+                doc=ParsingPipeline(ParserSettings(),ocr=OCR(),semantic=Model()).parse_document(
+                    path,"payment.pdf",type_code="PAYMENT_INSTRUCTION")
+        self.assertEqual(doc["status"],"needs_review")
+        self.assertIn("SEMANTIC_UNKNOWN_FIELD_KEY",[issue["code"] for issue in doc["issues"]])
+        self.assertNotIn("secret text",json.dumps(doc,ensure_ascii=False))
+
+    def test_malformed_model_field_is_reported(self):
+        class OCR:
+            def analyze(self,p): return p.blocks
+        class Model:
+            def extract(self,pages,tcode,specs,*,visual): return [None]
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/"payment.pdf";path.write_bytes(b"test")
+            with patch("app.parsing.pipeline.prepare",return_value=[page()]):
+                doc=ParsingPipeline(ParserSettings(),ocr=OCR(),semantic=Model()).parse_document(
+                    path,"payment.pdf",type_code="PAYMENT_INSTRUCTION")
+        self.assertIn("SEMANTIC_INVALID_FIELD",[issue["code"] for issue in doc["issues"]])
+
     def test_ocr_outage_keeps_candidate_unresolved_and_marks_document_incomplete(self):
         class OCR:
             def analyze(self,p): raise ParseError("OCR_REQUEST_FAILED")
