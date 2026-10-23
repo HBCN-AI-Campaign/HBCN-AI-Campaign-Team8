@@ -1,5 +1,5 @@
 import { App, ConfigProvider } from 'antd'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SkillLibraryDrawer } from '@/assistant/SkillLibraryDrawer'
 import { CollaborationApiError, collaborationApi } from '@/assistant/collaboration'
@@ -111,6 +111,30 @@ describe('reviewer skill-library journeys', () => {
     fireEvent.click(screen.getByRole('button', { name: /^取\s*消$/ }))
     await screen.findAllByText('放弃未保存的技能修改？')
     fireEvent.click(screen.getByRole('button', { name: '放弃修改' }))
+    await waitFor(() => expect(screen.queryByLabelText('工作指引')).toBeNull())
+  })
+
+  it('prevents closing the editor while a save is still pending', async () => {
+    let finishSave!: (skill: AssistantSkill) => void
+    vi.mocked(collaborationApi.updateCustomSkill).mockReturnValueOnce(new Promise((resolve) => { finishSave = resolve }))
+    mount()
+    await screen.findByText('贸易背景复核')
+    fireEvent.click(await screen.findByRole('button', { name: /编辑/ }))
+    const instruction = await screen.findByLabelText('工作指引') as HTMLTextAreaElement
+    fireEvent.change(instruction, { target: { value: '等待保存完成后再关闭。' } })
+
+    const editor = screen.getByText('编辑个人技能').closest('.hy-skill-editor-modal') as HTMLElement
+    const titleId = editor.getAttribute('aria-labelledby')
+    expect(titleId && Array.from(editor.querySelectorAll('[id]')).some((element) => element.id === titleId && element.textContent === '编辑个人技能')).toBe(true)
+    fireEvent.click(within(editor).getByRole('button', { name: /^保\s*存$/ }))
+    await waitFor(() => expect(collaborationApi.updateCustomSkill).toHaveBeenCalled())
+    expect((within(editor).getByRole('button', { name: /^取\s*消$/ }) as HTMLButtonElement).disabled).toBe(true)
+    expect(within(editor).queryByRole('button', { name: 'Close' })).toBeNull()
+    fireEvent.keyDown(document, { key: 'Escape', code: 'Escape', keyCode: 27 })
+    fireEvent.click(document.querySelector('.ant-modal-wrap'))
+    expect(screen.getByLabelText('工作指引')).toBeTruthy()
+
+    finishSave({ ...personal, revision: 2 })
     await waitFor(() => expect(screen.queryByLabelText('工作指引')).toBeNull())
   })
 

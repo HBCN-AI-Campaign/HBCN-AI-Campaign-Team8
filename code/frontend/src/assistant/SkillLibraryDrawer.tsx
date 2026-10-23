@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Alert, App, Button, Card, Drawer, Empty, Form, Input, List, Modal, Popconfirm, Space, Spin, Tabs, Tag, Typography } from 'antd'
 import { DeleteOutlined, EditOutlined, PlusOutlined, SearchOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import { CollaborationApiError, collaborationApi } from './collaboration'
@@ -17,6 +17,7 @@ interface SkillLibraryDrawerProps {
 export function SkillLibraryDrawer({ open, disabled = false, selectedSkillId, onClose, onChoose, onRefreshSkills }: SkillLibraryDrawerProps) {
   const { message, modal } = App.useApp()
   const [form] = Form.useForm<CustomSkillInput>()
+  const editorTitleId = useId()
   const [library, setLibrary] = useState<LibrarySkill[]>([])
   const [query, setQuery] = useState('')
   const [activeTab, setActiveTab] = useState('mine')
@@ -227,11 +228,17 @@ export function SkillLibraryDrawer({ open, disabled = false, selectedSkillId, on
     </Drawer>
 
     <Modal
-      title={editing ? '编辑个人技能' : '新建个人技能'}
+      title={<span id={editorTitleId}>{editing ? '编辑个人技能' : '新建个人技能'}</span>}
+      className="hy-skill-editor-modal"
+      aria-labelledby={editorTitleId}
       open={formOpen}
-      onCancel={closeEditor}
+      onCancel={() => { if (!busy) closeEditor() }}
       onOk={() => form.submit()}
       confirmLoading={busy}
+      cancelButtonProps={{ disabled: busy }}
+      closable={!busy}
+      keyboard={!busy}
+      maskClosable={!busy}
       okText="保存"
       cancelText="取消"
       destroyOnHidden

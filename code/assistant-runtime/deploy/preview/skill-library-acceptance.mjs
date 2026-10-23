@@ -308,6 +308,47 @@ try {
   await profileDrawer.locator('.ant-drawer-close').click()
   pass()
 
+  mark('mobile_skill_editor_keeps_save_action_visible')
+  await page.getByRole('button', { name: '业务技能' }).click()
+  const skillsDrawer = page.locator('.ant-drawer-content-wrapper:visible').last()
+  await waitForAnimations(skillsDrawer)
+  card = skillsDrawer.locator('.hy-skill-card').filter({ hasText: skillName })
+  await card.getByRole('button', { name: /编辑/ }).click()
+  const skillModal = page.locator('.hy-skill-editor-modal:visible').last()
+  await waitForAnimations(skillModal)
+  assert(await page.getByRole('dialog', { name: '编辑个人技能' }).isVisible(),
+    'Assistive technology must be able to identify the skill editor dialog by its title')
+  const skillSave = skillModal.getByRole('button', { name: /保\s*存/ })
+  const [skillViewport, skillModalBounds, skillContentMetrics, skillSaveBounds, skillBodyMetrics] = await Promise.all([
+    page.evaluate(() => ({ height: visualViewport?.height || innerHeight })),
+    skillModal.boundingBox(),
+    skillModal.locator('.ant-modal-content').evaluate((element) => ({
+      bounds: element.getBoundingClientRect().toJSON(),
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+      maxHeight: getComputedStyle(element).maxHeight,
+    })),
+    skillSave.boundingBox(),
+    skillModal.locator('.ant-modal-body').evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+      overflowY: getComputedStyle(element).overflowY,
+    })),
+  ])
+  assert(skillContentMetrics.bounds.y >= 0
+    && skillContentMetrics.bounds.bottom <= skillViewport.height,
+  `Skill editor content exceeds the mobile visual viewport: ${JSON.stringify({ skillViewport, skillModalBounds, skillContentMetrics })}`)
+  assert(skillSaveBounds && skillSaveBounds.y >= 0
+    && skillSaveBounds.y + skillSaveBounds.height <= skillViewport.height,
+  `Skill save action is obscured in the mobile visual viewport: ${JSON.stringify({ skillViewport, skillSaveBounds })}`)
+  assert.equal(skillBodyMetrics.overflowY, 'auto')
+  assert(skillBodyMetrics.scrollHeight > skillBodyMetrics.clientHeight,
+    `Skill editor body must scroll while its save action stays fixed: ${JSON.stringify(skillBodyMetrics)}`)
+  await skillModal.getByRole('button', { name: /^取\s*消$/ }).click()
+  await skillModal.waitFor({ state: 'hidden' })
+  await skillsDrawer.locator('.ant-drawer-close').click()
+  pass()
+
   mark('delete_current_session_clears_context_only_after_success')
   await page.setViewportSize({ width: 390, height: 844 })
   await page.getByRole('button', { name: '业务技能' }).click()
