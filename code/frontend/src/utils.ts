@@ -75,3 +75,36 @@ export const TYPE_LABEL: Record<string, string> = {
 export function typeLabel(code: string): string {
   return TYPE_LABEL[code] || code
 }
+
+/**
+ * 原件取用路径。pdf_file 有两种来源：
+ *   1) 经办人本次上传的真实件 —— "uploads/<批次>/<文件名>" → /uploads/...
+ *   2) 仓库自带样本件           —— "facility_letter.pdf"     → /pdf/...
+ * 鉴权头由调用方附加（见 PdfSourceViewer）。
+ */
+export function documentUrl(pdfFile: string): string {
+  if (pdfFile.startsWith('uploads/')) {
+    return '/' + pdfFile.split('/').map(encodeURIComponent).join('/')
+  }
+  return `/pdf/${encodeURIComponent(pdfFile)}`
+}
+
+/**
+ * 审核决定提示。业务审核的未决项与强规则不通过项都必须阻断放行提示，
+ * 只按强规则结果判断会让含未决项的初审显示为“可审核通过”。
+ */
+export function reviewDecisionHint(
+  ruleCounts: Record<string, number>,
+  reviewPending: number,
+): { type: 'success' | 'error'; message: string } {
+  if (ruleCounts.fail) {
+    return { type: 'error', message: `存在 ${ruleCounts.fail} 项不通过，建议退回要求补件` }
+  }
+  if (reviewPending > 0) {
+    return {
+      type: 'error',
+      message: `仍有 ${reviewPending} 项未决（解析质量、必填字段与专项检查），未核验前不能归档`,
+    }
+  }
+  return { type: 'success', message: '未发现不通过项，可审核通过' }
+}

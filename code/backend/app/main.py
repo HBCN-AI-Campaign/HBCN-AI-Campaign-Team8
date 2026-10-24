@@ -15,7 +15,7 @@ from .config import settings
 from .config import SAMPLE_PDF_DIR as _SAMPLE_PDF_DIR
 from .config import UPLOAD_DIR as _UPLOAD_DIR
 from .database import Base, engine
-from .routers import assistant, auth, customers, tasks, parsing, files
+from .routers import assistant, auth, customers, materials, tasks, parsing, files
 
 
 @asynccontextmanager
@@ -41,6 +41,7 @@ app.include_router(customers.router)
 app.include_router(tasks.router)
 app.include_router(parsing.router)
 app.include_router(files.router)
+app.include_router(materials.router)
 app.include_router(assistant.router)
 
 # 静态托管样本 PDF —— 前端 pdfjs 据此拉取原件做预览/高亮

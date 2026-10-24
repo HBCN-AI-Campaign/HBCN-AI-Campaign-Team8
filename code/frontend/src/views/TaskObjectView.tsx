@@ -40,7 +40,7 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/api'
-import { checkText, checkType, DIMENSION_NAME, fmt, statusText, statusType, typeLabel } from '@/utils'
+import { checkText, checkType, DIMENSION_NAME, fmt, reviewDecisionHint, statusText, statusType, typeLabel } from '@/utils'
 import PdfSourceViewer from '@/components/PdfSourceViewer'
 import type { AIPending, CheckResult, DocumentOut } from '@/types'
 import { useChecks, toRows, type RowData } from './task-object/hooks/useChecks'
@@ -64,6 +64,8 @@ export default function TaskObjectView() {
   const role = useAuthStore((s) => s.role)
   const displayName = useAuthStore((s) => s.displayName)
   const canReview = role === 'reviewer'
+  // 业务审核未决项数：决定提示不能只看强规则，否则含未决项的初审会显示成“可审核通过”
+  const [reviewPending, setReviewPending] = useState(0)
 
   const checks = useChecks(code, displayName, message)
   const {
@@ -117,6 +119,20 @@ export default function TaskObjectView() {
     genMail()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [results, detail, comment, includeAttachments])
+
+  useEffect(() => {
+    let active = true
+    void api.businessReview(code).then((run) => {
+      if (!active) return
+      setReviewPending(run.findings.filter(
+        (item) => item.requires_resolution && !item.resolution).length)
+    }).catch(() => {
+      if (active) setReviewPending(0)
+    })
+    return () => { active = false }
+  }, [code, results])
+
+  const decisionHint = reviewDecisionHint(counts, reviewPending)
 
   const aiStatusTag = useMemo(() => {
     if (ai.aiWaiting) return { color: 'warning', label: '已挂起 · 等待处置' }
@@ -593,14 +609,10 @@ export default function TaskObjectView() {
           {canReview ? (
             <>
               <Alert
-                type={counts.fail ? 'error' : 'success'}
+                type={decisionHint.type}
                 showIcon
                 style={{ marginBottom: 14 }}
-                message={
-                  counts.fail
-                    ? `存在 ${counts.fail} 项不通过，建议退回要求补件`
-                    : '未发现不通过项，可审核通过'
-                }
+                message={decisionHint.message}
               />
               <Input.TextArea
                 value={comment}

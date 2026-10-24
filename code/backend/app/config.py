@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     # --- 应用 ---
     APP_NAME: str = "境外贷款单据智能审核平台 · API"
     DEBUG: bool = True
+    # Machine-local folder holding the real material sets (see business_review/material_sets.py).
+    # Empty disables "load by case number" outright; it must never fall back to the
+    # repository's synthetic samples. Materials are referenced in place, never copied.
+    BUSINESS_MATERIALS_ROOT: str = ""
 
     # --- AI assistant runtime ---
     # Provider credentials live only in the isolated OpenCode runtime.

@@ -287,4 +287,55 @@ export const api = {
     )
     return data
   },
+
+  // 本机真实材料套（ BUSINESS_MATERIALS_ROOT 下的原件，不是仓库示例 PDF ）
+  async materialSets(): Promise<MaterialSetsResponse> {
+    const { data } = await http.get<MaterialSetsResponse>('/api/materials/sets', { timeout: 15000 })
+    return data
+  },
+
+  async materialDocuments(code: string): Promise<MaterialDocumentsResponse> {
+    const { data } = await http.get<MaterialDocumentsResponse>(
+      `/api/materials/sets/${encodeURIComponent(code)}/documents`,
+      { timeout: 15000 },
+    )
+    return data
+  },
+
+  async materialDocumentBlob(code: string, index: number): Promise<Blob> {
+    const { data } = await http.get<Blob>(
+      `/api/materials/sets/${encodeURIComponent(code)}/documents/${index}`,
+      { responseType: 'blob', timeout: 120000 },
+    )
+    return data
+  },
+}
+
+export interface MaterialSetInfo {
+  case_code: string
+  title: string
+  focus: string
+  expected_documents: number
+  available: boolean
+  reason: string
+  document_count?: number
+  document_types?: string[]
+}
+
+export interface MaterialSetsResponse {
+  configured: boolean
+  reason: string
+  sets: MaterialSetInfo[]
+}
+
+export interface MaterialDocumentInfo {
+  index: number
+  filename: string
+  type_code: string
+}
+
+export interface MaterialDocumentsResponse {
+  case_code: string
+  focus: string
+  documents: MaterialDocumentInfo[]
 }

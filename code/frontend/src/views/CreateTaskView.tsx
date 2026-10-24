@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Alert,
@@ -31,7 +31,7 @@ import {
   WarningFilled,
   EyeOutlined,
 } from '@ant-design/icons'
-import { api } from '@/api'
+import { api, type MaterialSetsResponse } from '@/api'
 import type { ParseResult, ParsedDocument, ParsedField, FieldSource, Customer, FacilitySelection, FacilityContext, DocumentIn } from '@/types'
 import { fmt } from '@/utils'
 import PdfSourceViewer from '@/components/PdfSourceViewer'
@@ -41,17 +41,27 @@ import { FacilityContextPanel } from '@/parsing/FacilityContextPanel'
 import { DocumentTypeChoices, typeSelectionsValid, typeSelectionPayload, type TypeSelections } from '@/parsing/DocumentTypeChoices'
 import { ClassificationAudit } from '@/parsing/DocumentClassificationHistory'
 
-// 快捷键：从 sample_pdfs 载入 8 个真实 PDF（走和真人上传完全一致的 multipart 流程）
-// 每项 [前端呈现的模板名(决定解析类型), 服务器样本文件名(真实二进制来源)]
-const TEMPLATE_FILES: [string, string][] = [
-  ['贷款合同.pdf', 'facility_letter.pdf'],
-  ['授信请求.pdf', 'drawdown_instruction_zn.pdf'],
-  ['支付指令-01.pdf', 'payment_instruction.pdf'],
-  ['支付指令-02.pdf', 'payment_instruction.pdf'],
-  ['商务合同.pdf', 'commercial_contract.pdf'],
-  ['形式发票.pdf', 'invoice.pdf'],
-  ['报关单.pdf', 'customs_declaration.pdf'],
-]
+// 后端校验错误多以 { detail } 形式返回，统一取出来展示
+function detailMessage(error: unknown): string {
+  const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail
+  if (error instanceof Error && error.message) return error.message
+  return '请求失败，请稍后重试。'
+}
+
+// blob 请求失败时后端把 JSON 错误体当成 Blob 返回，detail 不会自动展开，需读出来再解析
+async function materialErrorMessage(error: unknown): Promise<string> {
+  const data = (error as { response?: { data?: unknown } })?.response?.data
+  if (data instanceof Blob) {
+    try {
+      const parsed = JSON.parse(await data.text()) as { detail?: unknown }
+      if (typeof parsed.detail === 'string' && parsed.detail.trim()) return parsed.detail
+    } catch {
+      // 非 JSON 错误体：回退到通用提示
+    }
+  }
+  return detailMessage(error)
+}
 
 interface TaskForm {
   customer_no: string | null
@@ -87,8 +97,15 @@ export default function CreateTaskView() {
   const [parseProgress, setParseProgress] = useState('')
   const [parseRunId, setParseRunId] = useState('')
   const [creating, setCreating] = useState(false)
-  const [loadingTpl, setLoadingTpl] = useState(false)
   const [parsed, setParsed] = useState<ParseResult | null>(null)
+
+  // 真实材料套（本机 BUSINESS_MATERIALS_ROOT 下的原件，不是仓库示例 PDF）
+  const [materialSets, setMaterialSets] = useState<MaterialSetsResponse | null>(null)
+  const [materialSetsError, setMaterialSetsError] = useState('')
+  const [loadingSets, setLoadingSets] = useState(false)
+  const [selectedCaseCode, setSelectedCaseCode] = useState<string | null>(null)
+  const [loadingMaterial, setLoadingMaterial] = useState(false)
+  const [materialProgress, setMaterialProgress] = useState('')
   const [machineParsed, setMachineParsed] = useState<ParseResult | null>(null)
   const [facilityContext, setFacilityContext] = useState<FacilityContext | null>(null)
   const [facilitySelection, setFacilitySelection] = useState<FacilitySelection | null>(null)
@@ -132,33 +149,58 @@ export default function CreateTaskView() {
     setTypeSelections(previous => new Map([...previous].filter(([file]) => next.includes(file))))
   }
 
-  // 一键载入 8 个真实样本 PDF
-  const loadTemplate = async () => {
-    setLoadingTpl(true)
+  // 挂载时读取本机真实材料套；读取失败只提示，不提供任何示例数据兜底
+  useEffect(() => {
+    let cancelled = false
+    setLoadingSets(true)
+    setMaterialSetsError('')
+    void (async () => {
+      try {
+        const resp = await api.materialSets()
+        if (!cancelled) setMaterialSets(resp)
+      } catch (error) {
+        if (!cancelled) setMaterialSetsError(detailMessage(error))
+      } finally {
+        if (!cancelled) setLoadingSets(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
+
+  // 载入本机真实材料套：先取清单，再逐份取原件字节
+  // 只在全部成功后才替换文件状态，失败时保留经办人已选的文件
+  const loadMaterialSet = async () => {
+    const code = selectedCaseCode
+    if (!code) return
+    setLoadingMaterial(true)
+    setMaterialProgress('正在读取材料清单…')
     try {
-      const made = await Promise.all(
-        TEMPLATE_FILES.map(async ([tplName, sample]) => {
-          const resp = await fetch(`/pdf/${encodeURIComponent(sample)}`)
-          if (!resp.ok) throw new Error(`拉取样本 ${sample} 失败 (${resp.status})`)
-          const blob = await resp.blob()
-          return new File([blob], tplName, { type: 'application/pdf' })
-        }),
-      )
+      const listed = await api.materialDocuments(code)
+      if (!listed.documents.length) throw new Error('该套材料没有可用原件')
+      const made: File[] = []
+      for (let i = 0; i < listed.documents.length; i += 1) {
+        const item = listed.documents[i]
+        setMaterialProgress(`正在载入 ${i + 1}/${listed.documents.length}：${item.filename}`)
+        const blob = await api.materialDocumentBlob(code, item.index)
+        // 解析按文件名推断单据类型，必须沿用后端原文件名，不能改名
+        made.push(new File([blob], item.filename, { type: 'application/pdf' }))
+      }
       setFiles(made)
       setTypeSelections(new Map())
       setFileList(
         made.map((f, i) => ({
-          uid: String(Date.now() + i),
+          uid: `${Date.now()}-${i}`,
           name: f.name,
           status: 'done' as const,
           originFileObj: f as unknown as UploadFile['originFileObj'],
         })),
       )
-      message.success(`已载入 ${made.length} 个真实样本 PDF，可直接点「开始智能识别」`)
-    } catch (e) {
-      message.error('载入模板失败：' + ((e as Error)?.message || e))
+      message.success(`已载入第${Number(code)}套真实材料共 ${made.length} 份原件，请核对文件名与材料文件夹后再提交`)
+    } catch (error) {
+      message.error(await materialErrorMessage(error))
     } finally {
-      setLoadingTpl(false)
+      setLoadingMaterial(false)
+      setMaterialProgress('')
     }
   }
 
@@ -491,19 +533,66 @@ export default function CreateTaskView() {
       {step === 0 && (
         <Card
           title="📎 上传材料"
-          extra={
-            <Button
-              color="green"
-              variant="outlined"
-              icon={<ThunderboltOutlined />}
-              loading={loadingTpl}
-              disabled={parsing || creating}
-              onClick={loadTemplate}
-            >
-              载入示例模板（非第8套验收材料）
-            </Button>
-          }
+          extra={materialSets?.configured ? (
+            <Space>
+              <Select
+                aria-label="本机真实材料套"
+                style={{ width: 320 }}
+                loading={loadingSets}
+                placeholder="选择本机真实材料套"
+                value={selectedCaseCode ?? undefined}
+                onChange={setSelectedCaseCode}
+                disabled={loadingMaterial || parsing || creating}
+                options={materialSets.sets.map((item) => ({
+                  value: item.case_code,
+                  disabled: !item.available,
+                  title: item.reason || undefined,
+                  label: item.available
+                    ? `${item.title} · ${item.focus} · ${item.expected_documents} 份`
+                    : `${item.title} · ${item.focus} · 不可用：${item.reason}`,
+                }))}
+              />
+              <Button
+                color="green"
+                variant="outlined"
+                loading={loadingMaterial}
+                disabled={!selectedCaseCode || loadingMaterial || parsing || creating}
+                onClick={() => void loadMaterialSet()}
+              >
+                载入这套真实材料
+              </Button>
+            </Space>
+          ) : undefined}
         >
+          {materialSets && !materialSets.configured && (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginBottom: 14 }}
+              message="本机未配置真实材料目录"
+              description={`${materialSets.reason || '未找到材料根目录。'}请在运行本服务的机器上配置真实材料目录后刷新本页；这里不会用仓库示例 PDF 代替真实材料，请手工上传。`}
+            />
+          )}
+
+          {materialSetsError && (
+            <Alert
+              type="error"
+              showIcon
+              style={{ marginBottom: 14 }}
+              message="材料清单读取失败"
+              description={`${materialSetsError}已选文件不受影响，仍可手工上传。`}
+            />
+          )}
+
+          {loadingMaterial && (
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 14 }}
+              message={materialProgress || '正在载入真实材料'}
+            />
+          )}
+
           <Upload.Dragger
             multiple
             disabled={parsing || creating}
