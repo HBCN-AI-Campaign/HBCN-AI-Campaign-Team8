@@ -19,6 +19,8 @@ import type {
   FacilityContext,
   FacilitySelection,
   DocumentIn,
+  BusinessReviewAdviceOut,
+  BusinessReviewRun,
 } from '@/types'
 
 const http = axios.create({ baseURL: '/', timeout: 20000 })
@@ -207,6 +209,46 @@ export const api = {
   async completeTask(code: string, comment = ''): Promise<TaskOut> {
     const { data } = await http.post<TaskOut>(
       `/api/tasks/${encodeURIComponent(code)}/complete`, { comment },
+    )
+    return data
+  },
+
+  async businessReview(code: string): Promise<BusinessReviewRun> {
+    const { data } = await http.get<BusinessReviewRun>(
+      `/api/tasks/${encodeURIComponent(code)}/business-review`,
+    )
+    return data
+  },
+
+  async runBusinessReview(code: string): Promise<BusinessReviewRun> {
+    const { data } = await http.post<BusinessReviewRun>(
+      `/api/tasks/${encodeURIComponent(code)}/business-review/run`, {}, { timeout: 60000 },
+    )
+    return data
+  },
+
+  async resolveBusinessReview(
+    code: string,
+    findingId: string,
+    action: 'acknowledge' | 'approve_exception',
+    reason: string,
+  ): Promise<BusinessReviewRun> {
+    const { data } = await http.post<BusinessReviewRun>(
+      `/api/tasks/${encodeURIComponent(code)}/business-review/resolve`,
+      { finding_id: findingId, action, reason },
+    )
+    return data
+  },
+
+  async businessReviewAdvice(
+    code: string,
+    findingId: string,
+    question: string,
+  ): Promise<BusinessReviewAdviceOut> {
+    const { data } = await http.post<BusinessReviewAdviceOut>(
+      `/api/tasks/${encodeURIComponent(code)}/business-review/advice`,
+      { finding_id: findingId, question },
+      { timeout: 90000 },
     )
     return data
   },

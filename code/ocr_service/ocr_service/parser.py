@@ -8,9 +8,41 @@
 
 from __future__ import annotations
 
+import logging
+import shutil
 from pathlib import Path
 
 from . import config
+from .vision_ocr import is_configured, recognize_page
+
+log = logging.getLogger(__name__)
+
+
+def _recognize_image_detailed(image_path: Path, page: int, min_score: float) -> tuple[list[dict], str]:
+    from .ocr_engine import recognize_image_detailed
+
+    local_items = recognize_image_detailed(image_path, min_score=min_score)
+    scores = [float(item.get("score", 0.0)) for item in local_items]
+    should_fallback = is_configured() and (
+        len(local_items) < config.OCR_VISION_TRIGGER_MIN_LINES
+        or (scores and sum(scores) / len(scores) < config.OCR_VISION_TRIGGER_MIN_SCORE)
+    )
+    if should_fallback:
+        text = recognize_page(image_path)
+        if text:
+            candidate_items = [
+                {"text": line, "score": 0.0, "box": None, "poly": None,
+                 "page": page, "method": "vision_ocr"}
+                for line in text.splitlines() if line.strip()
+            ]
+            if candidate_items:
+                return candidate_items, "vision_ocr"
+    return [dict(item, page=page, method="paddleocr") for item in local_items], "paddleocr"
+
+
+def _remove_rendered_pages(images: list[Path]) -> None:
+    if images:
+        shutil.rmtree(images[0].parent, ignore_errors=True)
 
 
 # --------------------------------------------------------------------------
@@ -87,8 +119,8 @@ def parse_excel(path: Path) -> str:
 # --------------------------------------------------------------------------
 # PDF
 # --------------------------------------------------------------------------
-def parse_pdf(path: Path, ocr_min_text: int = 20) -> tuple[str, bool]:
-    """返回 (文本, 是否走了OCR)。文本层过少时视为扫描件走 OCR。"""
+def _parse_pdf_with_method(path: Path, ocr_min_text: int = 20) -> tuple[str, bool, str]:
+    """Return text, OCR usage, and the actual extraction method."""
     import pdfplumber
 
     text_parts: list[str] = []
@@ -101,25 +133,36 @@ def parse_pdf(path: Path, ocr_min_text: int = 20) -> tuple[str, bool]:
     text = "\n".join(text_parts).strip()
     # 文本层足够 → 直接返回
     if len(text) >= ocr_min_text:
-        return text, False
+        return text, False, "native_pdf"
 
     # 文本层过少（扫描件）→ 转图 OCR
-    from .ocr_engine import recognize_image
     from .pdf_to_image import pdf_to_images
 
+    images = pdf_to_images(path)
     ocr_lines: list[str] = []
-    for img_path in pdf_to_images(path):
-        ocr_lines.append(recognize_image(img_path))
-    return "\n\n".join(ocr_lines), True
+    methods: set[str] = set()
+    try:
+        for page_number, img_path in enumerate(images, start=1):
+            items, method = _recognize_image_detailed(img_path, page_number, 0.3)
+            methods.add(method)
+            ocr_lines.append("\n".join(item["text"] for item in items))
+    finally:
+        _remove_rendered_pages(images)
+    method = "vision_ocr" if "vision_ocr" in methods else "paddleocr"
+    return "\n\n".join(ocr_lines), True, method
+
+
+def parse_pdf(path: Path, ocr_min_text: int = 20) -> tuple[str, bool]:
+    """Return (text, whether OCR was used), preserving the original API."""
+    text, via_ocr, _ = _parse_pdf_with_method(path, ocr_min_text)
+    return text, via_ocr
 
 
 def parse_image_detailed(path: Path, min_score: float = 0.3) -> dict:
     """识别图片，返回带坐标的明细结果。"""
-    from .ocr_engine import recognize_image_detailed
-
-    items = recognize_image_detailed(path, min_score=min_score)
+    items, method = _recognize_image_detailed(path, 1, min_score)
     text = "\n".join(it["text"] for it in items)
-    return {"text": text, "blocks": items, "via_ocr": True}
+    return {"text": text, "blocks": items, "via_ocr": True, "method": method}
 
 
 def parse_pdf_detailed(
@@ -158,27 +201,29 @@ def parse_pdf_detailed(
                             [w["x0"], w["bottom"]],
                         ],
                         "page": pi,
+                        "method": "native_pdf",
                     }
                 )
-        return {"text": total_text, "blocks": blocks, "via_ocr": False}
+        return {"text": total_text, "blocks": blocks, "via_ocr": False, "method": "native_pdf"}
 
     # 扫描件：转图 OCR，按页给坐标
-    from .ocr_engine import recognize_image_detailed
     from .pdf_to_image import pdf_to_images
 
     all_blocks: list[dict] = []
     all_text: list[str] = []
     imgs = pdf_to_images(path)
-    for pi, img_path in enumerate(imgs, start=1):
-        items = recognize_image_detailed(img_path, min_score=min_score)
-        for it in items:
-            it["page"] = pi
-            all_blocks.append(it)
-        all_text.append("\n".join(it["text"] for it in items))
+    try:
+        for pi, img_path in enumerate(imgs, start=1):
+            items, _ = _recognize_image_detailed(img_path, pi, min_score)
+            all_blocks.extend(items)
+            all_text.append("\n".join(it["text"] for it in items))
+    finally:
+        _remove_rendered_pages(imgs)
     return {
         "text": "\n\n".join(all_text),
         "blocks": all_blocks,
         "via_ocr": True,
+        "method": "vision_ocr" if any(item.get("method") == "vision_ocr" for item in all_blocks) else "paddleocr",
     }
 
 
@@ -197,6 +242,7 @@ def parse_file(path: Path, detailed: bool = False) -> dict:
         "label": config.DOC_TYPE_LABELS.get(kind, "未知"),
         "text": "",
         "via_ocr": False,
+        "method": "native",
         "error": None,
     }
 
@@ -207,11 +253,12 @@ def parse_file(path: Path, detailed: bool = False) -> dict:
                 result["text"] = res["text"]
                 result["via_ocr"] = True
                 result["blocks"] = res["blocks"]
+                result["method"] = res["method"]
             else:
-                from .ocr_engine import recognize_image
-
-                result["text"] = recognize_image(path)
+                res = parse_image_detailed(path)
+                result["text"] = res["text"]
                 result["via_ocr"] = True
+                result["method"] = res["method"]
         elif kind == "word":
             result["text"] = parse_word(path)
         elif kind == "excel":
@@ -222,13 +269,17 @@ def parse_file(path: Path, detailed: bool = False) -> dict:
                 result["text"] = res["text"]
                 result["via_ocr"] = res["via_ocr"]
                 result["blocks"] = res["blocks"]
+                result["method"] = res["method"]
             else:
-                text, via_ocr = parse_pdf(path)
+                text, via_ocr, method = _parse_pdf_with_method(path)
                 result["text"] = text
                 result["via_ocr"] = via_ocr
+                result["method"] = method
         else:
             result["error"] = f"不支持的文件类型：{path.suffix}"
     except Exception as exc:  # noqa: BLE001
+        result["error_type"] = type(exc).__name__
+        log.error("Document parsing failed (%s)", result["error_type"])
         result["error"] = f"{type(exc).__name__}: {exc}"
 
     return result

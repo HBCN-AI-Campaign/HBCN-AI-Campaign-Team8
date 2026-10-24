@@ -73,6 +73,10 @@ def _skip(rid, name, dim, why):
     return RuleResult(rid, name, dim, Status.SKIP, why=why)
 
 
+def _field_row(docs: DocBundle, type_code: str, field_key: str, label: str, value, flag: str = "", idx: int = 0) -> list:
+    return [label, value, flag, docs.locate(type_code, field_key, idx)]
+
+
 def _handoff(rid, name, dim, why, suggestion=""):
     """移交专项审核：规则引擎做不到，交给 review_agent。"""
     return RuleResult(rid, name, dim, Status.SKIP, why=f"{HANDOFF} {why}", suggestion=suggestion)
@@ -476,22 +480,72 @@ class R_SupportingContractNo(Rule):
         if not ct:
             return _skip(self.id, self.name, self.dimension, "缺少商业合同，无法勾稽。")
         base = _norm(ct.get("contract_no"))
-        rows = [["商业合同 合同号", base, ""]]
-        bad = False
-        for tcode, label in [("COMMERCIAL_ORDER", "商业订单"), ("WAYBILL", "运单"),
-                             ("CUSTOMS_DECLARATION", "报关单"), ("PROFORMA_INVOICE", "形式发票")]:
-            for doc in docs.all(tcode):
+        if not base:
+            return _skip(self.id, self.name, self.dimension, "商业合同合同号缺失，无法勾稽。")
+
+        order = docs.first("COMMERCIAL_ORDER")
+        invoice_docs = docs.all("PROFORMA_INVOICE")
+        candidates = {base}
+        order_no = _norm((order or {}).get("order_no"))
+        if order_no:
+            candidates.add(order_no)
+        candidates.update(_norm(item.get("invoice_no")) for item in invoice_docs if _norm(item.get("invoice_no")))
+
+        rows = [_field_row(docs, "COMMERCIAL_CONTRACT", "contract_no", "商业合同 合同号", base)]
+        mismatches = []
+        missing = []
+
+        for tcode, label in [
+            ("COMMERCIAL_ORDER", "商业订单"),
+            ("WAYBILL", "运单"),
+            ("PROFORMA_INVOICE", "形式发票"),
+        ]:
+            for idx, doc in enumerate(docs.all(tcode)):
                 cn = _norm(doc.get("contract_no"))
-                if cn:
-                    ok = cn == base
-                    bad = bad or not ok
-                    rows.append([f"{label} 合同号", cn, "" if ok else "bad"])
-        if bad:
+                if cn and cn != base:
+                    mismatches.append((f"{label} 合同号", cn))
+                elif not cn:
+                    missing.append(f"{label}合同号")
+                rows.append(_field_row(docs, tcode, "contract_no", f"{label} 合同号", cn or "—",
+                                       "" if cn == base else "bad", idx))
+
+        if order:
+            if not order_no:
+                missing.append("商业订单订单号")
+            for tcode, label in [("WAYBILL", "运单"), ("PROFORMA_INVOICE", "形式发票")]:
+                for idx, doc in enumerate(docs.all(tcode)):
+                    ref = _norm(doc.get("order_no"))
+                    if ref and order_no and ref != order_no:
+                        mismatches.append((f"{label} 订单号", ref))
+                    elif ref and not order_no:
+                        missing.append("商业订单订单号")
+                    elif not ref:
+                        missing.append(f"{label}订单号")
+                    rows.append(_field_row(docs, tcode, "order_no", f"{label} 订单号", ref or "—",
+                                           "" if ref == order_no and order_no else "bad", idx))
+        elif any(_norm(doc.get("order_no")) for tcode in ("WAYBILL", "PROFORMA_INVOICE") for doc in docs.all(tcode)):
+            missing.append("商业订单（用于核对单据订单号）")
+
+        for idx, doc in enumerate(docs.all("CUSTOMS_DECLARATION")):
+            protocol_no = _norm(doc.get("contract_no"))
+            if protocol_no and protocol_no not in candidates:
+                mismatches.append(("报关单 协议号", protocol_no))
+            elif not protocol_no:
+                missing.append("报关单协议号")
+            rows.append(_field_row(docs, "CUSTOMS_DECLARATION", "contract_no", "报关单 协议号",
+                                   protocol_no or "—", "" if protocol_no in candidates and protocol_no else "bad", idx))
+
+        if mismatches:
             return RuleResult(self.id, self.name, self.dimension, Status.FAIL,
-                              why="部分支持性文件引用的合同号与商业合同不一致，贸易背景勾稽存在断点。",
-                              suggestion="核实各单据合同号，须指向同一笔贸易合同。", detail=rows)
+                              why="支持性文件合同/订单编号与对应主单不一致，贸易背景勾稽存在断点。",
+                              suggestion="核实合同号、订单号及报关协议号是否指向同一笔贸易；报关协议号可按规则与合同号、订单号或形式发票号关联。",
+                              detail=rows)
+        if missing:
+            return RuleResult(self.id, self.name, self.dimension, Status.WARN,
+                              why=f"编号字段或对应订单缺失，无法完成全部勾稽：{'、'.join(dict.fromkeys(missing))}。",
+                              suggestion="审核人查看原文并确认缺失字段是否适用；必要时补件。", detail=rows)
         return RuleResult(self.id, self.name, self.dimension, Status.PASS,
-                          why=f"各支持性文件合同号均与商业合同“{base}”勾稽一致。", detail=rows)
+                          why=f"合同号、可用订单号及报关协议号均按允许关联关系勾稽一致。", detail=rows)
 
 
 @register
@@ -511,11 +565,17 @@ class R_SupportingBillOfLading(Rule):
             return RuleResult(self.id, self.name, self.dimension, Status.FAIL,
                               why=f"运单提单号“{wb_bl}”与报关单“{cd_bl}”不一致。",
                               suggestion="核实提单号，并做真伪验证（海关网站/船公司/FIATA）。",
-                              detail=[["运单 提单号", wb_bl, "bad"], ["报关单 提单号", cd_bl, "bad"]])
+                              detail=[
+                                  _field_row(docs, "WAYBILL", "bill_of_lading_no", "运单 提单号", wb_bl, "bad"),
+                                  _field_row(docs, "CUSTOMS_DECLARATION", "bill_of_lading_no", "报关单 提单号", cd_bl, "bad"),
+                              ])
         # 号码一致（硬核对通过）；真伪验证依赖海关/船司/FIATA → 移交专项审核
         return RuleResult(self.id, self.name, self.dimension, Status.PASS,
                           why=f"运单与报关单提单号一致（{wb_bl}）；提单真伪由专项审核联网核验。",
-                          detail=[["运单 提单号", wb_bl, ""], ["报关单 提单号", cd_bl, ""]])
+                          detail=[
+                              _field_row(docs, "WAYBILL", "bill_of_lading_no", "运单 提单号", wb_bl),
+                              _field_row(docs, "CUSTOMS_DECLARATION", "bill_of_lading_no", "报关单 提单号", cd_bl),
+                          ])
 
 
 @register
@@ -554,21 +614,65 @@ class R_SupportingAmountChain(Rule):
     dimension = "C"
 
     def evaluate(self, docs: DocBundle) -> RuleResult:
-        ct = _dec((docs.first("COMMERCIAL_CONTRACT") or {}).get("amount"))
-        po = _dec((docs.first("COMMERCIAL_ORDER") or {}).get("amount"))
-        iv = _dec((docs.first("PROFORMA_INVOICE") or {}).get("amount"))
+        ct_doc = docs.first("COMMERCIAL_CONTRACT")
+        po_doc = docs.first("COMMERCIAL_ORDER")
+        invoice_docs = docs.all("PROFORMA_INVOICE")
+        customs_docs = docs.all("CUSTOMS_DECLARATION")
+        waybill_docs = docs.all("WAYBILL")
+        ct = _dec((ct_doc or {}).get("amount"))
+        po = _dec((po_doc or {}).get("amount"))
+        iv = sum((_dec(item.get("amount")) for item in invoice_docs), Decimal(0))
         payments = docs.all("PAYMENT_INSTRUCTION")
         pay = sum((_dec(p.get("amount")) for p in payments), Decimal(0)) if payments else Decimal(0)
-        if not (ct or po or iv):
+        if not (ct or po or iv) and payments:
             return _skip(self.id, self.name, self.dimension, "缺少合同/订单/发票金额，无法校验金额链。")
+        rows = []
+        if ct_doc is not None:
+            rows.append(_field_row(docs, "COMMERCIAL_CONTRACT", "amount", "商业合同金额",
+                                   _norm(ct_doc.get("amount")) or "—"))
+        if po_doc is not None:
+            rows.append(_field_row(docs, "COMMERCIAL_ORDER", "amount", "商业订单金额",
+                                   _norm(po_doc.get("amount")) or "—"))
+        for idx, item in enumerate(invoice_docs):
+            rows.append(_field_row(docs, "PROFORMA_INVOICE", "amount", f"形式发票金额 {idx + 1}",
+                                   _norm(item.get("amount")) or "—", idx=idx))
+        for idx, item in enumerate(customs_docs):
+            rows.append(_field_row(docs, "CUSTOMS_DECLARATION", "amount", f"报关金额 {idx + 1}",
+                                   _norm(item.get("amount")) or "—", idx=idx))
+        for idx, item in enumerate(waybill_docs):
+            rows.append(_field_row(docs, "WAYBILL", "amount", f"运单金额 {idx + 1}",
+                                   _norm(item.get("amount")) or "—", idx=idx))
+        for idx, item in enumerate(payments):
+            rows.append(_field_row(docs, "PAYMENT_INSTRUCTION", "amount", f"支付金额 {idx + 1}",
+                                   _norm(item.get("amount")) or "—", idx=idx))
+        missing = []
+        for doc, label in [(ct_doc, "商业合同金额"), (po_doc, "商业订单金额")]:
+            if doc is not None and not doc.get("amount"):
+                missing.append(label)
+        if invoice_docs and any(not item.get("amount") for item in invoice_docs):
+            missing.append("形式发票金额")
+        if customs_docs and any(not item.get("amount") for item in customs_docs):
+            missing.append("报关金额")
+        if waybill_docs and any(not item.get("amount") for item in waybill_docs):
+            missing.append("运单金额")
+        if payments and any(not item.get("amount") for item in payments):
+            missing.append("支付金额")
+        if not payments:
+            missing.append("支付指令（必需文件）")
         chain = [("合同金额", ct), ("订单金额", po), ("发票金额", iv), ("支付合计", pay)]
         present = [(lab, v) for lab, v in chain if v > 0]
         bad = any(present[i][1] < present[i + 1][1] for i in range(len(present) - 1))
-        rows = [[lab, f"{v:,.2f}", "bad" if bad else ""] for lab, v in present]
+        rows.extend([[lab, f"{v:,.2f}", "bad" if bad else "", None] for lab, v in present])
         if bad:
             return RuleResult(self.id, self.name, self.dimension, Status.FAIL,
                               why="金额链出现下游大于上游的情况（应满足 合同 ≥ 订单 ≥ 发票 ≥ 支付）。",
                               suggestion="核实各单据金额，排查超付/拆单异常。", detail=rows)
+        if missing:
+            reason_prefix = "缺少必需支付指令；" if not payments else ""
+            return RuleResult(self.id, self.name, self.dimension, Status.WARN,
+                              why=f"{reason_prefix}金额字段或必需文件不完整，不能判定金额链：{'、'.join(missing)}。",
+                              suggestion="补交缺失单据并核实原文金额与币种；有分货或多单据时按货品和编号拆分后复核。",
+                              detail=rows)
         return RuleResult(self.id, self.name, self.dimension, Status.PASS,
                           why="金额链满足 合同 ≥ 订单 ≥ 发票 ≥ 支付。", detail=rows)
 
@@ -682,21 +786,23 @@ class R_SupportingSeller(Rule):
     dimension = "C"
 
     def evaluate(self, docs: DocBundle) -> RuleResult:
-        sellers: list[tuple[str, str]] = []
+        sellers: list[tuple[str, str, str]] = []
         for tcode, label in [("COMMERCIAL_CONTRACT", "合同卖方"), ("COMMERCIAL_ORDER", "订单卖方"),
                              ("PROFORMA_INVOICE", "发票卖方"), ("WAYBILL", "运单发货方")]:
             doc = docs.first(tcode)
             if doc and doc.get("seller"):
-                sellers.append((label, _norm(doc.get("seller"))))
+                sellers.append((label, _norm(doc.get("seller")), tcode))
         if not sellers:
             return _skip(self.id, self.name, self.dimension, "缺少卖方信息，无法校验。")
         base = sellers[0][1]
-        rows = [[lab, s, "" if s == base else "bad"] for lab, s in sellers]
-        seller_bad = any(s != base for _, s in sellers)
+        rows = [_field_row(docs, tcode, "seller", label, seller, "" if seller == base else "bad")
+                for label, seller, tcode in sellers]
+        seller_bad = any(seller != base for _, seller, _ in sellers)
         payees = [_norm(p.get("payee")) for p in docs.all("PAYMENT_INSTRUCTION")]
         payee_bad = bool(payees) and base not in payees
-        for p in payees:
-            rows.append(["支付收款人", p, "" if p == base else ""])
+        for idx, payee in enumerate(payees):
+            rows.append(_field_row(docs, "PAYMENT_INSTRUCTION", "payee", "支付收款人", payee,
+                                   "" if payee == base else "", idx))
         if seller_bad:
             return RuleResult(self.id, self.name, self.dimension, Status.FAIL,
                               why="各单据卖方不一致，贸易对手存在矛盾。",
@@ -718,24 +824,31 @@ class R_SupportingBuyer(Rule):
     def evaluate(self, docs: DocBundle) -> RuleResult:
         fol = docs.first("FACILITY_LETTER")
         borrower = _norm(fol.get("borrower")) if fol else ""
-        buyers: list[tuple[str, str]] = []
+        buyers: list[tuple[str, str, str]] = []
         for tcode, label in [("COMMERCIAL_CONTRACT", "合同买方"), ("COMMERCIAL_ORDER", "订单买方"),
                              ("PROFORMA_INVOICE", "发票买方"), ("WAYBILL", "运单收货方")]:
             doc = docs.first(tcode)
             if doc and doc.get("buyer"):
-                buyers.append((label, _norm(doc.get("buyer"))))
+                buyers.append((label, _norm(doc.get("buyer")), tcode))
         if not buyers:
             return _skip(self.id, self.name, self.dimension, "缺少买方信息，无法校验。")
-        rows = [["FOL 借款人", borrower, ""]] if borrower else []
-        bad = False
-        for lab, b in buyers:
-            ok = (not borrower) or b == borrower
-            bad = bad or not ok
-            rows.append([lab, b, "" if ok else "bad"])
-        if bad:
+        rows = [_field_row(docs, "FACILITY_LETTER", "borrower", "FOL 借款人", borrower)] if borrower else []
+        names_differ = len({buyer for _, buyer, _ in buyers}) > 1
+        for label, buyer, tcode in buyers:
+            ok = not borrower or buyer == borrower
+            rows.append(_field_row(docs, tcode, "buyer", label, buyer, "" if ok else "bad"))
+        if names_differ:
             return RuleResult(self.id, self.name, self.dimension, Status.FAIL,
-                              why="单据买方与借款人不一致，可能存在代持或第三方交易。",
-                              suggestion="核实买方须为借款人本人。", detail=rows)
+                              why="商业合同、订单、发票或运单之间的买方/收货方名称不一致。",
+                              suggestion="核对同一笔贸易下买方、收货人及服务接收方的原文名称。", detail=rows)
+        if not borrower:
+            return RuleResult(self.id, self.name, self.dimension, Status.WARN,
+                              why="缺少可比对的借款人名称，无法判断买方/收货方与借款人的关系。",
+                              suggestion="核对授信函借款人字段；字段梳理工作簿与 V2 对该关系存在表述冲突。", detail=rows)
+        if any(buyer != borrower for _, buyer, _ in buyers):
+            return RuleResult(self.id, self.name, self.dimension, Status.WARN,
+                              why="单据买方/收货方与借款人名称不一致，但 V2 与字段梳理表的该项口径存在冲突，转人工和 AI 参考。",
+                              suggestion="查阅冲突原文并结合交易关系核实；不得由 AI 自动放行或自动判退。", detail=rows)
         return RuleResult(self.id, self.name, self.dimension, Status.PASS,
                           why=f"各单据买方一致且与借款人“{borrower}”相符。", detail=rows)
 

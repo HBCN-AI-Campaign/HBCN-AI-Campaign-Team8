@@ -40,9 +40,16 @@ from ocr_service.parser import parse_file
 
 app = FastAPI(
     title="轻量 OCR 文档识别 API",
-    description="基于 PaddleOCR + 轻量文档解析，支持 PDF / Word / Excel / 图片。",
+    description="基于 PaddleOCR 与可选视觉 OCR 兜底的文档解析，支持 PDF / Word / Excel / 图片。",
     version="0.4.0",
 )
+
+
+def _parse_error_payload(result: dict) -> dict:
+    return {
+        "error_type": result.get("error_type", "ParseError"),
+        "error": "文档解析失败",
+    }
 
 
 class PathRequest(BaseModel):
@@ -60,7 +67,7 @@ def root():
 
 
 @app.post("/analyze")
-async def ocr_analyze(
+def ocr_analyze(
     id: str = Form(..., description="业务标识号（如贷款申请编号，会原样返回）"),
     file: UploadFile = File(..., description="待识别的文档文件"),
 ):
@@ -73,7 +80,7 @@ async def ocr_analyze(
         )
 
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        tmp.write(await file.read())
+        tmp.write(file.file.read())
         tmp_path = Path(tmp.name)
 
     try:
@@ -84,7 +91,11 @@ async def ocr_analyze(
     if res["error"]:
         return JSONResponse(
             status_code=500,
-            content={"id": id, "filename": file.filename, "error": res["error"]},
+            content={
+                "id": id,
+                "filename": file.filename,
+                **_parse_error_payload(res),
+            },
         )
 
     return {
@@ -92,6 +103,7 @@ async def ocr_analyze(
         "filename": file.filename,
         "type": res["label"],
         "via_ocr": res["via_ocr"],
+        "method": res.get("method"),
         "text": res["text"],
         "blocks": res.get("blocks", []),
         "chars": len(res["text"]),
@@ -105,7 +117,7 @@ def ocr_types():
 
 
 @app.post("/extract")
-async def ocr_extract(
+def ocr_extract(
     type_code: str = Form(..., description="单据类型，见 /types"),
     file: UploadFile = File(..., description="待识别的文档文件"),
 ):
@@ -123,7 +135,7 @@ async def ocr_extract(
         )
 
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        tmp.write(await file.read())
+        tmp.write(file.file.read())
         tmp_path = Path(tmp.name)
 
     try:
@@ -134,7 +146,11 @@ async def ocr_extract(
     if res["error"]:
         return JSONResponse(
             status_code=500,
-            content={"type_code": type_code, "filename": file.filename, "error": res["error"]},
+            content={
+                "type_code": type_code,
+                "filename": file.filename,
+                **_parse_error_payload(res),
+            },
         )
 
     extracted = extract_fields(type_code, res["text"])
@@ -144,6 +160,7 @@ async def ocr_extract(
         "type_label": extracted["type_label"],
         "filename": file.filename,
         "via_ocr": res["via_ocr"],
+        "method": res.get("method"),
         "fields": extracted["fields"],
         "found_count": sum(1 for f in extracted["fields"] if f["found"]),
         "total_count": len(extracted["fields"]),
@@ -151,7 +168,7 @@ async def ocr_extract(
 
 
 @app.post("/file")
-async def ocr_file(file: UploadFile = File(...)):
+def ocr_file(file: UploadFile = File(...)):
     """上传文件并识别。"""
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in config.SUPPORTED_EXTENSIONS:
@@ -162,7 +179,7 @@ async def ocr_file(file: UploadFile = File(...)):
 
     # 保存到临时文件
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        tmp.write(await file.read())
+        tmp.write(file.file.read())
         tmp_path = Path(tmp.name)
 
     try:
@@ -171,29 +188,35 @@ async def ocr_file(file: UploadFile = File(...)):
         tmp_path.unlink(missing_ok=True)
 
     if res["error"]:
-        return JSONResponse(status_code=500, content=res)
+        return JSONResponse(status_code=500, content=_parse_error_payload(res))
 
     return {
         "filename": file.filename,
         "type": res["label"],
         "via_ocr": res["via_ocr"],
+        "method": res.get("method"),
         "text": res["text"],
         "chars": len(res["text"]),
     }
 
 
 @app.post("/file/detailed")
-async def ocr_file_detailed(file: UploadFile = File(...)):
-    """上传文件并识别，返回带坐标的明细。"""
+def ocr_file_detailed(
+    file: UploadFile = File(...),
+    type_code: str | None = Form(None, description="可选单据类型；提供时同时返回结构化字段"),
+):
+    """上传文件并识别，返回带坐标明细；可选地复用本次文本提取结构化字段。"""
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in config.SUPPORTED_EXTENSIONS:
         raise HTTPException(
             status_code=400,
             detail=f"不支持的文件类型：{suffix}（支持：{', '.join(sorted(config.SUPPORTED_EXTENSIONS))}）",
         )
+    if type_code is not None and fields_config.get_doc_type(type_code) is None:
+        raise HTTPException(status_code=400, detail=f"未知单据类型：{type_code}")
 
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        tmp.write(await file.read())
+        tmp.write(file.file.read())
         tmp_path = Path(tmp.name)
 
     try:
@@ -202,16 +225,20 @@ async def ocr_file_detailed(file: UploadFile = File(...)):
         tmp_path.unlink(missing_ok=True)
 
     if res["error"]:
-        return JSONResponse(status_code=500, content=res)
+        return JSONResponse(status_code=500, content=_parse_error_payload(res))
 
-    return {
+    response = {
         "filename": file.filename,
         "type": res["label"],
         "via_ocr": res["via_ocr"],
+        "method": res.get("method"),
         "text": res["text"],
         "blocks": res.get("blocks", []),
         "count": len(res.get("blocks", [])),
     }
+    if type_code is not None:
+        response["fields"] = extract_fields(type_code, res["text"])["fields"]
+    return response
 
 
 @app.post("/path")
@@ -225,12 +252,13 @@ def ocr_path(req: PathRequest):
 
     res = parse_file(p)
     if res["error"]:
-        return JSONResponse(status_code=500, content=res)
+        return JSONResponse(status_code=500, content=_parse_error_payload(res))
 
     return {
         "path": str(p),
         "type": res["label"],
         "via_ocr": res["via_ocr"],
+        "method": res.get("method"),
         "text": res["text"],
         "chars": len(res["text"]),
     }
@@ -247,12 +275,13 @@ def ocr_path_detailed(req: PathRequest):
 
     res = parse_file(p, detailed=True)
     if res["error"]:
-        return JSONResponse(status_code=500, content=res)
+        return JSONResponse(status_code=500, content=_parse_error_payload(res))
 
     return {
         "path": str(p),
         "type": res["label"],
         "via_ocr": res["via_ocr"],
+        "method": res.get("method"),
         "text": res["text"],
         "blocks": res.get("blocks", []),
         "count": len(res.get("blocks", [])),

@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     # --- OCR 服务 ---
     # 本地开发时在 .env 里设置为服务器地址；部署到同台服务器后默认值直接可用
     OCR_BASE_URL: str = "http://127.0.0.1:7888"
+    OCR_REQUEST_TIMEOUT_SECONDS: float = 180.0
 
     # Approved decision-model release; credentials are never exposed in repr.
     BUSINESS_REVIEW_DECISION_RELEASE: str = ""

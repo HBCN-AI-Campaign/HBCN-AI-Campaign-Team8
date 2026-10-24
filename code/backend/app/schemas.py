@@ -1,6 +1,8 @@
 """Pydantic DTO。"""
 from datetime import datetime
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from .parsing.facility import FacilitySelection
 from .money import TaskMoney
@@ -29,7 +31,7 @@ class DocumentIn(BaseModel):
     type_code: str
     fields: dict = {}
     pdf_file: str | None = None       # 原件 PDF 文件名（/pdf/<file> 可预览）
-    field_sources: dict = {}          # {field_key: {page, bbox}} 字段定位
+    field_sources: dict = {}          # {field_key: {page, bbox, method, confidence}}
     parse_run_id: str | None = None
     field_confirmations: dict[str, str] = {}
 
@@ -150,9 +152,11 @@ class TaskDetail(TaskOut):
 
 # --- 文件解析 Agent 返回 ---
 class FieldSource(BaseModel):
-    """字段在原件 PDF 中的位置（归一化 bbox，左上角原点）。"""
-    page: int = 1
-    bbox: list[float]              # [x0, y0, x1, y1]，各值 0~1
+    """字段来源、解析质量及原件 PDF 位置（归一化 bbox，左上角原点）。"""
+    page: int | None = None
+    bbox: list[float] | None = None  # [x0, y0, x1, y1]，各值 0~1
+    method: str | None = None
+    confidence: float | None = None
 
 
 class ParsedField(BaseModel):
@@ -256,4 +260,15 @@ class AIResolveOut(BaseModel):
     kind: str
     new_status: str                 # 处置后该项状态：pass/fail/warn
     counts: dict                    # 最新计数
+
+
+class BusinessReviewResolutionIn(BaseModel):
+    finding_id: str = Field(min_length=1, max_length=96)
+    action: Literal["acknowledge", "approve_exception"]
+    reason: str = Field(min_length=1, max_length=2000)
+
+
+class BusinessReviewAdviceIn(BaseModel):
+    finding_id: str = Field(min_length=1, max_length=96)
+    question: str = Field(min_length=2, max_length=2000)
 

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 # --------------------------------------------------------------------------
@@ -22,6 +23,27 @@ IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif"}
 WORD_EXTENSIONS = {".doc", ".docx"}
 EXCEL_EXTENSIONS = {".xls", ".xlsx"}
 PDF_EXTENSIONS = {".pdf"}
+
+# Optional page-level vision OCR fallback. Disabled unless explicitly approved and configured.
+OCR_VISION_ENABLED = os.getenv("OCR_VISION_ENABLED", "false").strip().lower() == "true"
+OCR_VISION_BASE_URL = os.getenv("OCR_VISION_BASE_URL", "").strip().rstrip("/")
+OCR_VISION_API_KEY = os.getenv("OCR_VISION_API_KEY", "")
+OCR_VISION_MODEL = os.getenv("OCR_VISION_MODEL", "").strip()
+OCR_VISION_TIMEOUT_SECONDS = float(os.getenv("OCR_VISION_TIMEOUT_SECONDS", "45"))
+OCR_VISION_MAX_IMAGE_BYTES = int(os.getenv("OCR_VISION_MAX_IMAGE_BYTES", str(10 * 1024 * 1024)))
+OCR_VISION_TRIGGER_MIN_LINES = int(os.getenv("OCR_VISION_TRIGGER_MIN_LINES", "2"))
+OCR_VISION_TRIGGER_MIN_SCORE = float(os.getenv("OCR_VISION_TRIGGER_MIN_SCORE", "0.55"))
+_DEFAULT_OCR_CPU_THREADS = max(1, min(10, (os.cpu_count() or 2) // 2))
+try:
+    OCR_CPU_THREADS = max(1, int(os.getenv("OCR_CPU_THREADS", str(_DEFAULT_OCR_CPU_THREADS))))
+except ValueError:
+    OCR_CPU_THREADS = _DEFAULT_OCR_CPU_THREADS
+try:
+    OCR_TEXT_RECOGNITION_BATCH_SIZE = max(
+        1, int(os.getenv("OCR_TEXT_RECOGNITION_BATCH_SIZE", "1"))
+    )
+except ValueError:
+    OCR_TEXT_RECOGNITION_BATCH_SIZE = 1
 
 SUPPORTED_EXTENSIONS: dict[str, str] = {}
 for _ext in IMAGE_EXTENSIONS:

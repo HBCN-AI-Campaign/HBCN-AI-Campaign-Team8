@@ -137,6 +137,12 @@ curl -X POST http://127.0.0.1:7888/cloud -F "file=@某文件.pdf"
 
 > ⚠️ 合规提示：云 OCR 会把文件内容上传到百度智能云，请确认贷款/合同类敏感数据允许外发后再使用。
 
+### 可选视觉 OCR 兜底
+
+主解析器还提供一个默认关闭的 OpenAI-compatible 视觉 OCR 适配器，用于本地 OCR 质量较差的页面。只有在服务端获批配置 `OCR_VISION_ENABLED=true`、`OCR_VISION_BASE_URL`、`OCR_VISION_API_KEY` 和 `OCR_VISION_MODEL` 后才会调用；API key 不应放入前端或仓库。当前版本只接受完整的识别文本，输出块标记 `method=vision_ocr`，`score=0` 且 `box`/`poly` 为空，因为模型不能提供真实坐标或经过校准的置信度。业务字段因此必须进入人工复核。
+
+该适配器遵循 OpenAI-compatible `chat/completions` 的图片 Data URL 请求格式。模型、区域、密钥和数据外发授权由部署方确定；启用前需核对汇丰的数据处理要求并完成影子评测。详见 [Model Studio vision API](https://help.aliyun.com/en/model-studio/qwen-vl-compatible-with-openai)。
+
 ### 带坐标的接口（detailed）
 
 `/file/detailed` 和 `/path/detailed` 额外返回 `blocks` 数组，每条记录包含文字及其位置坐标：

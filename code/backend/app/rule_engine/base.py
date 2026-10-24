@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import enum
+import math
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -61,7 +62,20 @@ class DocBundle:
             return None
         meta = metas[idx]
         src = (meta.get("field_sources") or {}).get(field_key)
-        if not src:
+        if not isinstance(src, dict):
+            return None
+        page = src.get("page")
+        bbox = src.get("bbox")
+        if isinstance(page, bool) or not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+            return None
+        try:
+            page_number = int(page)
+            x0, y0, x1, y1 = (float(value) for value in bbox)
+        except (OverflowError, TypeError, ValueError):
+            return None
+        if page_number < 1 or not all(math.isfinite(value) for value in (x0, y0, x1, y1)):
+            return None
+        if x1 <= x0 or y1 <= y0:
             return None
         return {
             "doc_id": meta.get("doc_id"),
@@ -69,8 +83,8 @@ class DocBundle:
             "type_code": type_code,
             "field_key": field_key,
             "pdf_file": meta.get("pdf_file"),
-            "page": src.get("page", 1),
-            "bbox": src.get("bbox"),
+            "page": page_number,
+            "bbox": bbox,
         }
 
 

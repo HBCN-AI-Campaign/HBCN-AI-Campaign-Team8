@@ -25,6 +25,7 @@ import {
 } from 'antd'
 import {
   ArrowLeftOutlined,
+  AuditOutlined,
   CheckOutlined,
   DownloadOutlined,
   EditOutlined,
@@ -48,6 +49,7 @@ import { usePdfLocator } from './task-object/hooks/usePdfLocator'
 import { useSupplement } from './task-object/hooks/useSupplement'
 import { useObjectGraph } from './task-object/hooks/useObjectGraph'
 import ObjectGraph from './task-object/ObjectGraph'
+import BusinessReviewPanel from './task-object/BusinessReviewPanel'
 
 const statColor: Record<string, string> = {
   pass: 'var(--green)',
@@ -757,6 +759,15 @@ export default function TaskObjectView() {
         </span>
       ),
       children: rulesTab,
+    },
+    {
+      key: 'business-review',
+      label: <span className="tab-label"><AuditOutlined /> 业务审核</span>,
+      children: <BusinessReviewPanel
+        code={code}
+        canReview={canReview && detail?.status !== 'completed'}
+        onLocate={pdf.locateRow}
+      />,
     },
     ...(canReview
       ? [

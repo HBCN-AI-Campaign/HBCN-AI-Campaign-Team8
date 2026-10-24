@@ -35,6 +35,8 @@ class OcrEngine:
         self._ocr = PaddleOCR(
             lang=self.lang,
             device=self.device,
+            cpu_threads=config.OCR_CPU_THREADS,
+            text_recognition_batch_size=config.OCR_TEXT_RECOGNITION_BATCH_SIZE,
             use_doc_orientation_classify=False,
             use_doc_unwarping=False,
             use_textline_orientation=True,

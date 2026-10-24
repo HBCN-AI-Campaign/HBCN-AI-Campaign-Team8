@@ -70,7 +70,7 @@ function documentInputs(parsed: ParseResult): DocumentIn[] {
     parse_run_id: parsed.parse_run_id, doc_code: d.doc_code, type_code: d.type_code,
     pdf_file: d.pdf_file ?? null,
     fields: Object.fromEntries(d.fields.map(f => [f.key, f.value])),
-    field_sources: Object.fromEntries(d.fields.filter(f => f.source).map(f => [f.key, f.source])),
+    field_sources: Object.fromEntries(d.fields.filter(f => f.source).map(f => [f.key, { ...f.source, confidence: f.confidence }])),
     field_confirmations: Object.fromEntries(d.fields.filter(f => f.confirmation_reason?.trim()).map(f => [f.key, f.confirmation_reason])),
   }))
 }
@@ -321,9 +321,12 @@ export default function CreateTaskView() {
         type_code: d.type_code,
         fields: Object.fromEntries(d.fields.map((f) => [f.key, f.value])),
         pdf_file: d.pdf_file ?? null,
-        field_sources: Object.fromEntries(
-          d.fields.filter((f) => f.source).map((f) => [f.key, f.source]),
-        ),
+        field_sources: Object.fromEntries(d.fields.filter((f) =>
+          f.source || (f.value !== null && f.value !== undefined && f.value !== ''),
+        ).map((f) => [
+          f.key,
+          { ...(f.source ?? {}), confidence: f.confidence },
+        ])),
       }))
       // 3) 创建任务（后端自动跑首次规则核对，状态直接进入「审核中」）
       const created = await api.createTask({

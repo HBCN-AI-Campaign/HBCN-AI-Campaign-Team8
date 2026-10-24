@@ -49,8 +49,10 @@ export interface FieldSource {
   type_code?: string
   field_key?: string // 字段键（编辑字段用）
   pdf_file?: string | null
-  page: number
-  bbox: number[] // [x0, y0, x1, y1] 归一化 0~1
+  page?: number | null
+  bbox?: number[] | null // [x0, y0, x1, y1] 归一化 0~1
+  method?: string | null
+  confidence?: number | null
 }
 
 export interface DocumentOut {
@@ -59,7 +61,7 @@ export interface DocumentOut {
   type_code: string
   fields: Record<string, any>
   pdf_file?: string | null
-  field_sources?: Record<string, { page: number; bbox: number[] }>
+  field_sources?: Record<string, FieldSource>
 }
 
 export interface TaskDetail extends TaskOut {
@@ -78,6 +80,58 @@ export interface CheckResult {
   suggestion: string
   // [label, value, flag] 或 [label, value, flag, source]
   detail: (string | FieldSource | null)[][]
+}
+
+export type BusinessFindingStatus = 'pass' | 'fail' | 'needs_review' | 'not_applicable'
+
+export interface BusinessReviewResolution {
+  action: 'acknowledge' | 'approve_exception'
+  reason: string
+  actor_id: number
+  actor_name: string
+  recorded_at: string
+}
+
+export interface BusinessReviewFinding {
+  finding_id: string
+  tier: string
+  rule_id: string
+  rule_name: string
+  dimension: string
+  status: BusinessFindingStatus
+  raw_status: string
+  requires_resolution: boolean
+  why: string
+  suggestion: string
+  evidence: unknown[]
+  resolution?: BusinessReviewResolution | null
+  business_conflict?: string
+}
+
+export interface BusinessReviewAdvisory {
+  status: 'available' | 'unavailable'
+  answer?: string | null
+  citations: { id?: string; label?: string; source?: string; page?: number; detail?: string }[]
+  created_at?: string
+}
+
+export interface BusinessReviewRun {
+  run_id?: number
+  task_code?: string
+  status: 'not_run' | 'needs_review' | 'ready_for_approval'
+  is_current: boolean
+  input_hash?: string
+  created_at?: string
+  findings: BusinessReviewFinding[]
+  decision_model: { status: string; threshold: number }
+  advisories: Record<string, BusinessReviewAdvisory>
+}
+
+export interface BusinessReviewAdviceOut {
+  status: 'available' | 'unavailable'
+  finding_id: string
+  answer?: string | null
+  citations: BusinessReviewAdvisory['citations']
 }
 
 export interface RunSummary {
@@ -266,7 +320,7 @@ export interface DocumentIn {
   type_code: string
   fields: Record<string, any>
   pdf_file?: string | null
-  field_sources?: Record<string, { page: number; bbox: number[] } | null | undefined>
+  field_sources?: Record<string, { page?: number | null; bbox?: number[] | null; method?: string | null; confidence?: number | null } | null | undefined>
   parse_run_id?: string
   field_confirmations?: Record<string, string | undefined>
 }

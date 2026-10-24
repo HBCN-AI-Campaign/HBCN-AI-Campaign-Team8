@@ -12,6 +12,7 @@
 
 ## 当前模块总览
 
+- [贷款文件审核业务架构](business-review/审核业务架构.md)、[实施规划与选型](business-review/实施规划与选型.md)、[真实材料测试与验收](business-review/真实材料测试与验收.md)：首期第 8–10 套材料的业务流程、三层判断边界、规则冲突台账与验收门槛。
 - [RAG 模块总览与运行说明](../code/rag-service/README.md)：当前架构图、入库时序、实际 PostgreSQL/pgvector 数据关系、接口和限制。
 - [RAG 后端验收与运行](RAG后端验收与运行.md)：真实后端联调结果、已验证资料范围、测试证据和剩余部署工作。
 - [Agentic RAG 优化规划](Agentic-RAG优化规划.md)：v3 持续执行基线，R01–R17；北大法宝 MCP、多源归并重排、历史案例/经验记忆、四张目标图与逐项验收追踪。

@@ -192,3 +192,31 @@ class CheckResult(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)
 
     task: Mapped["ReviewTask"] = relationship(back_populates="results")
+
+
+class BusinessReviewRun(Base):
+    __tablename__ = "business_review_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("review_tasks.id"), index=True)
+    input_hash: Mapped[str] = mapped_column(String(64), index=True)
+    status: Mapped[str] = mapped_column(String(32))
+    findings: Mapped[list] = mapped_column(JSON, default=list)
+    decision_model: Mapped[dict] = mapped_column(JSON, default=dict)
+    advisories: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)
+
+
+class BusinessReviewEvent(Base):
+    __tablename__ = "business_review_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("business_review_runs.id"), index=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("review_tasks.id"), index=True)
+    finding_id: Mapped[str | None] = mapped_column(String(96), nullable=True)
+    actor_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    action: Mapped[str] = mapped_column(String(40))
+    reason: Mapped[str] = mapped_column(Text, default="")
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=_now)

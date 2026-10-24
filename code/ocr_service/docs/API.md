@@ -66,6 +66,7 @@ print(resp.json())
   "filename": "商业合同.pdf",
   "type": "PDF",
   "via_ocr": true,
+  "method": "paddleocr",
   "text": "完整识别文本（换行符分隔）",
   "blocks": [
     {
@@ -88,6 +89,7 @@ print(resp.json())
 | `filename` | string | 上传的文件名 |
 | `type` | string | 文件类型（`PDF` / `Word` / `Excel` / `图片`） |
 | `via_ocr` | bool | 是否走了 OCR（扫描件/图片为 true） |
+| `method` | string | 提取来源：`native_pdf`、`paddleocr` 或 `vision_ocr` |
 | `text` | string | 识别出的完整文本，按行用 `\n` 分隔 |
 | `blocks` | array | 带坐标的明细（见下表）；Word/Excel 为 `[]` |
 | `chars` | int | 文本总字符数 |
@@ -101,9 +103,11 @@ print(resp.json())
 | `box` | array | 水平外接框 `[x1, y1, x2, y2]`（左上角 + 右下角） |
 | `poly` | array | 四点多边形 `[[x1,y1],[x2,y2],[x3,y3],[x4,y4]]`，贴合倾斜文字 |
 | `page` | int | （仅 PDF）文字所在页码，从 1 开始 |
+| `method` | string | 产生该文本块的识别来源 |
 
 > **坐标单位是像素，相对原图/原始页面**，前端拿到可直接在图上画框定位。
 > Word / Excel 是结构化文档，无像素坐标，故 `blocks` 为空数组，文本在 `text` 字段。
+> `vision_ocr` 候选没有真实坐标或校准分数，因此返回 `box=null`、`poly=null`、`score=0`；必须人工复核。
 
 ### 错误返回
 
@@ -111,12 +115,13 @@ print(resp.json())
 {
   "id": "LOAN-2024-0871",
   "filename": "xxx.pdf",
-  "error": "不支持的文件类型：.xyz"
+  "error_type": "RuntimeError",
+  "error": "文档解析失败"
 }
 ```
 
 - HTTP `400`：文件类型不支持
-- HTTP `500`：解析失败
+- HTTP `500`：解析失败；仅返回异常类别，不返回异常消息或文件临时路径
 
 ---
 
