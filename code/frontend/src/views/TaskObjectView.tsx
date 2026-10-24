@@ -201,45 +201,39 @@ export default function TaskObjectView() {
     await refreshResults() // 拉取最新核对统计/判定
   }
 
-  const detailColumns: ColumnsType<RowData> = [
-    { title: '项目', dataIndex: 'label', width: 180 },
-    {
-      title: '值',
-      dataIndex: 'value',
-      render: (v: string, row) => {
-        const editable = !!(row.source?.doc_id && row.source?.field_key)
-        return (
-          <span className="rule-value-cell">
-            <span className={row.flag === 'bad' ? 'badvalue' : undefined}>{v}</span>
-            {editable && (
-              <Tooltip title="更正该字段抓取值">
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<EditOutlined />}
-                  className="rule-edit-btn"
-                  onClick={() => openEdit(row)}
-                />
-              </Tooltip>
-            )}
-          </span>
-        )
-      },
-    },
-    {
-      title: '原文定位',
-      width: 120,
-      align: 'center',
-      render: (_, row) =>
-        row.source?.pdf_file ? (
-          <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => pdf.locateRow(row.source)}>
-            定位原文
-          </Button>
-        ) : (
-          <span className="muted">—</span>
-        ),
-    },
-  ]
+  // 规则表格里：把 detail 的某一比对取值渲染成「值 +（可编辑）+ 定位原文」
+  const renderRuleValue = (row: RowData | undefined) => {
+    if (!row) return <span className="muted">—</span>
+    const editable = !!(row.source?.doc_id && row.source?.field_key)
+    return (
+      <div className="rule-value-cell">
+        {row.label && <div className="rule-val-label">{row.label}</div>}
+        <span className={row.flag === 'bad' ? 'badvalue' : undefined}>{row.value || '—'}</span>
+        {editable && (
+          <Tooltip title="更正该字段抓取值">
+            <Button
+              type="text"
+              size="small"
+              icon={<EditOutlined />}
+              className="rule-edit-btn"
+              onClick={() => openEdit(row)}
+            />
+          </Tooltip>
+        )}
+        {row.source?.pdf_file && (
+          <Tooltip title="定位原文">
+            <Button
+              type="text"
+              size="small"
+              icon={<EyeOutlined />}
+              className="rule-edit-btn"
+              onClick={() => pdf.locateRow(row.source)}
+            />
+          </Tooltip>
+        )}
+      </div>
+    )
+  }
 
   // ======= 单据字段复核：按文件逐项改字段值 =======
   const docFieldsTab = (
@@ -308,6 +302,22 @@ export default function TaskObjectView() {
                 },
               },
               {
+                title: '置信度',
+                width: 110,
+                align: 'center',
+                render: (_, row) => {
+                  const c = doc.field_confidences?.[row.fieldKey]
+                  if (c == null) return <span className="muted">—</span>
+                  const pct = Math.round(c * 100)
+                  const low = c < 0.8
+                  return (
+                    <Tag color={low ? 'error' : pct >= 95 ? 'success' : 'warning'}>
+                      {pct}%
+                    </Tag>
+                  )
+                },
+              },
+              {
                 title: '原文定位',
                 width: 120,
                 align: 'center',
@@ -368,6 +378,133 @@ export default function TaskObjectView() {
     </>
   )
 
+  // 文件类型简短中文名（表头列名/sheet 标题用）
+  const TYPE_CN: Record<string, string> = {
+    FACILITY_LETTER: '授信函/FOL',
+    DRAWDOWN_INSTRUCTION: '提款指令',
+    PAYMENT_INSTRUCTION: '支付指令',
+    COMMERCIAL_CONTRACT: '商业合同',
+    COMMERCIAL_ORDER: '商业订单',
+    WAYBILL: '运单',
+    CUSTOMS_DECLARATION: '报关单',
+    PROFORMA_INVOICE: '形式发票',
+  }
+  const typeCn = (code?: string) => (code ? TYPE_CN[code] || code : '')
+
+  // 单个 sheet 的列定义：比对字段 + 文件1列(+文件2列) + 比对规则 + 结果
+  // doc2 为空 → 单方校验，只有一列取值
+  const buildColumns = (doc1?: string, doc2?: string): ColumnsType<CheckResult> => {
+    const cols: ColumnsType<CheckResult> = [
+      {
+        title: '比对字段',
+        width: 110,
+        render: (_, r) => (
+          <Tooltip title={r.rule_name}>
+            <span className="rname-short">{r.short_name || r.rule_name}</span>
+          </Tooltip>
+        ),
+      },
+      {
+        title: typeCn(doc1) || '取值',
+        width: 160,
+        render: (_, r) => renderRuleValue(toRows(r.detail)[0]),
+      },
+    ]
+    if (doc2) {
+      cols.push({
+        title: typeCn(doc2),
+        width: 160,
+        render: (_, r) => renderRuleValue(toRows(r.detail)[1]),
+      })
+    }
+    cols.push(
+      {
+        title: '比对规则',
+        width: 150,
+        render: (_, r) => (
+          <Tooltip title={r.why || r.rule_name}>
+            <span className="rule-text-short">{r.rule_text || r.rule_name}</span>
+          </Tooltip>
+        ),
+      },
+      {
+        title: '结果',
+        dataIndex: 'status',
+        width: 72,
+        align: 'center',
+        render: (s: string) => (
+          <Tag color={checkType(s)} style={{ fontWeight: 600 }}>
+            {checkText(s)}
+          </Tag>
+        ),
+      },
+    )
+    return cols
+  }
+
+  // 按 (doc1_type, doc2_type) 组合分组；单文件规则（doc2 为空）并入
+  // 「以其 doc1 为文件1」的第一个双方组合，不再单独成 sheet。
+  const ruleGroups = useMemo(() => {
+    const map = new Map<string, { doc1: string; doc2: string; rows: CheckResult[] }>()
+    // 第一遍：先建所有双方组合，确立 doc1 → 组合 key 的归属
+    const firstPairKeyByDoc1 = new Map<string, string>()
+    for (const r of results) {
+      const d1 = r.doc1_type || ''
+      const d2 = r.doc2_type || ''
+      if (!d2) continue // 单文件留到第二遍
+      const key = `${d1}__${d2}`
+      if (!map.has(key)) map.set(key, { doc1: d1, doc2: d2, rows: [] })
+      map.get(key)!.rows.push(r)
+      if (!firstPairKeyByDoc1.has(d1)) firstPairKeyByDoc1.set(d1, key)
+    }
+    // 第二遍：单文件规则并入同 doc1 的第一个双方组合；无则自成一组
+    for (const r of results) {
+      const d1 = r.doc1_type || ''
+      const d2 = r.doc2_type || ''
+      if (d2) continue
+      const target = firstPairKeyByDoc1.get(d1)
+      if (target) {
+        map.get(target)!.rows.push(r)
+      } else {
+        const key = `${d1}__`
+        if (!map.has(key)) map.set(key, { doc1: d1, doc2: '', rows: [] })
+        map.get(key)!.rows.push(r)
+      }
+    }
+    return Array.from(map.entries()).map(([key, g]) => ({ key, ...g }))
+  }, [results])
+
+  const renderRuleTable = (rows: CheckResult[], doc1?: string, doc2?: string) =>
+    rows.length ? (
+      <Table<CheckResult>
+        className="rule-result-table"
+        rowKey="rule_id"
+        dataSource={rows}
+        size="small"
+        bordered
+        pagination={false}
+        rowClassName={(r) =>
+          r.status === 'fail' ? 'rule-row-fail' : r.status === 'warn' ? 'rule-row-warn' : ''
+        }
+        columns={buildColumns(doc1, doc2)}
+      />
+    ) : (
+      <Empty description="本组暂无核对项" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+    )
+
+  const sheetCount = (rows: CheckResult[]) => {
+    const fail = rows.filter((r) => r.status === 'fail').length
+    const warn = rows.filter((r) => r.status === 'warn').length
+    const tags = []
+    if (fail) tags.push(<Tag key="f" color="error">{fail} 不通过</Tag>)
+    if (warn) tags.push(<Tag key="w" color="warning">{warn} 提示</Tag>)
+    return tags
+  }
+
+  // sheet 标题：双方「提款指令 × 授信函」；单方「支付指令 · 单文件校验」
+  const sheetTitle = (doc1: string, doc2: string) =>
+    doc2 ? `${typeCn(doc1)} × ${typeCn(doc2)}` : `${typeCn(doc1)} · 单文件`
+
   const rulesTab = (
     <>
       <div className="tab-head">
@@ -393,51 +530,23 @@ export default function TaskObjectView() {
       )}
 
       <Row gutter={16} style={{ marginTop: 10 }}>
-        {/* 左：规则核对结果（主内容，占更宽） */}
+        {/* 左：规则核对结果，按「文件1 × 文件2」类型组合分 sheet */}
         <Col xs={24} lg={16}>
           {!results.length ? (
             <Empty description="暂无核对结果" />
           ) : (
-            <Collapse
-              accordion
-              items={results.map((r: CheckResult) => ({
-                key: r.rule_id,
+            <Tabs
+              className="rule-sheet-tabs"
+              defaultActiveKey={ruleGroups[0]?.key}
+              items={ruleGroups.map((g) => ({
+                key: g.key,
                 label: (
                   <span>
-                    <Tag color={checkType(r.status)} style={{ marginRight: 10 }}>
-                      {checkText(r.status)}
-                    </Tag>
-                    <span className="rname">{r.rule_name}</span>
-                    <Tag style={{ marginLeft: 10 }}>
-                      {r.dimension} · {DIMENSION_NAME[r.dimension]}
-                    </Tag>
-                    <code className="rid">{r.rule_id}</code>
+                    {sheetTitle(g.doc1, g.doc2)}{' '}
+                    <span className="muted">({g.rows.length})</span> {sheetCount(g.rows)}
                   </span>
                 ),
-                children: (
-                  <div>
-                    <div className="why">
-                      <strong>判定说明：</strong>
-                      {r.why}
-                    </div>
-                    {r.detail?.length > 0 && (
-                      <Table<RowData>
-                        columns={detailColumns}
-                        dataSource={toRows(r.detail)}
-                        size="small"
-                        bordered
-                        pagination={false}
-                        style={{ margin: '10px 0' }}
-                      />
-                    )}
-                    {r.suggestion && (
-                      <div className="sug">
-                        <strong>处理建议：</strong>
-                        {r.suggestion}
-                      </div>
-                    )}
-                  </div>
-                ),
+                children: renderRuleTable(g.rows, g.doc1, g.doc2),
               }))}
             />
           )}
