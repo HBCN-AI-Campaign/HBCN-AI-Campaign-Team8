@@ -1,0 +1,1583 @@
+{
+  "meta": {
+    "source": [
+      "明细规则&字段_20261024.xlsx (sheet: 表格_20261024 (5))",
+      "贷款文件比对要求-字段梳理 - 人工整理后.xlsx (sheet: 文件字段总览-修正版)"
+    ],
+    "generated": "2026-10-24",
+    "description": "从两个 Excel 抽取的字段比对规则，机器可读。字段来源于『文件字段总览-修正版』（什么文件有什么字段）；比对规则来源于『明细规则&字段』（文件自身及跨文件的字段核对）。每条规则按 Excel 的『明细序号』拆分为 sub_rules；每个 sub_rule 带 must_do 标记与人工备注。logic 中统一使用完整文件代码（如 DRAWDOWN_INSTRUCTION），不使用缩写。一个 DRAWDOWN_INSTRUCTION 可对应多个 PAYMENT_INSTRUCTION 实例；单个 PAYMENT_INSTRUCTION 的 amount 为单笔金额，多笔汇总在 logic 中用 sum(all PAYMENT_INSTRUCTION.amount) 表示。",
+    "must_do_legend": {
+      "1": "一定要做：本期必须实现并执行的硬性校验",
+      "0": "暂不做：因依赖外部数据源、逻辑复杂、文案不固定或架构已自动支持而本期跳过",
+      "null": "Excel 中『一定要做的』列未显式标注，默认按常规规则执行"
+    },
+    "sheets": {
+      "核心授信比对": "提款指令自身 / 提款指令 vs 授信函(FOL) 核心比对",
+      "提款与支付比对": "提款指令 vs 支付指令比对",
+      "授信与支付比对": "授信函(FOL) vs 支付指令比对",
+      "支持性文件交叉校验": "贸易背景支持性文件交叉比对"
+    }
+  },
+  "documents": {
+    "DRAWDOWN_INSTRUCTION": {
+      "zh": "授信使用申请书（提款指令）",
+      "en": "Facility Utilization Request",
+      "category": "核心业务文件",
+      "fields": [
+        "date",
+        "branch",
+        "referenced_facility_letter_date",
+        "drawdown_date",
+        "tranche",
+        "facility",
+        "currency",
+        "amount",
+        "interest_period",
+        "interest_rate",
+        "maturity_date",
+        "purpose",
+        "payment_account",
+        "disbursement_method",
+        "commitment_text"
+      ]
+    },
+    "FACILITY_LETTER": {
+      "zh": "贷款合同 / 授信函 (FOL)",
+      "en": "Facility Letter / Loan Agreement",
+      "category": "核心业务文件",
+      "fields": [
+        "date",
+        "lender_branch",
+        "latest_date",
+        "currency",
+        "tranche",
+        "facility",
+        "amount",
+        "interest_period",
+        "interest_rate",
+        "maturity_date",
+        "purpose",
+        "disbursement_threshold",
+        "commitment_text",
+        "borrower"
+      ]
+    },
+    "PAYMENT_INSTRUCTION": {
+      "zh": "支付指令（境外汇款申请书）",
+      "en": "Payment Instruction / Overseas Remittance Application",
+      "category": "核心业务文件",
+      "fields": [
+        "debit_date",
+        "application_date",
+        "currency",
+        "amount",
+        "amount_in_words",
+        "payee_account",
+        "payee_bank_code",
+        "payee_bank_name",
+        "payee",
+        "payee_bank_country",
+        "payment_account",
+        "remitter_name",
+        "remittance_remark",
+        "transaction_remark",
+        "payment_date"
+      ]
+    },
+    "COMMERCIAL_CONTRACT": {
+      "zh": "商业合同",
+      "en": "Commercial Contract",
+      "category": "支持性文件",
+      "fields": [
+        "contract_no",
+        "goods_or_service",
+        "date",
+        "payment_terms",
+        "seller",
+        "buyer",
+        "payee_bank_country",
+        "amount",
+        "quantity",
+        "unit_price",
+        "payee_account",
+        "payment_method",
+        "effective_terms"
+      ]
+    },
+    "COMMERCIAL_ORDER": {
+      "zh": "商业订单",
+      "en": "Commercial Order",
+      "category": "支持性文件",
+      "fields": [
+        "order_no",
+        "contract_no",
+        "goods_or_service",
+        "date",
+        "seller",
+        "buyer",
+        "amount",
+        "quantity",
+        "unit_price",
+        "payee_account",
+        "payee_bank_country",
+        "payment_method",
+        "effective_terms"
+      ]
+    },
+    "WAYBILL": {
+      "zh": "运单",
+      "en": "Waybill / Bill of Lading",
+      "category": "支持性文件",
+      "fields": [
+        "bill_of_lading_no",
+        "contract_no",
+        "order_no",
+        "goods_or_service",
+        "shipment_date",
+        "destination",
+        "country_of_departure",
+        "seller",
+        "buyer",
+        "quantity",
+        "amount"
+      ]
+    },
+    "CUSTOMS_DECLARATION": {
+      "zh": "报关单",
+      "en": "Customs Declaration",
+      "category": "支持性文件",
+      "fields": [
+        "contract_no",
+        "bill_of_lading_no",
+        "goods_or_service",
+        "date",
+        "country_of_departure",
+        "destination",
+        "quantity",
+        "unit_price",
+        "amount",
+        "transport_party"
+      ]
+    },
+    "PROFORMA_INVOICE": {
+      "zh": "形式发票",
+      "en": "Proforma Invoice",
+      "category": "支持性文件",
+      "fields": [
+        "invoice_no",
+        "contract_no",
+        "order_no",
+        "goods_or_service",
+        "date",
+        "seller",
+        "buyer",
+        "payee_bank_country",
+        "quantity",
+        "unit_price",
+        "amount",
+        "effective_terms"
+      ]
+    }
+  },
+  "rules": [
+    {
+      "id": "DRAWDOWN__DATE",
+      "sheet": "核心授信比对",
+      "category": "核心授信比对",
+      "compare_field": "日期",
+      "field": "date",
+      "docs": [
+        "DRAWDOWN_INSTRUCTION",
+        "FACILITY_LETTER"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": 1,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "FACILITY_LETTER"
+          ],
+          "logic": "if DRAWDOWN_INSTRUCTION.date is not null: assert DRAWDOWN_INSTRUCTION.date >= FACILITY_LETTER.date (first/original 授信函订立日期 第一段)",
+          "note": "若『日期』字段有值，则该日期应不早于授信函订立日期（第一段）"
+        },
+        {
+          "seq": 2,
+          "must_do": 1,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "if DRAWDOWN_INSTRUCTION.date is not null: assert DRAWDOWN_INSTRUCTION.date >= DRAWDOWN_INSTRUCTION.drawdown_date",
+          "note": "若『日期』字段有值，则该日期应不早于指令中的『拟授信使用日（提款日）』"
+        },
+        {
+          "seq": 3,
+          "must_do": 0,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "if DRAWDOWN_INSTRUCTION.date is null: skip",
+          "note": "若『日期』字段为空，则忽略该项比对",
+          "manual_note": "按照我们的架构这个自动支持"
+        }
+      ]
+    },
+    {
+      "id": "DRAWDOWN_VS_FACILITY_LETTER__BRANCH",
+      "sheet": "核心授信比对",
+      "category": "核心授信比对",
+      "compare_field": "分支行",
+      "field": "branch",
+      "docs": [
+        "DRAWDOWN_INSTRUCTION",
+        "FACILITY_LETTER"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": 1,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "assert DRAWDOWN_INSTRUCTION.branch is not null",
+          "note": "分支行为必填项"
+        },
+        {
+          "seq": 2,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "FACILITY_LETTER"
+          ],
+          "logic": "if FACILITY_LETTER.lender_branch is specific: assert DRAWDOWN_INSTRUCTION.branch == FACILITY_LETTER.lender_branch",
+          "note": "当 FOL 中有明确具体分支行时，指令中的填写内容应与 FOL 表述一致"
+        },
+        {
+          "seq": 3,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "FACILITY_LETTER"
+          ],
+          "logic": "if FACILITY_LETTER.lender_branch == '汇丰银行(中国)有限公司(通过任一或多个分支行行事)': warn('请用户人工检查分支行')",
+          "note": "当 FOL 中表述为『汇丰银行(中国)有限公司(通过任一或多个分支行行事)』时，提示用户人工检查"
+        }
+      ]
+    },
+    {
+      "id": "DRAWDOWN_VS_FACILITY_LETTER__FACILITY_LETTER_DATE",
+      "sheet": "核心授信比对",
+      "category": "核心授信比对",
+      "compare_field": "授信函日期",
+      "field": "referenced_facility_letter_date",
+      "docs": [
+        "DRAWDOWN_INSTRUCTION",
+        "FACILITY_LETTER"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "FACILITY_LETTER"
+          ],
+          "logic": "assert DRAWDOWN_INSTRUCTION.referenced_facility_letter_date in {FACILITY_LETTER.date, FACILITY_LETTER.latest_date}",
+          "note": "提款指令中的授信函日期，应等于 FOL 最初或最新的订立日期"
+        }
+      ]
+    },
+    {
+      "id": "DRAWDOWN__DRAWDOWN_DATE",
+      "sheet": "核心授信比对",
+      "category": "核心授信比对",
+      "compare_field": "拟授信使用日（提款日）",
+      "field": "drawdown_date",
+      "docs": [
+        "DRAWDOWN_INSTRUCTION"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "assert DRAWDOWN_INSTRUCTION.drawdown_date is not null",
+          "note": "拟授信使用日（提款日）为必填项"
+        },
+        {
+          "seq": 2,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "assert not is_holiday(DRAWDOWN_INSTRUCTION.drawdown_date, country='CN') and not is_holiday(DRAWDOWN_INSTRUCTION.drawdown_date, currency=DRAWDOWN_INSTRUCTION.currency)",
+          "note": "提款日不应为中国及对应币种的节假日"
+        },
+        {
+          "seq": 3,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "assert DRAWDOWN_INSTRUCTION.drawdown_date >= today",
+          "note": "提款日应当不早于当前日期"
+        }
+      ]
+    },
+    {
+      "id": "DRAWDOWN_VS_FACILITY_LETTER__TRANCHE",
+      "sheet": "核心授信比对",
+      "category": "核心授信比对",
+      "compare_field": "授信段内容",
+      "field": "tranche",
+      "docs": [
+        "DRAWDOWN_INSTRUCTION",
+        "FACILITY_LETTER"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": 0,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "DRAWDOWN_INSTRUCTION.tranche may be null / NA",
+          "note": "授信段可为空 / NA"
+        },
+        {
+          "seq": 2,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "FACILITY_LETTER"
+          ],
+          "logic": "if DRAWDOWN_INSTRUCTION.tranche is not null: assert semantic_match(DRAWDOWN_INSTRUCTION.tranche, FACILITY_LETTER.tranche) ignoring zh/en diff",
+          "note": "若提款指令填写了授信段，则所填内容应在 FOL 对应段落中有对应表述，且含义一致（不考虑中英文差异）",
+          "manual_note": "语义一致校验，不强制严格字符串相等"
+        }
+      ]
+    },
+    {
+      "id": "DRAWDOWN_VS_FACILITY_LETTER__FACILITY",
+      "sheet": "核心授信比对",
+      "category": "核心授信比对",
+      "compare_field": "授信内容",
+      "field": "facility",
+      "docs": [
+        "DRAWDOWN_INSTRUCTION",
+        "FACILITY_LETTER"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "assert DRAWDOWN_INSTRUCTION.facility is not null",
+          "note": "拟使用的授信为必填项"
+        },
+        {
+          "seq": 2,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "FACILITY_LETTER"
+          ],
+          "logic": "assert semantic_match(DRAWDOWN_INSTRUCTION.facility, FACILITY_LETTER.facility) exact wording",
+          "note": "指令中所填授信内容，应在 FOL 对应段落中有完全相同的表述",
+          "manual_note": "语义一致校验，不考虑中英文差异"
+        }
+      ]
+    },
+    {
+      "id": "DRAWDOWN_VS_FACILITY_LETTER__CURRENCY",
+      "sheet": "核心授信比对",
+      "category": "核心授信比对",
+      "compare_field": "币种",
+      "field": "currency",
+      "docs": [
+        "DRAWDOWN_INSTRUCTION",
+        "FACILITY_LETTER"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "assert DRAWDOWN_INSTRUCTION.currency is not null",
+          "note": "提款币种为必填项"
+        },
+        {
+          "seq": 2,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "FACILITY_LETTER"
+          ],
+          "logic": "assert DRAWDOWN_INSTRUCTION.currency in FACILITY_LETTER.allowed_currencies",
+          "note": "指令中所填币种，应在 FOL 对应授信条款表述的币种范围内"
+        },
+        {
+          "seq": 3,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "FACILITY_LETTER"
+          ],
+          "logic": "if FACILITY_LETTER.currency clause == '授信使用的货币可为贷款人同意的任何币种 / Utilization may be made in any currency as agreed by the Lender': skip",
+          "note": "若 FOL 表述为『授信使用的货币可为贷款人同意的任何币种』，则忽略该项比对"
+        }
+      ]
+    },
+    {
+      "id": "DRAWDOWN_VS_FACILITY_LETTER__AMOUNT",
+      "sheet": "核心授信比对",
+      "category": "核心授信比对",
+      "compare_field": "金额",
+      "field": "amount",
+      "docs": [
+        "DRAWDOWN_INSTRUCTION",
+        "FACILITY_LETTER"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "assert DRAWDOWN_INSTRUCTION.amount is not null",
+          "note": "提款金额为必填项"
+        },
+        {
+          "seq": 2,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "FACILITY_LETTER"
+          ],
+          "logic": "assert DRAWDOWN_INSTRUCTION.amount <= FACILITY_LETTER.amount (available amount)",
+          "note": "指令所填金额，应小于等于 FOL 对应授信的可用金额"
+        }
+      ]
+    },
+    {
+      "id": "DRAWDOWN_VS_FACILITY_LETTER__INTEREST_PERIOD",
+      "sheet": "核心授信比对",
+      "category": "核心授信比对",
+      "compare_field": "利息期",
+      "field": "interest_period",
+      "docs": [
+        "DRAWDOWN_INSTRUCTION",
+        "FACILITY_LETTER"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": 0,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "DRAWDOWN_INSTRUCTION.interest_period may be null / NA",
+          "note": "利息期可为空 / NA",
+          "manual_note": "按照我们的架构这个自动支持"
+        },
+        {
+          "seq": 3,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "FACILITY_LETTER"
+          ],
+          "logic": "if FACILITY_LETTER.interest_period is list (e.g. 1/3/6 月): assert DRAWDOWN_INSTRUCTION.interest_period in FACILITY_LETTER.interest_period_list",
+          "note": "若 FOL 中有一个或多个可选值（如 1 个月、3 个月、6 个月），则符合其中一个即可"
+        },
+        {
+          "seq": 4,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "FACILITY_LETTER"
+          ],
+          "logic": "if FACILITY_LETTER.interest_period is 'agreed by lender' pattern: skip",
+          "note": "若 FOL 中有『贷款人同意的 / 在该贷款授信使用日和(如适用)续借日前确定并载于 / agreed by the lender』类表述，则忽略该项比对"
+        }
+      ]
+    },
+    {
+      "id": "DRAWDOWN_VS_FACILITY_LETTER__INTEREST_RATE",
+      "sheet": "核心授信比对",
+      "category": "核心授信比对",
+      "compare_field": "利率",
+      "field": "interest_rate",
+      "docs": [
+        "DRAWDOWN_INSTRUCTION",
+        "FACILITY_LETTER"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "assert DRAWDOWN_INSTRUCTION.interest_rate is not null",
+          "note": "贷款利率为必填项"
+        },
+        {
+          "seq": 2,
+          "must_do": 0,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "FACILITY_LETTER"
+          ],
+          "logic": "assert DRAWDOWN_INSTRUCTION.interest_rate (combined from options) == FACILITY_LETTER.interest_rate",
+          "note": "提款指令的利率值根据不同选项组合而成，应与 FOL 中对应利率一致",
+          "manual_note": "这个字段在文件中实际应该会有很多字段"
+        },
+        {
+          "seq": 3,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "FACILITY_LETTER"
+          ],
+          "logic": "if FACILITY_LETTER.interest_rate is 'agreed by lender' pattern: skip",
+          "note": "若 FOL 表述为『适用利率由贷款人和借款人在该贷款授信使用日和(如适用)续借日前确定并载于该贷款授信使用申请书和(如适用)续借通知书中 / agreed by the Lender』，则忽略该项比对"
+        }
+      ]
+    },
+    {
+      "id": "DRAWDOWN_VS_FACILITY_LETTER__MATURITY_DATE",
+      "sheet": "核心授信比对",
+      "category": "核心授信比对",
+      "compare_field": "到期日",
+      "field": "maturity_date",
+      "docs": [
+        "DRAWDOWN_INSTRUCTION",
+        "FACILITY_LETTER"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "assert DRAWDOWN_INSTRUCTION.maturity_date is not null",
+          "note": "贷款到期日为必填项"
+        },
+        {
+          "seq": 2,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "assert not is_holiday(DRAWDOWN_INSTRUCTION.maturity_date, country='CN') and not is_holiday(DRAWDOWN_INSTRUCTION.maturity_date, currency=DRAWDOWN_INSTRUCTION.currency)",
+          "note": "提款指令上的到期日，不应为本地和对应币种的节假日"
+        },
+        {
+          "seq": 3,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "FACILITY_LETTER"
+          ],
+          "logic": "if FACILITY_LETTER has special term in 特别授信条款: assert (DRAWDOWN_INSTRUCTION.maturity_date - DRAWDOWN_INSTRUCTION.drawdown_date) <= FACILITY_LETTER.special_term",
+          "note": "若 FOL 在特别授信条款中约定期限，则『到期日 - 提款日』的期限，应当不长于 FOL 要求的最长期限"
+        },
+        {
+          "seq": 4,
+          "must_do": 0,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "FACILITY_LETTER"
+          ],
+          "logic": "if FACILITY_LETTER term clause == '首个授信使用日 / 借款人签署本授信函之日起 [**][年 / 月]': require user-input base date then compute & validate",
+          "note": "若 FOL 期限条款为『首个授信使用日 / 借款人签署本授信函之日起 [**][年 / 月]』，需用户输入对应基准日期后再计算校验",
+          "manual_note": "这里的字段应该不是到期日期，感觉有点复杂先不做"
+        },
+        {
+          "seq": 5,
+          "must_do": 0,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "FACILITY_LETTER"
+          ],
+          "logic": "check FACILITY_LETTER.repayment_schedule with cumulative_drawdown; validate this drawdown maturity vs scheduled amount/ratio",
+          "note": "需结合特别授信条款中的还款计划（如有）、累计提款总额，校验本次提款到期日与计划金额 / 比例是否匹配",
+          "manual_note": "这里的字段应该不是到期日期，感觉有点复杂先不做"
+        },
+        {
+          "seq": 6,
+          "must_do": 0,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "FACILITY_LETTER"
+          ],
+          "logic": "require user-input historical cumulative drawdown total as auxiliary data for maturity validation",
+          "note": "校验到期日时，需用户输入历史提款总额作为辅助数据",
+          "manual_note": "这里的字段应该不是到期日期，感觉有点复杂先不做"
+        }
+      ]
+    },
+    {
+      "id": "DRAWDOWN_VS_FACILITY_LETTER__PURPOSE",
+      "sheet": "核心授信比对",
+      "category": "核心授信比对",
+      "compare_field": "贷款用途",
+      "field": "purpose",
+      "docs": [
+        "DRAWDOWN_INSTRUCTION",
+        "FACILITY_LETTER"
+      ],
+      "forbidden_purposes": [
+        "股东分红",
+        "金融资产投资",
+        "固定资产投资(固定资产贷款除外)",
+        "股权投资",
+        "证券市场",
+        "期货市场",
+        "房地产市场(房地产开发贷除外)",
+        "转贷",
+        "票据解付",
+        "支付奖金(含管理人员绩效工资)",
+        "缴纳罚款",
+        "虚增财政收入",
+        "新增地方政府隐性债务",
+        "国家禁止生产经营的领域和用途"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": 1,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "assert DRAWDOWN_INSTRUCTION.purpose is not null",
+          "note": "贷款用途为必填项"
+        },
+        {
+          "seq": 2,
+          "must_do": 1,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "FACILITY_LETTER"
+          ],
+          "logic": "assert DRAWDOWN_INSTRUCTION.purpose within FACILITY_LETTER.purpose_scope",
+          "note": "提款指令的用途，应当在 FOL 约定的用途范围内"
+        },
+        {
+          "seq": 3,
+          "must_do": 1,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "assert DRAWDOWN_INSTRUCTION.purpose not in FORBIDDEN_PURPOSES",
+          "note": "提款指令的用途，不得用于以下用途：股东分红，以及金融资产、固定资产（固定资产贷款不适用）、股权等投资，或用于证券市场、期货市场、房地产市场（房地产开发贷不适用），或将资金进行转贷或用于票据解付、支付奖金（包括管理人员绩效工资）或缴纳罚款；不得用于虚增财政收入、新增地方政府隐性债务（如用于政府项目或其相关债务等）；不得用于国家禁止生产、经营的领域和用途。"
+        }
+      ]
+    },
+    {
+      "id": "DRAWDOWN__PAYMENT_ACCOUNT",
+      "sheet": "核心授信比对",
+      "category": "核心授信比对",
+      "compare_field": "贷款支付账号",
+      "field": "payment_account",
+      "docs": [
+        "DRAWDOWN_INSTRUCTION"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "assert DRAWDOWN_INSTRUCTION.payment_account is not null",
+          "note": "贷款支付账号（放款指示）为必填项"
+        },
+        {
+          "seq": 2,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "assert matches_regex(DRAWDOWN_INSTRUCTION.payment_account, r'^(\\d{3}-\\d{6}-\\d{3}|\\d{12})$')",
+          "note": "账号为 12 位数字，格式应为：xxx-xxxxxx-xxx 或 xxxxxxxxxxxx"
+        }
+      ]
+    },
+    {
+      "id": "DRAWDOWN_VS_FACILITY_LETTER__DISBURSEMENT",
+      "sheet": "核心授信比对",
+      "category": "核心授信比对",
+      "compare_field": "支付方式",
+      "field": "disbursement_method",
+      "docs": [
+        "DRAWDOWN_INSTRUCTION",
+        "FACILITY_LETTER"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "assert DRAWDOWN_INSTRUCTION.disbursement_method is not null",
+          "note": "贷款支付方式为必填项"
+        },
+        {
+          "seq": 2,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "FACILITY_LETTER"
+          ],
+          "logic": "if DRAWDOWN_INSTRUCTION.amount > FACILITY_LETTER.disbursement_threshold: assert DRAWDOWN_INSTRUCTION.disbursement_method == '银行受托支付'",
+          "note": "当提款金额大于 FOL 约定的受托支付限额时，应当勾选『银行受托支付』"
+        }
+      ]
+    },
+    {
+      "id": "DRAWDOWN__COMMITMENT_TEXT",
+      "sheet": "核心授信比对",
+      "category": "核心授信比对",
+      "compare_field": "承诺内容",
+      "field": "commitment_text",
+      "docs": [
+        "DRAWDOWN_INSTRUCTION"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": 0,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "assert DRAWDOWN_INSTRUCTION.commitment_text == STANDARD_COMMITMENT_TEXT",
+          "note": "承诺内容应与标准文本表述一致",
+          "manual_note": "标准文本是什么？"
+        }
+      ]
+    },
+    {
+      "id": "DRAWDOWN_VS_PAYMENT__CURRENCY",
+      "sheet": "提款与支付比对",
+      "category": "提款与支付比对",
+      "compare_field": "币种",
+      "field": "currency",
+      "docs": [
+        "DRAWDOWN_INSTRUCTION",
+        "PAYMENT_INSTRUCTION"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": 0,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "PAYMENT_INSTRUCTION"
+          ],
+          "logic": "no_constraint",
+          "note": "提款指令与支付指令的币种可以不相等",
+          "manual_note": "可以不做"
+        }
+      ]
+    },
+    {
+      "id": "DRAWDOWN_VS_PAYMENT__AMOUNT",
+      "sheet": "提款与支付比对",
+      "category": "提款与支付比对",
+      "compare_field": "金额",
+      "field": "amount",
+      "docs": [
+        "DRAWDOWN_INSTRUCTION",
+        "PAYMENT_INSTRUCTION"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "PAYMENT_INSTRUCTION"
+          ],
+          "logic": "if DRAWDOWN_INSTRUCTION.currency == PAYMENT_INSTRUCTION.currency: assert sum(all PAYMENT_INSTRUCTION.amount) >= DRAWDOWN_INSTRUCTION.amount",
+          "note": "若币种相等，则支付指令加总金额应大于等于提款金额"
+        },
+        {
+          "seq": 2,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "PAYMENT_INSTRUCTION"
+          ],
+          "logic": "if DRAWDOWN_INSTRUCTION.currency != PAYMENT_INSTRUCTION.currency: assert fx_convert(sum(all PAYMENT_INSTRUCTION.amount), PAYMENT_INSTRUCTION.currency, DRAWDOWN_INSTRUCTION.currency) >= DRAWDOWN_INSTRUCTION.amount",
+          "note": "若币种不相等，按照提款指令币种汇率折算后，支付指令加总金额应大于等于提款金额"
+        }
+      ]
+    },
+    {
+      "id": "PAYMENT__AMOUNT_IN_WORDS",
+      "sheet": "提款与支付比对",
+      "category": "提款与支付比对",
+      "compare_field": "金额大写",
+      "field": "amount_in_words",
+      "docs": [
+        "PAYMENT_INSTRUCTION"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "PAYMENT_INSTRUCTION"
+          ],
+          "logic": "assert PAYMENT_INSTRUCTION.amount_in_words == to_words(PAYMENT_INSTRUCTION.amount)",
+          "note": "大写金额应和汇款金额表示一致"
+        }
+      ]
+    },
+    {
+      "id": "DRAWDOWN_VS_PAYMENT__ACCOUNT",
+      "sheet": "提款与支付比对",
+      "category": "提款与支付比对",
+      "compare_field": "支付账号",
+      "field": "payment_account",
+      "docs": [
+        "DRAWDOWN_INSTRUCTION",
+        "PAYMENT_INSTRUCTION"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "PAYMENT_INSTRUCTION"
+          ],
+          "logic": "assert DRAWDOWN_INSTRUCTION.payment_account == PAYMENT_INSTRUCTION.payment_account",
+          "note": "支付指令的账号应与提款指令的放款指示账号一致"
+        }
+      ]
+    },
+    {
+      "id": "FACILITY_LETTER_VS_PAYMENT__REMITTER",
+      "sheet": "授信与支付比对",
+      "category": "授信与支付比对",
+      "compare_field": "汇款人名称",
+      "field": "remitter_name",
+      "docs": [
+        "FACILITY_LETTER",
+        "PAYMENT_INSTRUCTION"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "FACILITY_LETTER",
+            "PAYMENT_INSTRUCTION"
+          ],
+          "logic": "assert FACILITY_LETTER.borrower == PAYMENT_INSTRUCTION.remitter_name",
+          "note": "支付指令的汇款人名称，应与 FOL 中的借款人名称一致"
+        }
+      ]
+    },
+    {
+      "id": "SUPPORTING__CONTRACT_NO",
+      "sheet": "支持性文件交叉校验",
+      "category": "支持性文件交叉校验",
+      "compare_field": "合同号码 / 订单号",
+      "field": "contract_no / order_no",
+      "docs": [
+        "COMMERCIAL_CONTRACT",
+        "COMMERCIAL_ORDER",
+        "WAYBILL",
+        "CUSTOMS_DECLARATION",
+        "PROFORMA_INVOICE"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": 1,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "WAYBILL",
+            "PROFORMA_INVOICE"
+          ],
+          "logic": "assert COMMERCIAL_ORDER.contract_no == COMMERCIAL_CONTRACT.contract_no and WAYBILL.contract_no == COMMERCIAL_CONTRACT.contract_no and PROFORMA_INVOICE.contract_no == COMMERCIAL_CONTRACT.contract_no",
+          "note": "商业订单、运单、形式发票涉及的合同号，需要和商业合同中的合同号相符"
+        },
+        {
+          "seq": 2,
+          "must_do": 1,
+          "docs": [
+            "COMMERCIAL_ORDER",
+            "WAYBILL",
+            "PROFORMA_INVOICE"
+          ],
+          "logic": "assert WAYBILL.order_no == COMMERCIAL_ORDER.order_no and PROFORMA_INVOICE.order_no == COMMERCIAL_ORDER.order_no",
+          "note": "运单、形式发票涉及的订单号，需要和商业订单中的订单号相符"
+        },
+        {
+          "seq": 3,
+          "must_do": 1,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "PROFORMA_INVOICE",
+            "CUSTOMS_DECLARATION"
+          ],
+          "logic": "assert CUSTOMS_DECLARATION.contract_no in {COMMERCIAL_CONTRACT.contract_no, COMMERCIAL_ORDER.order_no, PROFORMA_INVOICE.invoice_no}",
+          "note": "报关单中的合同协议号，需要与合同号、订单号、形式发票号码其中之一相符"
+        },
+        {
+          "seq": 4,
+          "must_do": 0,
+          "docs": [
+            "CUSTOMS_DECLARATION",
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "PROFORMA_INVOICE"
+          ],
+          "logic": "if CUSTOMS_DECLARATION covers multiple contracts/orders/invoices: query_customs_website()",
+          "note": "如一份报关单涉及多份商业合同、商业订单、形式发票，可根据海关网站信息进行查询判断",
+          "manual_note": "判断规则不明确，外部查询不支持，先不做"
+        }
+      ]
+    },
+    {
+      "id": "SUPPORTING__BILL_OF_LADING_NO",
+      "sheet": "支持性文件交叉校验",
+      "category": "支持性文件交叉校验",
+      "compare_field": "提单号",
+      "field": "bill_of_lading_no",
+      "docs": [
+        "WAYBILL",
+        "CUSTOMS_DECLARATION"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "WAYBILL",
+            "CUSTOMS_DECLARATION"
+          ],
+          "logic": "assert WAYBILL.bill_of_lading_no == CUSTOMS_DECLARATION.bill_of_lading_no",
+          "note": "运单与报关单的提单号应当相符"
+        },
+        {
+          "seq": 2,
+          "must_do": 0,
+          "docs": [
+            "WAYBILL"
+          ],
+          "logic": "verify_authenticity(WAYBILL.bill_of_lading_no, sources=['海关网站','船公司','FIATA'])",
+          "note": "可根据提单号通过海关网站、船公司、FIATA 渠道进行真伪验证",
+          "manual_note": "外部查询不支持，先不做"
+        }
+      ]
+    },
+    {
+      "id": "SUPPORTING__GOODS_OR_SERVICE",
+      "sheet": "支持性文件交叉校验",
+      "category": "支持性文件交叉校验",
+      "compare_field": "采购 / 服务标的",
+      "field": "goods_or_service",
+      "docs": [
+        "COMMERCIAL_CONTRACT",
+        "COMMERCIAL_ORDER",
+        "WAYBILL",
+        "CUSTOMS_DECLARATION",
+        "PROFORMA_INVOICE",
+        "PAYMENT_INSTRUCTION",
+        "DRAWDOWN_INSTRUCTION",
+        "FACILITY_LETTER"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": 1,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "WAYBILL",
+            "CUSTOMS_DECLARATION",
+            "PROFORMA_INVOICE"
+          ],
+          "logic": "assert all documents (except DRAWDOWN_INSTRUCTION) goods_or_service consistent, i.e. COMMERCIAL_CONTRACT >= COMMERCIAL_ORDER >= PROFORMA_INVOICE == WAYBILL == CUSTOMS_DECLARATION",
+          "note": "除提款指令以外的文件，所显示的采购 / 服务标的之间应当相互一致或 合同≥订单≥发票 = 运单 = 报关单"
+        },
+        {
+          "seq": 2,
+          "must_do": 0,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "WAYBILL",
+            "CUSTOMS_DECLARATION",
+            "PROFORMA_INVOICE"
+          ],
+          "logic": "if containment relationship: consider cross-document / partial shipment scenarios",
+          "note": "若为包含关系，需考虑文件交叉、部分提货的场景",
+          "manual_note": "逻辑复杂，先不做"
+        },
+        {
+          "seq": 3,
+          "must_do": 0,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "PROFORMA_INVOICE",
+            "WAYBILL",
+            "CUSTOMS_DECLARATION"
+          ],
+          "logic": "if a document references another document's no: check under the same doc_no; if nos mismatch -> materials mismatch",
+          "note": "若文件中显示其他文件编号，应在同一编号下进行检查；编号不匹配则说明材料不匹配",
+          "manual_note": "表述不清，未理解，先不做"
+        },
+        {
+          "seq": 4,
+          "must_do": null,
+          "docs": [
+            "PAYMENT_INSTRUCTION",
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "PROFORMA_INVOICE"
+          ],
+          "logic": "if PAYMENT_INSTRUCTION.remittance_remark or transaction_remark mentions contract/order no or goods name: assert consistent with other docs",
+          "note": "若支付指令的汇款附言、交易附言写明了合同订单编号或货物名称，应当与其他文件内容相符"
+        },
+        {
+          "seq": 5,
+          "must_do": 1,
+          "docs": [
+            "DRAWDOWN_INSTRUCTION",
+            "COMMERCIAL_CONTRACT"
+          ],
+          "logic": "assert DRAWDOWN_INSTRUCTION.purpose is a superset/contains COMMERCIAL_CONTRACT.goods_or_service",
+          "note": "提款指令填写的贷款用途相对概括，与实际标的应为包含关系"
+        },
+        {
+          "seq": 6,
+          "must_do": null,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "PROFORMA_INVOICE"
+          ],
+          "logic": "check forbidden_field(goods_or_service)",
+          "note": "检查采购 / 服务标的是否涉及禁止领域"
+        },
+        {
+          "seq": 7,
+          "must_do": 1,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "PROFORMA_INVOICE"
+          ],
+          "logic": "check regulation_requirement(goods_or_service) and internal_manual_requirement and approval_requirement",
+          "note": "检查采购 / 服务标的是否有监管法规要求，是否满足行内手册要求，是否需要相关审批"
+        },
+        {
+          "seq": 8,
+          "must_do": 1,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "FACILITY_LETTER"
+          ],
+          "logic": "check goods_or_service matches FACILITY_LETTER.purpose and loan_eligible(goods_or_service)",
+          "note": "检查采购 / 服务标的是否符合 FOL 贷款用途，以及是否可以使用贷款支付"
+        },
+        {
+          "seq": 9,
+          "must_do": 0,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER"
+          ],
+          "logic": "check goods_or_service in borrower_business_scope",
+          "note": "检查采购 / 服务标的是否在借款人经营范围内",
+          "manual_note": "借款人经营范围从哪里来？"
+        }
+      ]
+    },
+    {
+      "id": "SUPPORTING__DATE_AND_TERM",
+      "sheet": "支持性文件交叉校验",
+      "category": "支持性文件交叉校验",
+      "compare_field": "日期 & 账期",
+      "field": "date / payment_terms",
+      "docs": [
+        "COMMERCIAL_CONTRACT",
+        "COMMERCIAL_ORDER",
+        "WAYBILL",
+        "CUSTOMS_DECLARATION",
+        "PROFORMA_INVOICE",
+        "DRAWDOWN_INSTRUCTION",
+        "PAYMENT_INSTRUCTION"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "WAYBILL",
+            "CUSTOMS_DECLARATION",
+            "PROFORMA_INVOICE",
+            "DRAWDOWN_INSTRUCTION",
+            "PAYMENT_INSTRUCTION"
+          ],
+          "logic": "assert COMMERCIAL_CONTRACT.date <= min(COMMERCIAL_ORDER.date, WAYBILL.shipment_date, CUSTOMS_DECLARATION.date, PROFORMA_INVOICE.date, DRAWDOWN_INSTRUCTION.date, PAYMENT_INSTRUCTION.application_date)",
+          "note": "商业合同日期应当早于等于其他所有文件日期"
+        },
+        {
+          "seq": 2,
+          "must_do": null,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "WAYBILL",
+            "CUSTOMS_DECLARATION",
+            "PROFORMA_INVOICE"
+          ],
+          "logic": "validate_date_logic_by_payment_terms(COMMERCIAL_CONTRACT.payment_terms): e.g. 款到发货/收货后开票 -> COMMERCIAL_ORDER.date <= WAYBILL.shipment_date <= PROFORMA_INVOICE.date",
+          "note": "根据商业合同 / 订单中的支付条款，判断订单日期、运单运输日期、报关单日期、发票日期的逻辑合理性（如合同约定『具体货物以签发订单为准，款到发货，收货后开具发票』，则订单日期应早于等于运单运输日期早于发票日期）",
+          "manual_note": "文案不固定，是要直接交给大模型还是直接做如的部分？"
+        },
+        {
+          "seq": 3,
+          "must_do": 0,
+          "docs": [
+            "COMMERCIAL_ORDER",
+            "WAYBILL",
+            "CUSTOMS_DECLARATION"
+          ],
+          "logic": "COMMERCIAL_ORDER / WAYBILL / CUSTOMS_DECLARATION are optional (non-mandatory) documents",
+          "note": "订单、运单、报关单为非必要文件",
+          "manual_note": "按照我们的架构这个自动支持"
+        },
+        {
+          "seq": 4,
+          "must_do": null,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "PROFORMA_INVOICE",
+            "DRAWDOWN_INSTRUCTION",
+            "WAYBILL"
+          ],
+          "logic": "if payment_terms specify a window: assert DRAWDOWN_INSTRUCTION.drawdown_date within window from shipment/invoice; else (no term or negotiable): assert (DRAWDOWN_INSTRUCTION.drawdown_date - earliest_invoice_date) <= 3 months",
+          "note": "根据合同/发票/订单中的支付条款检查提款日期是否合理（如合同显示发货后3个月内支付，运单显示20260103发货，提款时间20260301 即为合理）；若文件中没有显示支付期限要求或者为协商条款，则检查最早发票日期和提款日期是否超过了3个月",
+          "manual_note": "文案不固定，是要直接交给大模型还是直接做如的部分？"
+        },
+        {
+          "seq": 6,
+          "must_do": null,
+          "docs": [
+            "PAYMENT_INSTRUCTION",
+            "DRAWDOWN_INSTRUCTION"
+          ],
+          "logic": "assert PAYMENT_INSTRUCTION.payment_date <= DRAWDOWN_INSTRUCTION.drawdown_date",
+          "note": "支付指令的付款日期，应当不晚于提款日期"
+        }
+      ]
+    },
+    {
+      "id": "SUPPORTING__SELLER",
+      "sheet": "支持性文件交叉校验",
+      "category": "支持性文件交叉校验",
+      "compare_field": "销售方 / 卖方 / 服务提供方",
+      "field": "seller",
+      "docs": [
+        "COMMERCIAL_CONTRACT",
+        "COMMERCIAL_ORDER",
+        "WAYBILL",
+        "PROFORMA_INVOICE",
+        "PAYMENT_INSTRUCTION",
+        "CUSTOMS_DECLARATION",
+        "FACILITY_LETTER"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "WAYBILL",
+            "PROFORMA_INVOICE",
+            "PAYMENT_INSTRUCTION"
+          ],
+          "logic": "assert all_equal([COMMERCIAL_CONTRACT.seller, COMMERCIAL_ORDER.seller, WAYBILL.seller, PROFORMA_INVOICE.seller]) and that == PAYMENT_INSTRUCTION.payee",
+          "note": "同一套商业合同、订单、运单、形式发票的销售方名称应当一致，且与支付指令的收款方相符"
+        },
+        {
+          "seq": 2,
+          "must_do": 0,
+          "docs": [
+            "CUSTOMS_DECLARATION"
+          ],
+          "logic": "CUSTOMS_DECLARATION.transport_party (经营单位/收发货人) may be transport party, not strictly equal to seller",
+          "note": "报关单的主体可能为运输方，不强制与销售方一致",
+          "manual_note": "只说是可能，检查结果对与错都没用"
+        },
+        {
+          "seq": 3,
+          "must_do": 0,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "FACILITY_LETTER"
+          ],
+          "logic": "check seller is related party / intra-group of FACILITY_LETTER.borrower",
+          "note": "检查销售方是否与借款人是关联方或集团内公司",
+          "manual_note": "做不到，没有数据源"
+        },
+        {
+          "seq": 4,
+          "must_do": 0,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "PROFORMA_INVOICE"
+          ],
+          "logic": "check seller_country not in SANCTIONED_COUNTRIES",
+          "note": "检查销售方国别是否落入制裁国家范围",
+          "manual_note": "梳理字段不对，需要调整"
+        }
+      ]
+    },
+    {
+      "id": "SUPPORTING__BUYER",
+      "sheet": "支持性文件交叉校验",
+      "category": "支持性文件交叉校验",
+      "compare_field": "收货方 / 买方 / 服务接收方",
+      "field": "buyer",
+      "docs": [
+        "COMMERCIAL_CONTRACT",
+        "COMMERCIAL_ORDER",
+        "WAYBILL",
+        "PROFORMA_INVOICE",
+        "CUSTOMS_DECLARATION",
+        "FACILITY_LETTER"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "WAYBILL",
+            "PROFORMA_INVOICE",
+            "FACILITY_LETTER"
+          ],
+          "logic": "assert all_equal([COMMERCIAL_CONTRACT.buyer, COMMERCIAL_ORDER.buyer, WAYBILL.buyer, PROFORMA_INVOICE.buyer]) and that == FACILITY_LETTER.borrower",
+          "note": "同一套商业合同、订单、运单、形式发票的收货方名称应当一致，且与借款人相符",
+          "manual_note": "借款人从哪里来？"
+        },
+        {
+          "seq": 2,
+          "must_do": 0,
+          "docs": [
+            "CUSTOMS_DECLARATION"
+          ],
+          "logic": "CUSTOMS_DECLARATION.transport_party (经营单位/收发货人) may be transport party, not strictly equal to buyer",
+          "note": "报关单的主体可能为运输方，不强制与收货方一致",
+          "manual_note": "只说是可能，检查结果对与错都没用"
+        }
+      ]
+    },
+    {
+      "id": "SUPPORTING__FUND_FLOW",
+      "sheet": "支持性文件交叉校验",
+      "category": "支持性文件交叉校验",
+      "compare_field": "贷款去向（国别）",
+      "field": "payee_bank_country",
+      "docs": [
+        "PAYMENT_INSTRUCTION",
+        "WAYBILL",
+        "CUSTOMS_DECLARATION",
+        "COMMERCIAL_CONTRACT",
+        "COMMERCIAL_ORDER",
+        "PROFORMA_INVOICE"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "PAYMENT_INSTRUCTION",
+            "WAYBILL",
+            "CUSTOMS_DECLARATION"
+          ],
+          "logic": "assert PAYMENT_INSTRUCTION.payee_bank_country == WAYBILL.country_of_departure == CUSTOMS_DECLARATION.country_of_departure",
+          "note": "支付指令的收款人银行所在国家，应与运单、报关单的『启运国』相同"
+        },
+        {
+          "seq": 2,
+          "must_do": 0,
+          "docs": [
+            "PAYMENT_INSTRUCTION",
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "PROFORMA_INVOICE"
+          ],
+          "logic": "assert PAYMENT_INSTRUCTION.payee_bank_country == bank_country_in([COMMERCIAL_CONTRACT, COMMERCIAL_ORDER, PROFORMA_INVOICE])",
+          "note": "支付指令的收款人银行所在国家，应与商业合同、订单、形式发票上涉及的收款人银行国家相同",
+          "manual_note": "字段好像没有"
+        },
+        {
+          "seq": 3,
+          "must_do": null,
+          "docs": [
+            "PAYMENT_INSTRUCTION",
+            "WAYBILL",
+            "COMMERCIAL_CONTRACT"
+          ],
+          "logic": "check PAYMENT_INSTRUCTION.payee_bank_country / WAYBILL.country_of_departure / WAYBILL.destination not in SANCTIONED_COUNTRIES",
+          "note": "检查对应国家是否涉及制裁国"
+        }
+      ]
+    },
+    {
+      "id": "SUPPORTING__AMOUNT",
+      "sheet": "支持性文件交叉校验",
+      "category": "支持性文件交叉校验",
+      "compare_field": "金额",
+      "field": "amount",
+      "docs": [
+        "COMMERCIAL_CONTRACT",
+        "COMMERCIAL_ORDER",
+        "WAYBILL",
+        "CUSTOMS_DECLARATION",
+        "PROFORMA_INVOICE",
+        "PAYMENT_INSTRUCTION"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "WAYBILL",
+            "CUSTOMS_DECLARATION",
+            "PROFORMA_INVOICE",
+            "PAYMENT_INSTRUCTION"
+          ],
+          "logic": "for each seller: assert PAYMENT_INSTRUCTION.amount <= PROFORMA_INVOICE.amount and <= CUSTOMS_DECLARATION.amount and <= WAYBILL.amount and <= COMMERCIAL_ORDER.amount and <= COMMERCIAL_CONTRACT.amount",
+          "note": "同一个销售方的支付指令金额，应小于等于形式发票、报关单、运单、商业订单、商业合同的金额"
+        },
+        {
+          "seq": 2,
+          "must_do": null,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "PROFORMA_INVOICE"
+          ],
+          "logic": "assert COMMERCIAL_CONTRACT.amount >= COMMERCIAL_ORDER.amount >= PROFORMA_INVOICE.amount",
+          "note": "同一套商业文件的金额量级应满足：合同≥订单≥发票，需考虑文件交叉、部分货品的情况",
+          "manual_note": "先不考虑文件交叉、部分货品的情况"
+        }
+      ]
+    },
+    {
+      "id": "SUPPORTING__QUANTITY",
+      "sheet": "支持性文件交叉校验",
+      "category": "支持性文件交叉校验",
+      "compare_field": "货物数量",
+      "field": "quantity",
+      "docs": [
+        "COMMERCIAL_CONTRACT",
+        "COMMERCIAL_ORDER",
+        "WAYBILL",
+        "CUSTOMS_DECLARATION",
+        "PROFORMA_INVOICE"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "WAYBILL",
+            "CUSTOMS_DECLARATION",
+            "PROFORMA_INVOICE"
+          ],
+          "logic": "assert PROFORMA_INVOICE.quantity <= min(CUSTOMS_DECLARATION.quantity, WAYBILL.quantity, COMMERCIAL_ORDER.quantity, COMMERCIAL_CONTRACT.quantity)",
+          "note": "形式发票的货物数量，应小于等于报关单、运单、订单、商业合同中的数量"
+        }
+      ]
+    },
+    {
+      "id": "SUPPORTING__UNIT_PRICE",
+      "sheet": "支持性文件交叉校验",
+      "category": "支持性文件交叉校验",
+      "compare_field": "货物单价",
+      "field": "unit_price",
+      "docs": [
+        "COMMERCIAL_CONTRACT",
+        "COMMERCIAL_ORDER",
+        "CUSTOMS_DECLARATION",
+        "PROFORMA_INVOICE"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "PROFORMA_INVOICE",
+            "CUSTOMS_DECLARATION"
+          ],
+          "logic": "assert PROFORMA_INVOICE.unit_price == CUSTOMS_DECLARATION.unit_price",
+          "note": "同一套材料中，形式发票的货物单价应等于报关单单价"
+        },
+        {
+          "seq": 2,
+          "must_do": null,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "PROFORMA_INVOICE"
+          ],
+          "logic": "if COMMERCIAL_CONTRACT and COMMERCIAL_ORDER have fixed unit_price and no floating clause: assert PROFORMA_INVOICE.unit_price == COMMERCIAL_ORDER.unit_price == COMMERCIAL_CONTRACT.unit_price; elif floating clause exists: assert floating_clause_present()",
+          "note": "若商业合同和商业订单有明确货物单价且无浮动条款，形式发票单价应等于订单、合同单价；若商业合同和商业订单有浮动单价条款，校验浮动条款是否存在即可"
+        },
+        {
+          "seq": 4,
+          "must_do": 0,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "CUSTOMS_DECLARATION",
+            "PROFORMA_INVOICE"
+          ],
+          "logic": "handle tax_inclusive vs tax_exclusive unit_price",
+          "note": "注意区分含税金额与不含税金额",
+          "manual_note": "不知道怎么区分，文件形式不知道"
+        }
+      ]
+    },
+    {
+      "id": "SUPPORTING__VALIDITY",
+      "sheet": "支持性文件交叉校验",
+      "category": "支持性文件交叉校验",
+      "compare_field": "有效性（盖章 / 签字）",
+      "field": "validity_seal_signature",
+      "docs": [
+        "COMMERCIAL_CONTRACT",
+        "COMMERCIAL_ORDER",
+        "PROFORMA_INVOICE"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": 0,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "PROFORMA_INVOICE"
+          ],
+          "logic": "if has_effective_clause(doc): assert meets_effective_clause()",
+          "note": "若文件有相应生效条款，检查是否符合条款要求",
+          "manual_note": "文件文案形式不知道"
+        },
+        {
+          "seq": 2,
+          "must_do": 0,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "PROFORMA_INVOICE"
+          ],
+          "logic": "assert same_company_same_type_seal_identical([COMMERCIAL_CONTRACT, COMMERCIAL_ORDER, PROFORMA_INVOICE]) (公章 / 财务章样式一致)",
+          "note": "同一公司的同性质印章（公章或财务章）样式应当一致"
+        },
+        {
+          "seq": 3,
+          "must_do": 0,
+          "docs": [
+            "COMMERCIAL_CONTRACT"
+          ],
+          "logic": "if no effective_clause: suggest_by_local_rule()",
+          "note": "若无生效条款，参考当地普适性规则给出校验建议",
+          "manual_note": "当地暂时不考虑，只考虑北大法宝给的信息"
+        },
+        {
+          "seq": 4,
+          "must_do": null,
+          "docs": [
+            "COMMERCIAL_CONTRACT"
+          ],
+          "logic": "check contract effective period & renewal requirement against COMMERCIAL_CONTRACT.date -> confirm not expired",
+          "note": "检查合同生效期以及续期要求，确认是否已经过期失效"
+        }
+      ]
+    },
+    {
+      "id": "SUPPORTING__PAYEE_ACCOUNT",
+      "sheet": "支持性文件交叉校验",
+      "category": "支持性文件交叉校验",
+      "compare_field": "收款账号",
+      "field": "payee_account",
+      "docs": [
+        "COMMERCIAL_CONTRACT",
+        "COMMERCIAL_ORDER",
+        "PAYMENT_INSTRUCTION"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER",
+            "PAYMENT_INSTRUCTION"
+          ],
+          "logic": "if COMMERCIAL_CONTRACT.payee_account is not null or COMMERCIAL_ORDER.payee_account is not null: assert PAYMENT_INSTRUCTION {payee_bank_code, payee_bank_name, payee_account, payee} == (COMMERCIAL_CONTRACT or COMMERCIAL_ORDER).payee_account info",
+          "note": "若商业合同 / 订单中有收款账号信息（户名、账号、银行），检查支付指令中的收款信息是否与其一致"
+        }
+      ]
+    },
+    {
+      "id": "SUPPORTING__PAYMENT_METHOD",
+      "sheet": "支持性文件交叉校验",
+      "category": "支持性文件交叉校验",
+      "compare_field": "支付方式",
+      "field": "payment_method",
+      "docs": [
+        "COMMERCIAL_CONTRACT",
+        "COMMERCIAL_ORDER"
+      ],
+      "sub_rules": [
+        {
+          "seq": 1,
+          "must_do": null,
+          "docs": [
+            "COMMERCIAL_CONTRACT",
+            "COMMERCIAL_ORDER"
+          ],
+          "logic": "if COMMERCIAL_CONTRACT.payment_method is not null or COMMERCIAL_ORDER.payment_method is not null: assert payment_method in ['转账', 'TT', '现金']",
+          "note": "若商业合同 / 订单中有明确的支付方式，检查该方式是否为转账 / TT / 现金等合规方式"
+        }
+      ]
+    }
+  ]
+}

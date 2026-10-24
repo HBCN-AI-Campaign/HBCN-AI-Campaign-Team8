@@ -219,11 +219,16 @@ def _extract_facility_letter(text: str, blocks: list[dict]) -> list[dict]:
     v_cur, c_cur, src_cur = _find_with_source(t, ["允许币种", "Available Currency", "可提用币种"], blocks)
     return [
         _ft("borrower",           "借款人",        t, ["借款人", "Borrower"],                         blocks),
+        _ft("date",               "授信函订立日期", t, ["订立日期", "签署日期", "Date of", "Dated"],    blocks),
+        _ft("latest_date",        "最新日期",      t, ["最新日期", "修订日期", "Latest Date", "Amended"], blocks),
         _ft("lender_branch",      "贷款人分行",     t, ["贷款人", "贷款分行", "Lender"],               blocks),
         _ft("facility",           "授信品种",       t, ["授信品种", "授信类型", "Facility Type"],      blocks),
         _fc("facility_amount",    "授信额度",       t, ["授信额度", "Facility Amount", "授信金额"],    blocks),
         _f("allowed_currencies",  "允许币种",       [v_cur] if v_cur else None, "list",
            c_cur if v_cur else 0.5, src_cur),
+        _ft("interest_period",    "利息期",         t, ["利息期", "Interest Period"],              blocks),
+        _ft("interest_rate",      "利率",           t, ["利率", "Interest Rate"],                  blocks),
+        _fc("disbursement_threshold", "受托支付阈值", t, ["受托支付", "支付阈值", "Threshold"],      blocks),
         _ft("term",               "授信期限",       t, ["授信期限", "Term", "有效期"],                 blocks),
         _ft("purpose",            "资金用途范围",    t, ["资金用途", "用途", "Purpose"],                blocks),
     ]
@@ -236,9 +241,14 @@ def _extract_drawdown(text: str, abs_path: str, blocks: list[dict]) -> list[dict
             return [_from_ocr_field(f, blocks) for f in ocr_fields]
     t = text
     return [
+        _ft("date",                "申请书日期", t, ["申请日期", "填单日期", "Date"],              blocks),
+        _ft("branch",              "分支行",    t, ["分支行", "分行", "Branch"],                 blocks),
+        _ft("referenced_facility_letter_date", "授信函日期", t, ["授信函日期", "授信函订立", "Facility Letter Date"], blocks),
         _ft("currency",            "提款币种",  t, ["币种", "Currency"],                        blocks),
         _fc("amount",              "提款金额",  t, ["金额", "Amount"],                          blocks),
         _ft("tranche",             "授信段",    t, ["授信段", "Tranche"],                       blocks),
+        _ft("interest_period",     "利息期",    t, ["利息期", "Interest Period"],              blocks),
+        _ft("interest_rate",       "贷款利率",  t, ["利率", "Interest Rate"],                  blocks),
         _ft("drawdown_date",       "拟提款日",  t, ["拟提款日", "提款日", "Utilization Date"],  blocks),
         _ft("maturity_date",       "到期日",    t, ["到期日", "Maturity Date"],                 blocks),
         _ft("purpose",             "提款用途",  t, ["用途", "Purpose"],                         blocks),
@@ -458,3 +468,94 @@ def parse_files(uploads: list) -> dict:
         "suggested_amount": amount,
         "documents": documents,
     }
+
+
+# ===========================================================================
+# 解析 Agent 的两步职责（供路由/编排调用）
+#
+#   第 1 步：OCR 识别 + 落库 —— ocr_and_store()
+#       调用 OCR 服务识别每个文件，产出结构化字段，写入 t_doc（单据）与
+#       t_doc_field（字段）。当前 ORM 切片用 Document.fields(JSON) 承载字段、
+#       field_sources(JSON) 承载定位，等价于「一个 t_doc + 其下多条 t_doc_field」。
+#
+#   第 2 步：暴露参与规则核对的字段 —— extract_review_fields()
+#       按 task_id 取该任务所有单据的字段，筛出「参与规则核对」的内容，
+#       组织成供下游规则核对（对方 rule_check API 或本地 rule_engine）消费的结构。
+# ===========================================================================
+
+def _fields_to_dicts(parsed_fields: list[dict]) -> tuple[dict, dict]:
+    """把 ParsedField dict 列表拆成 (fields, field_sources)。
+
+    - fields        : {field_key: value}            —— 对应多条 t_doc_field 的值
+    - field_sources : {field_key: {page, bbox}}     —— 字段在原件 PDF 的定位
+    """
+    fields: dict = {}
+    field_sources: dict = {}
+    for f in parsed_fields:
+        key = f.get("key")
+        if not key:
+            continue
+        fields[key] = f.get("value")
+        src = f.get("source")
+        if src and src.get("bbox"):
+            field_sources[key] = {"page": src.get("page", 1), "bbox": src["bbox"]}
+    return fields, field_sources
+
+
+def ocr_and_store(db, task, uploads: list) -> list:
+    """第 1 步：对上传文件做 OCR 识别，并把结果落库到 task 的单据/字段。
+
+    入参：
+      - db     : SQLAlchemy Session
+      - task   : 已建的 ReviewTask（需已 add 到 session；本函数不 commit）
+      - uploads: 同 parse_files 入参（list[dict{filename,pdf_url}] 或 list[str]）
+
+    行为：调用 parse_files()（内部走 OCR 服务），为每个识别出的单据创建一个
+    Document（含 fields 与 field_sources，等价于 t_doc + 若干 t_doc_field）。
+
+    返回：新建的 Document 列表。调用方负责 flush/commit。
+    """
+    from . import models
+
+    parsed = parse_files(uploads)
+    docs: list = []
+    for d in parsed.get("documents", []):
+        fields, field_sources = _fields_to_dicts(d.get("fields", []))
+        doc = models.Document(
+            doc_code=d["doc_code"],
+            type_code=d["type_code"],
+            fields=fields,
+            pdf_file=d.get("pdf_file"),
+            field_sources=field_sources,
+        )
+        task.documents.append(doc)
+        docs.append(doc)
+    log.info("ocr_and_store: task=%s 落库 %d 份单据", getattr(task, "task_code", "?"), len(docs))
+    return docs
+
+
+def extract_review_fields(db, task_id: int) -> dict:
+    """第 2 步：按 task_id 暴露该任务参与规则核对的字段。
+
+    从库里读取该任务的全部单据，输出下游规则核对所需的结构（与对方
+    rule_check API 的请求体、本地 rule_engine 的取数口径一致）：
+
+        {
+          "task_code": "...",
+          "drawdown_currency": "...",
+          "drawdown_amount": ...,
+          "documents": [
+            {"doc_code","type_code","pdf_file","fields":{...},"field_sources":{...}}, ...
+          ]
+        }
+
+    「参与规则核对的字段」即各单据 OCR 落库的全部结构化字段——本地/对方规则
+    引擎各自按 type_code 取用其关心的 field_key，因此这里整单暴露即可。
+    """
+    from . import models
+    from .rule_check_client import to_payload
+
+    task = db.query(models.ReviewTask).filter_by(id=task_id).first()
+    if not task:
+        return {"task_code": None, "documents": []}
+    return to_payload(task, task.documents)

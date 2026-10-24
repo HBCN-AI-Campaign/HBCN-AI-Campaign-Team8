@@ -229,10 +229,28 @@ class R_DrawdownPurpose(Rule):
                               why=f"提款用途“{purpose}”命中禁止用途：{'、'.join(hit)}。",
                               suggestion="资金不得用于禁止用途，要求更正用途或驳回。",
                               detail=[["提款用途", purpose, "bad"], ["命中禁止项", "、".join(hit), "bad"]])
-        # 禁止清单硬核对通过；但"是否落在 FOL 用途范围内"属语义包含判断 → 由专项审核兜底
+        # seq2（must_do=1）：提款用途应落在 FOL 约定用途范围内。
+        # FOL 用途为自由文本，做关键词包含判断（互为子串即视为在范围内）；
+        # 两者有交集 → PASS；完全无交集 → WARN（措辞差异需人工/专项确认，不直接判 FAIL）。
+        fol_purpose = _norm(fol.get("purpose"))
+        loc_dd = docs.locate("DRAWDOWN_INSTRUCTION", "purpose")
+        loc_fol = docs.locate("FACILITY_LETTER", "purpose")
+        if fol_purpose:
+            within = purpose in fol_purpose or fol_purpose in purpose
+            if within:
+                return RuleResult(self.id, self.name, self.dimension, Status.PASS,
+                                  why=f"提款用途“{purpose}”未命中禁止清单，且落在 FOL 用途范围“{fol_purpose}”内。",
+                                  detail=[["提款用途", purpose, "", loc_dd],
+                                          ["FOL 用途范围", fol_purpose, "", loc_fol]])
+            return RuleResult(self.id, self.name, self.dimension, Status.WARN,
+                              why=f"提款用途“{purpose}”未命中禁止清单，但与 FOL 用途范围“{fol_purpose}”字面无交集，需确认是否仍在授信用途内。",
+                              suggestion="核对提款用途是否属于 FOL 约定用途范围；措辞差异较大时由专项审核语义研判。",
+                              detail=[["提款用途", purpose, "bad", loc_dd],
+                                      ["FOL 用途范围", fol_purpose, "bad", loc_fol]])
+        # FOL 未提供用途范围 → 仅完成禁止清单硬核对，范围比对交专项
         return RuleResult(self.id, self.name, self.dimension, Status.PASS,
-                          why=f"提款用途“{purpose}”未命中禁止用途清单；与 FOL 用途范围的语义包含关系由专项审核进一步研判。",
-                          detail=[["提款用途", purpose, ""], ["FOL 用途范围", _norm(fol.get("purpose")), ""]])
+                          why=f"提款用途“{purpose}”未命中禁止用途清单；FOL 未列明用途范围，范围比对由专项审核研判。",
+                          detail=[["提款用途", purpose, "", loc_dd], ["FOL 用途范围", "—", ""]])
 
 
 @register
@@ -282,6 +300,224 @@ class R_DrawdownDates(Rule):
                 f"是否为中国及 {_norm(dd.get('currency')) or '对应币种'} 节假日，需联网节假日日历判定；提款日不应早于当前日期。",
             suggestion="由专项审核调用节假日日历核验提款日/到期日，并校验期限是否超出 FOL 要求。",
         )
+
+
+# FOL 中表示“由贷款人另行同意/后续确定”的自由表述，命中则该比对项跳过。
+_AGREED_BY_LENDER = ("贷款人同意", "另行同意", "由贷款人", "续借日前确定", "agreed by the lender",
+                     "as agreed", "to be agreed", "确定并载于")
+
+
+def _is_agreed_by_lender(s: str) -> bool:
+    low = s.lower()
+    return any(k.lower() in low for k in _AGREED_BY_LENDER)
+
+
+@register
+class R_DrawdownDate(Rule):
+    """申请书『日期』时效校验：不早于 FOL 订立日、不早于拟提款日。"""
+    id = "DRAWDOWN__DATE"
+    name = "申请书日期不早于授信函订立日/提款日"
+    dimension = "A"
+
+    def evaluate(self, docs: DocBundle) -> RuleResult:
+        dd = docs.first("DRAWDOWN_INSTRUCTION")
+        fol = docs.first("FACILITY_LETTER")
+        if not dd or not fol:
+            return _skip(self.id, self.name, self.dimension, "缺少提款指令或授信函，无法校验。")
+        d_app = _d(dd.get("date"))
+        if d_app is None:
+            # seq3：日期为空 → 忽略该项
+            return _skip(self.id, self.name, self.dimension, "提款指令未填『日期』，按规则忽略该比对。")
+        loc = docs.locate("DRAWDOWN_INSTRUCTION", "date")
+        fol_date = _d(fol.get("date"))
+        dd_date = _d(dd.get("drawdown_date"))
+        bad = []
+        # seq1：date >= FOL.date
+        if fol_date and d_app < fol_date:
+            bad.append(["申请书日期", _norm(dd.get("date")), "bad", loc])
+            bad.append(["授信函订立日期", _norm(fol.get("date")), "bad"])
+        # seq2：date >= drawdown_date
+        if dd_date and d_app < dd_date:
+            bad.append(["申请书日期", _norm(dd.get("date")), "bad", loc])
+            bad.append(["拟提款日", _norm(dd.get("drawdown_date")), "bad"])
+        if bad:
+            return RuleResult(self.id, self.name, self.dimension, Status.FAIL,
+                              why=f"申请书日期“{_norm(dd.get('date'))}”早于授信函订立日期或拟提款日。",
+                              suggestion="申请书日期应不早于授信函订立日期，且不早于拟提款日。",
+                              detail=bad)
+        return RuleResult(self.id, self.name, self.dimension, Status.PASS,
+                          why=f"申请书日期“{_norm(dd.get('date'))}”不早于授信函订立日期“{_norm(fol.get('date')) or '—'}”及拟提款日“{_norm(dd.get('drawdown_date')) or '—'}”。",
+                          detail=[["申请书日期", _norm(dd.get("date")), "", loc],
+                                  ["授信函订立日期", _norm(fol.get("date")) or "—", ""],
+                                  ["拟提款日", _norm(dd.get("drawdown_date")) or "—", ""]])
+
+
+@register
+class R_DrawdownFacilityLetterDate(Rule):
+    """提款指令引用的授信函日期，应为 FOL 最初或最新订立日期。"""
+    id = "DRAWDOWN_VS_FACILITY_LETTER__FACILITY_LETTER_DATE"
+    name = "引用授信函日期 ∈ {FOL订立日, FOL最新日}"
+    dimension = "A"
+
+    def evaluate(self, docs: DocBundle) -> RuleResult:
+        dd = docs.first("DRAWDOWN_INSTRUCTION")
+        fol = docs.first("FACILITY_LETTER")
+        if not dd or not fol:
+            return _skip(self.id, self.name, self.dimension, "缺少提款指令或授信函，无法校验。")
+        ref = _d(dd.get("referenced_facility_letter_date"))
+        if ref is None:
+            return _skip(self.id, self.name, self.dimension, "提款指令未填引用授信函日期，跳过。")
+        candidates = [d for d in (_d(fol.get("date")), _d(fol.get("latest_date"))) if d]
+        if not candidates:
+            return _skip(self.id, self.name, self.dimension, "FOL 未提供订立/最新日期，无法比对。")
+        loc = docs.locate("DRAWDOWN_INSTRUCTION", "referenced_facility_letter_date")
+        if ref in candidates:
+            return RuleResult(self.id, self.name, self.dimension, Status.PASS,
+                              why=f"引用授信函日期“{_norm(dd.get('referenced_facility_letter_date'))}”与 FOL 订立/最新日期一致。",
+                              detail=[["引用授信函日期", _norm(dd.get("referenced_facility_letter_date")), "", loc],
+                                      ["FOL 订立日期", _norm(fol.get("date")) or "—", ""],
+                                      ["FOL 最新日期", _norm(fol.get("latest_date")) or "—", ""]])
+        return RuleResult(self.id, self.name, self.dimension, Status.FAIL,
+                          why=f"引用授信函日期“{_norm(dd.get('referenced_facility_letter_date'))}”与 FOL 订立/最新日期均不符。",
+                          suggestion="核实提款指令引用的授信函日期，应等于 FOL 最初或最新订立日期。",
+                          detail=[["引用授信函日期", _norm(dd.get("referenced_facility_letter_date")), "bad", loc],
+                                  ["FOL 订立日期", _norm(fol.get("date")) or "—", "bad"],
+                                  ["FOL 最新日期", _norm(fol.get("latest_date")) or "—", "bad"]])
+
+
+@register
+class R_DrawdownFacility(Rule):
+    """拟使用授信内容：必填，且应在 FOL 授信内容中有一致表述。"""
+    id = "DRAWDOWN_VS_FACILITY_LETTER__FACILITY"
+    name = "拟使用授信内容与 FOL 一致"
+    dimension = "A"
+
+    def evaluate(self, docs: DocBundle) -> RuleResult:
+        dd = docs.first("DRAWDOWN_INSTRUCTION")
+        fol = docs.first("FACILITY_LETTER")
+        if not dd or not fol:
+            return _skip(self.id, self.name, self.dimension, "缺少提款指令或授信函，无法校验。")
+        facility = _norm(dd.get("facility"))
+        loc = docs.locate("DRAWDOWN_INSTRUCTION", "facility")
+        # seq1：必填
+        if not facility:
+            return RuleResult(self.id, self.name, self.dimension, Status.FAIL,
+                              why="提款指令未填『拟使用的授信内容』（必填）。",
+                              suggestion="要求补填拟使用的授信内容。")
+        fol_facility = _norm(fol.get("facility"))
+        if not fol_facility:
+            return _skip(self.id, self.name, self.dimension, "FOL 未列明授信内容，字面比对跳过。")
+        # seq2：语义一致（硬核做子串近似，大的措辞差异交专项）
+        if facility == fol_facility or facility in fol_facility or fol_facility in facility:
+            return RuleResult(self.id, self.name, self.dimension, Status.PASS,
+                              why=f"拟使用授信内容“{facility}”与 FOL 授信内容“{fol_facility}”表述一致。",
+                              detail=[["拟使用授信内容", facility, "", loc], ["FOL 授信内容", fol_facility, ""]])
+        return RuleResult(self.id, self.name, self.dimension, Status.WARN,
+                          why=f"拟使用授信内容“{facility}”与 FOL 授信内容“{fol_facility}”字面无交集，需确认是否同一授信。",
+                          suggestion="核对授信内容措辞；差异较大时由专项审核做中英文/语义研判。",
+                          detail=[["拟使用授信内容", facility, "bad", loc], ["FOL 授信内容", fol_facility, "bad"]])
+
+
+@register
+class R_DrawdownInterestPeriod(Rule):
+    """利息期：可空；若填写且 FOL 为可选列表，须命中其一；FOL 为『另行同意』则跳过。"""
+    id = "DRAWDOWN_VS_FACILITY_LETTER__INTEREST_PERIOD"
+    name = "利息期 ∈ FOL 可选利息期"
+    dimension = "A"
+
+    def evaluate(self, docs: DocBundle) -> RuleResult:
+        dd = docs.first("DRAWDOWN_INSTRUCTION")
+        fol = docs.first("FACILITY_LETTER")
+        if not dd or not fol:
+            return _skip(self.id, self.name, self.dimension, "缺少提款指令或授信函，无法校验。")
+        dd_ip = _norm(dd.get("interest_period"))
+        if not dd_ip:
+            return _skip(self.id, self.name, self.dimension, "提款指令未填利息期（允许为空），跳过。")
+        fol_ip = fol.get("interest_period")
+        if fol_ip is None or (isinstance(fol_ip, str) and not fol_ip.strip()):
+            return _skip(self.id, self.name, self.dimension, "FOL 未列明利息期，跳过。")
+        # seq4：FOL 为“另行同意”类表述 → 跳过
+        fol_ip_text = fol_ip if isinstance(fol_ip, str) else "、".join(str(x) for x in fol_ip)
+        if _is_agreed_by_lender(fol_ip_text):
+            return _skip(self.id, self.name, self.dimension, "FOL 利息期约定为『由贷款人另行同意』，按规则跳过。")
+        loc = docs.locate("DRAWDOWN_INSTRUCTION", "interest_period")
+        # seq3：FOL 为可选列表 → 命中其一
+        options = [str(x).strip() for x in fol_ip] if isinstance(fol_ip, (list, tuple)) \
+            else [p.strip() for p in re.split(r"[、,/，]", fol_ip_text) if p.strip()]
+        hit = any(dd_ip == o or dd_ip in o or o in dd_ip for o in options)
+        if hit:
+            return RuleResult(self.id, self.name, self.dimension, Status.PASS,
+                              why=f"提款利息期“{dd_ip}”属于 FOL 可选利息期（{'、'.join(options)}）。",
+                              detail=[["提款利息期", dd_ip, "", loc], ["FOL 可选利息期", "、".join(options), ""]])
+        return RuleResult(self.id, self.name, self.dimension, Status.FAIL,
+                          why=f"提款利息期“{dd_ip}”不在 FOL 可选利息期（{'、'.join(options)}）范围内。",
+                          suggestion="利息期须为 FOL 列明可选值之一。",
+                          detail=[["提款利息期", dd_ip, "bad", loc], ["FOL 可选利息期", "、".join(options), "bad"]])
+
+
+@register
+class R_DrawdownInterestRate(Rule):
+    """贷款利率：必填；FOL 为『另行同意』则跳过；精确组合比对涉及多字段 → 专项。"""
+    id = "DRAWDOWN_VS_FACILITY_LETTER__INTEREST_RATE"
+    name = "贷款利率必填并与 FOL 一致"
+    dimension = "A"
+
+    def evaluate(self, docs: DocBundle) -> RuleResult:
+        dd = docs.first("DRAWDOWN_INSTRUCTION")
+        fol = docs.first("FACILITY_LETTER")
+        if not dd or not fol:
+            return _skip(self.id, self.name, self.dimension, "缺少提款指令或授信函，无法校验。")
+        rate = _norm(dd.get("interest_rate"))
+        loc = docs.locate("DRAWDOWN_INSTRUCTION", "interest_rate")
+        # seq1：必填
+        if not rate:
+            return RuleResult(self.id, self.name, self.dimension, Status.FAIL,
+                              why="提款指令未填『贷款利率』（必填）。",
+                              suggestion="要求补填贷款利率。")
+        fol_rate = _norm(fol.get("interest_rate"))
+        # seq3：FOL 为“另行同意”类表述 → 范围比对跳过，仅完成必填校验
+        if fol_rate and _is_agreed_by_lender(fol_rate):
+            return RuleResult(self.id, self.name, self.dimension, Status.PASS,
+                              why=f"贷款利率“{rate}”已填写；FOL 约定利率为『由贷款人另行同意』，范围比对按规则跳过。",
+                              detail=[["提款贷款利率", rate, "", loc], ["FOL 利率", fol_rate, ""]])
+        if not fol_rate:
+            return RuleResult(self.id, self.name, self.dimension, Status.PASS,
+                              why=f"贷款利率“{rate}”已填写；FOL 未单列利率，精确组合比对交专项。",
+                              detail=[["提款贷款利率", rate, "", loc], ["FOL 利率", "—", ""]])
+        # seq2（must_do=0）：利率由多选项组合而成，精确比对复杂 → 做字面一致快速核对，差异交专项
+        if rate == fol_rate or rate in fol_rate or fol_rate in rate:
+            return RuleResult(self.id, self.name, self.dimension, Status.PASS,
+                              why=f"贷款利率“{rate}”与 FOL 利率“{fol_rate}”字面一致。",
+                              detail=[["提款贷款利率", rate, "", loc], ["FOL 利率", fol_rate, ""]])
+        return _handoff(self.id, self.name, self.dimension,
+                        why=f"贷款利率“{rate}”与 FOL 利率“{fol_rate}”字面不一致；利率常由多选项组合而成，需专项逐项核对。",
+                        suggestion="由专项审核按 FOL 利率条款逐项还原组合利率后比对。")
+
+
+@register
+class R_DrawdownMaturityDate(Rule):
+    """到期日：必填；节假日判定交专项；期限≤FOL 特别条款最长期限。"""
+    id = "DRAWDOWN_VS_FACILITY_LETTER__MATURITY_DATE"
+    name = "到期日必填且期限不超 FOL 约定"
+    dimension = "A"
+
+    def evaluate(self, docs: DocBundle) -> RuleResult:
+        dd = docs.first("DRAWDOWN_INSTRUCTION")
+        fol = docs.first("FACILITY_LETTER")
+        if not dd or not fol:
+            return _skip(self.id, self.name, self.dimension, "缺少提款指令或授信函，无法校验。")
+        mat = _d(dd.get("maturity_date"))
+        loc = docs.locate("DRAWDOWN_INSTRUCTION", "maturity_date")
+        # seq1：必填
+        if mat is None:
+            return RuleResult(self.id, self.name, self.dimension, Status.FAIL,
+                              why="提款指令未填『到期日』（必填）。",
+                              suggestion="要求补填贷款到期日。")
+        # 节假日判定（seq2）依赖外部日历 → 专项
+        return _handoff(self.id, self.name, self.dimension,
+                        why=f"到期日“{_norm(dd.get('maturity_date'))}”已填写；是否为中国及对应币种节假日需联网日历判定，"
+                            f"且『到期日-提款日』期限是否超 FOL 特别授信条款最长期限需结合条款研判。",
+                        suggestion="由专项审核核验到期日节假日，并校验期限是否超出 FOL 特别授信条款约定。")
 
 
 # ================================================================
@@ -389,6 +625,7 @@ class R_SupportingContractNo(Rule):
         base = _norm(ct.get("contract_no"))
         rows = [["商业合同 合同号", base, ""]]
         bad = False
+        # seq1（must_do=1）：订单/运单/报关/发票引用的合同号 == 商业合同号
         for tcode, label in [("COMMERCIAL_ORDER", "商业订单"), ("WAYBILL", "运单"),
                              ("CUSTOMS_DECLARATION", "报关单"), ("PROFORMA_INVOICE", "形式发票")]:
             for doc in docs.all(tcode):
@@ -397,12 +634,35 @@ class R_SupportingContractNo(Rule):
                     ok = cn == base
                     bad = bad or not ok
                     rows.append([f"{label} 合同号", cn, "" if ok else "bad"])
+        # seq2（must_do=1）：运单/形式发票引用的订单号 == 商业订单号
+        order = docs.first("COMMERCIAL_ORDER")
+        order_no = _norm(order.get("order_no")) if order else ""
+        if order_no:
+            rows.append(["商业订单 订单号", order_no, ""])
+            for tcode, label in [("WAYBILL", "运单"), ("PROFORMA_INVOICE", "形式发票")]:
+                for doc in docs.all(tcode):
+                    on = _norm(doc.get("order_no"))
+                    if on:
+                        ok = on == order_no
+                        bad = bad or not ok
+                        rows.append([f"{label} 订单号", on, "" if ok else "bad"])
+        # seq3（must_do=1）：报关单协议号 ∈ {合同号, 订单号, 形式发票号}
+        iv = docs.first("PROFORMA_INVOICE")
+        invoice_no = _norm(iv.get("invoice_no")) if iv else ""
+        for cd in docs.all("CUSTOMS_DECLARATION"):
+            cd_no = _norm(cd.get("contract_no"))
+            if cd_no:
+                allowed = [x for x in (base, order_no, invoice_no) if x]
+                ok = cd_no in allowed
+                bad = bad or not ok
+                rows.append(["报关单 协议号", cd_no, "" if ok else "bad"])
         if bad:
             return RuleResult(self.id, self.name, self.dimension, Status.FAIL,
-                              why="部分支持性文件引用的合同号与商业合同不一致，贸易背景勾稽存在断点。",
-                              suggestion="核实各单据合同号，须指向同一笔贸易合同。", detail=rows)
+                              why="部分支持性文件的合同号/订单号/报关协议号勾稽不一致，贸易背景存在断点。",
+                              suggestion="核实各单据编号：合同号须一致、订单号须一致、报关协议号须等于合同/订单/发票号之一。",
+                              detail=rows)
         return RuleResult(self.id, self.name, self.dimension, Status.PASS,
-                          why=f"各支持性文件合同号均与商业合同“{base}”勾稽一致。", detail=rows)
+                          why=f"各支持性文件合同号/订单号/报关协议号均勾稽一致（合同号 {base}）。", detail=rows)
 
 
 @register
@@ -454,8 +714,21 @@ class R_SupportingGoods(Rule):
                               why="各单据采购标的物描述不一致，贸易真实性存疑。",
                               suggestion="核实标的物，须在合同→订单→发票→运单→报关单间保持一致（允许包含关系）。",
                               detail=rows)
+        # seq5（must_do=1）：提款指令用途相对概括，与实际标的应为包含关系（用途 ⊇ 标的）
+        dd = docs.first("DRAWDOWN_INSTRUCTION")
+        dd_purpose = _norm(dd.get("purpose")) if dd else ""
+        if dd_purpose and base:
+            loc_pp = docs.locate("DRAWDOWN_INSTRUCTION", "purpose")
+            contains = base in dd_purpose or dd_purpose in base
+            if not contains:
+                rows.append(["提款用途", dd_purpose, "bad", loc_pp])
+                return RuleResult(self.id, self.name, self.dimension, Status.WARN,
+                                  why=f"各单据标的物一致（{base}），但与提款用途“{dd_purpose}”字面无包含关系，需确认用途是否涵盖该标的。",
+                                  suggestion="核对提款用途应概括涵盖贸易标的（用途 ⊇ 标的）；措辞差异较大时由专项审核语义研判。",
+                                  detail=rows)
+            rows.append(["提款用途", dd_purpose, "", loc_pp])
         return RuleResult(self.id, self.name, self.dimension, Status.PASS,
-                          why=f"各单据采购标的物一致（{base}）；跨语种/监管受限品名由专项审核翻译研判。", detail=rows)
+                          why=f"各单据采购标的物一致（{base}），且被提款用途涵盖；跨语种/监管受限品名由专项审核翻译研判。", detail=rows)
 
 
 @register

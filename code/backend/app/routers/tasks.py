@@ -8,6 +8,8 @@ from ..models import Role, TaskStatus, User
 from ..parse_agent import parse_files
 from ..review_agent import build_session
 from ..rule_engine import run_all, summarize
+from ..rule_engine.rule_meta import get_rule_meta
+from ..rule_orchestrator import run_rules
 from ..schemas import (
     AIResolveIn,
     AIResolveOut,
@@ -24,6 +26,23 @@ from ..schemas import (
     TaskOut,
 )
 from ..security import get_current_user, require_role
+
+
+def _result_out(r) -> CheckResultOut | None:
+    """把 CheckResult（ORM）映射为 DTO，附加展示用短字段/短规则/文件类型。
+
+    未登记（多方规则）返回 None，由调用方过滤掉——前端只展示单方/双方可比对项。
+    """
+    meta = get_rule_meta(r.rule_id)
+    if meta is None:
+        return None
+    status_value = r.status.value if hasattr(r.status, "value") else r.status
+    return CheckResultOut(
+        rule_id=r.rule_id, rule_name=r.rule_name, dimension=r.dimension,
+        status=status_value, why=r.why, suggestion=r.suggestion, detail=r.detail,
+        short_name=meta["short_name"], rule_text=meta["rule_text"],
+        doc1_type=meta["doc1_type"] or "", doc2_type=meta["doc2_type"] or "",
+    )
 
 
 def _task_out(task: "models.ReviewTask") -> TaskOut:
@@ -184,6 +203,7 @@ def create_task(
             models.Document(
                 doc_code=d.doc_code, type_code=d.type_code, fields=d.fields,
                 pdf_file=d.pdf_file, field_sources=d.field_sources,
+                field_confidences=d.field_confidences,
             )
         )
     db.add(task)
@@ -228,18 +248,26 @@ def _get_task(db: Session, task_code: str) -> models.ReviewTask:
 def _run_and_persist(db: Session, task: "models.ReviewTask") -> list:
     """对任务执行一次规则核对并落库（清空历史结果后重跑，幂等）。
 
-    返回实际落库（非 skip）的结果对象列表。调用方负责 commit。
+    规则核对由编排器决定来源：对方 rule_check 服务 ready 则调对方，
+    否则回退本地内置 rule_engine。返回实际落库（非 skip）的结果对象列表。
+    调用方负责 commit。
     """
     db.query(models.CheckResult).filter_by(task_id=task.id).delete()
-    results = run_all(task.documents)
+    results, source = run_rules(task, task.documents)
     persisted = []
     for r in results:
         if r.status.value == "skip":
             continue  # 不落库 skip，仅保留实际判定
+        meta = get_rule_meta(r.rule_id)  # None=多方规则，仍落库但展示时会被过滤
         db.add(models.CheckResult(
             task_id=task.id, rule_id=r.rule_id, rule_name=r.rule_name,
             dimension=r.dimension, status=r.status.value,
             why=r.why, suggestion=r.suggestion, detail=r.detail,
+            short_name=(meta or {}).get("short_name"),
+            rule_text=(meta or {}).get("rule_text"),
+            doc1_type=(meta or {}).get("doc1_type"),
+            doc2_type=(meta or {}).get("doc2_type"),
+            compare_type=("pairwise" if meta and meta.get("doc2_type") else "single") if meta else "multi",
         ))
         persisted.append(r)
     return persisted
@@ -283,7 +311,8 @@ def get_task_detail(
              "type_code": d.type_code.value if hasattr(d.type_code, "value") else str(d.type_code),
              "fields": d.fields,
              "pdf_file": d.pdf_file,
-             "field_sources": d.field_sources or {}}
+             "field_sources": d.field_sources or {},
+             "field_confidences": d.field_confidences or {}}
             for d in task.documents
         ],
         result_counts=counts,
@@ -308,13 +337,7 @@ def run_checks(
     return RunSummary(
         task_code=task_code,
         counts=summarize(persisted),
-        results=[
-            CheckResultOut(
-                rule_id=r.rule_id, rule_name=r.rule_name, dimension=r.dimension,
-                status=r.status.value, why=r.why, suggestion=r.suggestion, detail=r.detail,
-            )
-            for r in persisted
-        ],
+        results=[o for o in (_result_out(r) for r in persisted) if o is not None],
     )
 
 
@@ -339,10 +362,9 @@ def update_document_fields(
     if not doc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="单据不存在")
 
-    new_fields = dict(doc.fields or {})
+    # 逐字段更正：写回对应 DocField 行（保留定位 bbox/page，标记 is_edited/manual）
     for upd in payload.updates:
-        new_fields[upd.field_key] = upd.value
-    doc.fields = new_fields
+        doc.update_field(upd.field_key, upd.value, is_edited=True)
 
     # 字段变更 → 立即自动重新核对（改完即触发）；保持当前任务状态不变
     db.flush()
@@ -402,15 +424,13 @@ def supplement_task(
     if task.status != models.TaskStatus.NEED_SUPPLEMENT:
         raise HTTPException(status.HTTP_409_CONFLICT, detail="仅「待补件」的任务可以补件")
 
-    # 1) 字段级更正：按 doc_code 定位单据，重建 fields dict 以触发 JSON 列更新
+    # 1) 字段级更正：按 doc_code 定位单据，写回对应 DocField 行（保留定位，标记已编辑）
     docs_by_code = {d.doc_code: d for d in task.documents}
     for upd in payload.field_updates:
         d = docs_by_code.get(upd.doc_code)
         if not d:
             continue
-        new_fields = dict(d.fields or {})
-        new_fields[upd.field_key] = upd.value
-        d.fields = new_fields
+        d.update_field(upd.field_key, upd.value, is_edited=True)
 
     # 2) 登记补充文件（仅记录文件名，便于审核人看到补了哪些件）
     if payload.added_files:
@@ -448,7 +468,8 @@ def ai_start(
     # 无结果则先跑规则，保证思考流有内容
     if not task.results:
         db.query(models.CheckResult).filter_by(task_id=task.id).delete()
-        for r in run_all(task.documents):
+        results, _source = run_rules(task, task.documents)
+        for r in results:
             if r.status.value == "skip":
                 continue
             db.add(models.CheckResult(
@@ -555,10 +576,4 @@ def get_results(
 ):
     task = _get_task(db, task_code)
     rows = db.query(models.CheckResult).filter_by(task_id=task.id).all()
-    return [
-        CheckResultOut(
-            rule_id=r.rule_id, rule_name=r.rule_name, dimension=r.dimension,
-            status=r.status.value, why=r.why, suggestion=r.suggestion, detail=r.detail,
-        )
-        for r in rows
-    ]
+    return [o for o in (_result_out(r) for r in rows) if o is not None]

@@ -110,6 +110,24 @@ body {
 .rname {
   font-weight: 600;
 }
+/* 极简比对字段名（如「币种」），加粗、不换行 */
+.rname-short {
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+}
+/* 极简比对规则说明（如「∈ FOL币种范围」），灰色小字、单行省略 */
+.rule-text-short {
+  display: inline-block;
+  max-width: 100%;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
 .rid {
   margin-left: 10px;
   color: var(--muted);
@@ -122,6 +140,34 @@ body {
 }
 .sug {
   color: var(--amber);
+}
+/* 规则审核结果表：按结果整行着色（对照 mockup：不通过红底、提示黄底） */
+.rule-result-table .rule-row-fail > td {
+  background: #fff1f0 !important;
+}
+.rule-result-table .rule-row-warn > td {
+  background: #fffbe6 !important;
+}
+.rule-result-table .rule-row-fail:hover > td,
+.rule-result-table .rule-row-fail > td.ant-table-cell-row-hover {
+  background: #ffe7e4 !important;
+}
+.rule-result-table .rule-row-warn:hover > td,
+.rule-result-table .rule-row-warn > td.ant-table-cell-row-hover {
+  background: #fff4cc !important;
+}
+.rule-val-label {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.3;
+}
+/* 规则结果两个 sheet（核心业务文件 / 支持性文件）分页签 */
+.rule-sheet-tabs .ant-tabs-tab {
+  padding: 6px 12px;
+}
+.rule-sheet-tabs .ant-tabs-tab .ant-tag {
+  margin-inline-start: 4px;
+  margin-inline-end: 0;
 }
 .card-head {
   display: flex;

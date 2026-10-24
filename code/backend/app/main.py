@@ -26,30 +26,9 @@ logging.basicConfig(
 )
 
 
-def _migrate(eng):
-    """为旧版数据库补齐新增列（兼容 SQLite / PostgreSQL）。"""
-    from sqlalchemy import inspect, text
-
-    inspector = inspect(eng)
-    if "review_tasks" not in inspector.get_table_names():
-        return  # 表还没建，create_all 会完整建，不需要补列
-    existing = {col["name"] for col in inspector.get_columns("review_tasks")}
-    pending = [
-        ("needs_recheck",   "BOOLEAN DEFAULT FALSE"),
-        ("review_comment",  "TEXT"),
-        ("supplement_note", "TEXT"),
-        ("submitted_by",    "INTEGER"),
-    ]
-    with eng.begin() as conn:
-        for col, definition in pending:
-            if col not in existing:
-                conn.execute(text(f"ALTER TABLE review_tasks ADD COLUMN {col} {definition}"))
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 补列（老库升级）→ 建表（首次部署）
-    _migrate(engine)
+    # 建表（首次部署按新 ORM/schema 创建全部表）→ 种子数据
     Base.metadata.create_all(bind=engine)
     _seed()
     yield
@@ -82,3 +61,19 @@ app.mount("/uploads", StaticFiles(directory=str(_UPLOAD_DIR)), name="uploads")
 @app.get("/api/health")
 def health():
     return {"status": "ok", "app": settings.APP_NAME}
+
+
+@app.get("/api/rule-check/health")
+def rule_check_health():
+    """探测对方规则核对服务状态，供前端/运维确认当前核对走对方还是本地引擎。"""
+    from . import rule_check_client
+
+    configured = rule_check_client.configured()
+    ready = rule_check_client.health(force=True) if configured else False
+    return {
+        "configured": configured,
+        "base_url": settings.RULE_CHECK_BASE_URL or None,
+        "ready": ready,
+        # 当前规则核对实际使用的来源
+        "active_source": "remote" if ready else "local",
+    }

@@ -53,18 +53,31 @@ function guessType(name: string): string {
   return ''
 }
 
-// 快捷键：从 sample_pdfs 载入 8 个真实 PDF（走和真人上传完全一致的 multipart 流程）
-// 每项 [前端呈现的模板名(决定解析类型), 服务器样本文件名(真实二进制来源)]
-const TEMPLATE_FILES: [string, string][] = [
-  ['贷款合同.pdf', 'facility_letter.pdf'],
-  ['授信请求.pdf', 'drawdown_instruction_zn.pdf'],
-  ['提款指令.pdf', 'drawdown_instruction_zn.pdf'],
-  ['支付指令-01.pdf', 'payment_instruction.pdf'],
-  ['支付指令-02.pdf', 'payment_instruction.pdf'],
-  ['商务合同.pdf', 'commercial_contract.pdf'],
-  ['形式发票.pdf', 'invoice.pdf'],
+// 可选的样本数据套：下拉选择后一键上传对应那一套的 7 个真实 PDF。
+// 每套的 7 个文件统一命名，放在 sample_pdfs/<dir>/ 下，经 /pdf/<dir>/<file> 托管。
+// files 项为 [前端呈现的模板名(含关键词，决定解析类型), 该套目录下的真实文件名]
+const SET_FILES: [string, string][] = [
+  ['FOL贷款合同.pdf', 'facility_letter.pdf'],
+  ['提款指令.pdf', 'drawdown_instruction.pdf'],
+  ['支付指令.pdf', 'payment_instruction.pdf'],
+  ['商业合同.pdf', 'commercial_contract.pdf'],
+  ['形式发票.pdf', 'proforma_invoice.pdf'],
   ['报关单.pdf', 'customs_declaration.pdf'],
+  ['运单.pdf', 'waybill.pdf'],
 ]
+
+interface DataSet {
+  key: string
+  label: string
+  dir: string // sample_pdfs 下的子目录
+}
+
+const DATA_SETS: DataSet[] = [
+  { key: 'set_8', label: '第八套数据（客户/供应商名称更改）', dir: 'set_8' },
+  { key: 'set_9', label: '第九套数据（合同价格）', dir: 'set_9' },
+  { key: 'set_10', label: '第十套数据（发票/报关单合同号）', dir: 'set_10' },
+]
+
 
 interface TaskForm {
   customer_no: string | null
@@ -88,6 +101,7 @@ export default function CreateTaskView() {
   const [parsing, setParsing] = useState(false)
   const [creating, setCreating] = useState(false)
   const [loadingTpl, setLoadingTpl] = useState(false)
+  const [selectedSet, setSelectedSet] = useState<string>(DATA_SETS[1].key) // 默认第九套
   const [parsed, setParsed] = useState<ParseResult | null>(null)
   const [activeDocs, setActiveDocs] = useState<string[]>([])
   const [taskForm, setTaskForm] = useState<TaskForm>({
@@ -114,14 +128,16 @@ export default function CreateTaskView() {
     setFiles(info.fileList.map((f) => f.originFileObj as File).filter(Boolean))
   }
 
-  // 一键载入 8 个真实样本 PDF
+  // 一键载入所选数据套的 7 个真实样本 PDF
   const loadTemplate = async () => {
+    const ds = DATA_SETS.find((d) => d.key === selectedSet) ?? DATA_SETS[1]
     setLoadingTpl(true)
     try {
       const made = await Promise.all(
-        TEMPLATE_FILES.map(async ([tplName, sample]) => {
-          const resp = await fetch(`/pdf/${encodeURIComponent(sample)}`)
-          if (!resp.ok) throw new Error(`拉取样本 ${sample} 失败 (${resp.status})`)
+        SET_FILES.map(async ([tplName, sample]) => {
+          const url = `/pdf/${encodeURIComponent(ds.dir)}/${encodeURIComponent(sample)}`
+          const resp = await fetch(url)
+          if (!resp.ok) throw new Error(`拉取样本 ${ds.dir}/${sample} 失败 (${resp.status})`)
           const blob = await resp.blob()
           return new File([blob], tplName, { type: 'application/pdf' })
         }),
@@ -135,9 +151,9 @@ export default function CreateTaskView() {
           originFileObj: f as unknown as UploadFile['originFileObj'],
         })),
       )
-      message.success(`已载入 ${made.length} 个真实样本 PDF，可直接点「开始智能识别」`)
+      message.success(`已上传${ds.label}共 ${made.length} 个文件，可直接点「开始智能识别」`)
     } catch (e) {
-      message.error('载入模板失败：' + ((e as Error)?.message || e))
+      message.error('载入样本失败：' + ((e as Error)?.message || e))
     } finally {
       setLoadingTpl(false)
     }
@@ -417,15 +433,23 @@ export default function CreateTaskView() {
         <Card
           title="📎 上传材料"
           extra={
-            <Button
-              color="green"
-              variant="outlined"
-              icon={<ThunderboltOutlined />}
-              loading={loadingTpl}
-              onClick={loadTemplate}
-            >
-              一键载入模板 8 个文件
-            </Button>
+            <Space>
+              <Select
+                value={selectedSet}
+                onChange={setSelectedSet}
+                style={{ width: 280 }}
+                options={DATA_SETS.map((d) => ({ value: d.key, label: d.label }))}
+              />
+              <Button
+                color="green"
+                variant="outlined"
+                icon={<ThunderboltOutlined />}
+                loading={loadingTpl}
+                onClick={loadTemplate}
+              >
+                一键上传该套数据
+              </Button>
+            </Space>
           }
         >
           <Upload.Dragger

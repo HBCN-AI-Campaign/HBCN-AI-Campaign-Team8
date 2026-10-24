@@ -28,6 +28,7 @@ class DocumentIn(BaseModel):
     fields: dict = {}
     pdf_file: str | None = None       # 原件 PDF 文件名（/pdf/<file> 可预览）
     field_sources: dict = {}          # {field_key: {page, bbox}} 字段定位
+    field_confidences: dict = {}      # {field_key: confidence(0~1)} 识别置信度
 
 
 class DocumentOut(DocumentIn):
@@ -71,6 +72,10 @@ class CheckResultOut(BaseModel):
     why: str
     suggestion: str
     detail: list = []
+    short_name: str = ""     # 比对字段短名（= 字段1名字）
+    rule_text: str = ""      # 比对规则短说明
+    doc1_type: str = ""      # 文件1 类型 code
+    doc2_type: str = ""      # 文件2 类型 code（单方校验为空）
 
     @field_validator("detail", mode="before")
     @classmethod

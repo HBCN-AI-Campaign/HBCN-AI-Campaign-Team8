@@ -59,6 +59,7 @@ export interface DocumentOut {
   fields: Record<string, any>
   pdf_file?: string | null
   field_sources?: Record<string, { page: number; bbox: number[] }>
+  field_confidences?: Record<string, number>
 }
 
 export interface TaskDetail extends TaskOut {
@@ -77,6 +78,10 @@ export interface CheckResult {
   suggestion: string
   // [label, value, flag] 或 [label, value, flag, source]
   detail: (string | FieldSource | null)[][]
+  short_name?: string   // 比对字段短名（= 字段1名字）
+  rule_text?: string    // 比对规则短说明
+  doc1_type?: string    // 文件1 类型 code
+  doc2_type?: string    // 文件2 类型 code（单方校验为空）
 }
 
 export interface RunSummary {
