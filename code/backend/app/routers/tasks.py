@@ -108,7 +108,10 @@ async def parse_documents(
 
     if not saved:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="未收到任何文件")
-    result = parse_files(saved)
+
+    import asyncio
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(None, parse_files, saved)
 
     # 按识别出的借款人名称匹配客户主数据，作为客户号建议（经办人可在前端改选）
     borrower = result.get("suggested_borrower")

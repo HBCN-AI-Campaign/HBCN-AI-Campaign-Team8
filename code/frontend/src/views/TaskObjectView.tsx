@@ -39,7 +39,7 @@ import {
 import type { ColumnsType } from 'antd/es/table'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/api'
-import { checkText, checkType, DIMENSION_NAME, fmt, statusText, statusType, typeLabel } from '@/utils'
+import { checkText, checkType, DIMENSION_NAME, fieldLabel, fmt, statusText, statusType, typeLabel } from '@/utils'
 import PdfSourceViewer from '@/components/PdfSourceViewer'
 import type { AIPending, CheckResult, DocumentOut } from '@/types'
 import { useChecks, toRows, type RowData } from './task-object/hooks/useChecks'
@@ -53,6 +53,14 @@ const statColor: Record<string, string> = {
   pass: 'var(--green)',
   fail: 'var(--red)',
   warn: 'var(--amber)',
+}
+
+// 单据字段值 → 可编辑/可显示的文本（数组用、拼接，空值显示占位）
+function fmtFieldValue(raw: unknown): string {
+  if (raw == null || raw === '') return ''
+  if (Array.isArray(raw)) return raw.join('、')
+  if (typeof raw === 'object') return JSON.stringify(raw)
+  return String(raw)
 }
 
 export default function TaskObjectView() {
@@ -143,24 +151,54 @@ export default function TaskObjectView() {
     setEditValue(row.value)
   }
 
+  // 「单据字段复核」内联编辑：按文件逐项改字段值
+  const [docEdit, setDocEdit] = useState<{ docId: number; fieldKey: string } | null>(null)
+  const [docEditVal, setDocEditVal] = useState('')
+  const [docSaving, setDocSaving] = useState(false)
+
+  const startDocEdit = (docId: number, fieldKey: string, raw: unknown) => {
+    setDocEdit({ docId, fieldKey })
+    setDocEditVal(fmtFieldValue(raw))
+  }
+  const cancelDocEdit = () => {
+    setDocEdit(null)
+    setDocEditVal('')
+  }
+  const saveDocEdit = async () => {
+    if (!docEdit) return
+    setDocSaving(true)
+    try {
+      await submitFieldUpdate(docEdit.docId, docEdit.fieldKey, docEditVal)
+      cancelDocEdit()
+      message.success('已更新并自动重新核对')
+    } catch {
+      /* 拦截器已提示 */
+    } finally {
+      setDocSaving(false)
+    }
+  }
+
   const saveEdit = async () => {
     if (!editRow) return
     setSavingEdit(true)
     try {
-      const updated = await api.updateDocFields(code, editRow.docId, [
-        { field_key: editRow.fieldKey, value: editValue },
-      ])
-      setDetail(updated) // 后端已自动重跑核对
-      // 先即时把该字段显示值换成新值，再拉取最新核对结果
-      patchFieldValue(editRow.docId, editRow.fieldKey, editValue)
+      await submitFieldUpdate(editRow.docId, editRow.fieldKey, editValue)
       setEditRow(null)
-      await refreshResults()
       message.success('已更新并自动重新核对')
     } catch {
       /* 拦截器已提示 */
     } finally {
       setSavingEdit(false)
     }
+  }
+
+  // 统一的字段更新提交：弹窗编辑 + 单据字段复核内联编辑共用。
+  // 后端在 PATCH 后会自动重跑规则核对，这里即时刷新详情/表格/结果。
+  const submitFieldUpdate = async (docId: number, fieldKey: string, value: string) => {
+    const updated = await api.updateDocFields(code, docId, [{ field_key: fieldKey, value }])
+    setDetail(updated) // 后端已自动重跑核对
+    patchFieldValue(docId, fieldKey, value) // 即时把规则明细表里的显示值换成新值
+    await refreshResults() // 拉取最新核对统计/判定
   }
 
   const detailColumns: ColumnsType<RowData> = [
@@ -202,6 +240,133 @@ export default function TaskObjectView() {
         ),
     },
   ]
+
+  // ======= 单据字段复核：按文件逐项改字段值 =======
+  const docFieldsTab = (
+    <>
+      <Alert
+        type="info"
+        showIcon
+        style={{ margin: '4px 0 12px' }}
+        message="按单据文件逐项复核并更正字段抓取值。保存后系统将自动重新核对并刷新规则判定结果。"
+      />
+      {!detail || detail.documents.length === 0 ? (
+        <Empty description="暂无单据" />
+      ) : (
+        <Collapse
+          defaultActiveKey={detail.documents.map((d) => String(d.id))}
+          items={detail.documents.map((doc: DocumentOut) => {
+            const keys = Object.keys(doc.fields || {})
+            const rows = keys.map((k) => ({ key: k, fieldKey: k, raw: doc.fields[k] }))
+            const cols: ColumnsType<{ key: string; fieldKey: string; raw: unknown }> = [
+              {
+                title: '字段',
+                dataIndex: 'fieldKey',
+                width: 200,
+                render: (k: string) => (
+                  <span>
+                    {fieldLabel(k)} <code className="rid">{k}</code>
+                  </span>
+                ),
+              },
+              {
+                title: '识别值（可编辑）',
+                dataIndex: 'raw',
+                render: (raw: unknown, row) => {
+                  const editing = docEdit?.docId === doc.id && docEdit?.fieldKey === row.fieldKey
+                  if (editing) {
+                    return (
+                      <Space.Compact style={{ width: '100%' }}>
+                        <Input
+                          autoFocus
+                          value={docEditVal}
+                          onChange={(e) => setDocEditVal(e.target.value)}
+                          onPressEnter={() => void saveDocEdit()}
+                        />
+                        <Button type="primary" loading={docSaving} onClick={() => void saveDocEdit()}>
+                          保存
+                        </Button>
+                        <Button onClick={cancelDocEdit}>取消</Button>
+                      </Space.Compact>
+                    )
+                  }
+                  const text = fmtFieldValue(raw)
+                  return (
+                    <span className="rule-value-cell">
+                      <span className={text ? undefined : 'muted'}>{text || '（空）'}</span>
+                      <Tooltip title="更正该字段抓取值">
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<EditOutlined />}
+                          className="rule-edit-btn"
+                          onClick={() => startDocEdit(doc.id, row.fieldKey, raw)}
+                        />
+                      </Tooltip>
+                    </span>
+                  )
+                },
+              },
+              {
+                title: '原文定位',
+                width: 120,
+                align: 'center',
+                render: (_, row) =>
+                  doc.field_sources?.[row.fieldKey]?.bbox ? (
+                    <Button
+                      type="link"
+                      size="small"
+                      icon={<EyeOutlined />}
+                      onClick={() => pdf.locateDocField(doc.id, row.fieldKey)}
+                    >
+                      定位原文
+                    </Button>
+                  ) : (
+                    <span className="muted">—</span>
+                  ),
+              },
+            ]
+            return {
+              key: String(doc.id),
+              label: (
+                <span>
+                  <Tag style={{ marginRight: 8 }}>{doc.doc_code}</Tag>
+                  <b>{typeLabel(doc.type_code)}</b>
+                  {doc.pdf_file && <span className="muted" style={{ marginLeft: 8 }}>· {doc.pdf_file}</span>}
+                  <Tag style={{ marginLeft: 8 }} color="default">
+                    {keys.length} 个字段
+                  </Tag>
+                </span>
+              ),
+              extra: doc.pdf_file ? (
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<EyeOutlined />}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    pdf.viewDoc(doc.id)
+                  }}
+                >
+                  查看原件
+                </Button>
+              ) : undefined,
+              children: (
+                <Table
+                  rowKey="key"
+                  columns={cols}
+                  dataSource={rows}
+                  size="small"
+                  bordered
+                  pagination={false}
+                />
+              ),
+            }
+          })}
+        />
+      )}
+    </>
+  )
 
   const rulesTab = (
     <>
@@ -749,6 +914,16 @@ export default function TaskObjectView() {
 
   const tabItems = [
     {
+      key: 'fields',
+      label: (
+        <span className="tab-label">
+          <EditOutlined /> 单据字段复核
+          <Badge count={detail?.documents.length || 0} color="blue" showZero={false} />
+        </span>
+      ),
+      children: docFieldsTab,
+    },
+    {
       key: 'rules',
       label: (
         <span className="tab-label">
@@ -843,7 +1018,7 @@ export default function TaskObjectView() {
       </div>
 
       <Card loading={loading}>
-        <Tabs items={tabItems} />
+        <Tabs defaultActiveKey={canReview ? 'rules' : 'fields'} items={tabItems} />
       </Card>
 
       <PdfSourceViewer visible={pdf.pdfVisible} source={pdf.pdfSource} onClose={pdf.close} />

@@ -5,6 +5,7 @@
     uvicorn app.main:app --reload
 文档：http://127.0.0.1:8000/docs
 """
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -17,6 +18,12 @@ from .config import UPLOAD_DIR as _UPLOAD_DIR
 from .database import Base, engine
 from .routers import auth, customers, tasks
 from .seed import seed as _seed
+
+# 统一日志级别，使各模块 log.info（含 OCR 调用过程）可见
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s | %(message)s",
+)
 
 
 def _migrate(eng):
