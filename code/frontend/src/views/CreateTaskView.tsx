@@ -476,8 +476,8 @@ export default function CreateTaskView() {
               <Button
                 type="primary"
                 icon={<SendOutlined />}
-                loading={creating || parsing}
-                disabled={!files.length}
+                loading={creating}
+                disabled={!files.length || parsing}
                 onClick={uploadAndCreate}
               >
                 上传并创建任务（{files.length} 个文件）

@@ -69,3 +69,65 @@ export const TYPE_LABEL: Record<string, string> = {
 export function typeLabel(code: string): string {
   return TYPE_LABEL[code] || code
 }
+
+// 字段键 → 中文标签（与 checklist_rules.json 的字段集合对齐）。
+// 用于「单据字段复核」按文件逐项展示字段中文名。
+export const FIELD_LABEL: Record<string, string> = {
+  // 通用
+  date: '日期',
+  currency: '币种',
+  amount: '金额',
+  quantity: '数量',
+  unit_price: '单价',
+  seller: '卖方',
+  buyer: '买方',
+  purpose: '用途',
+  contract_no: '合同号',
+  order_no: '订单号',
+  goods_or_service: '货物/服务',
+  // 授信函 / 贷款合同
+  lender_branch: '贷款人分支行',
+  tranche: '授信段',
+  facility: '授信品种',
+  facility_amount: '授信金额',
+  allowed_currencies: '允许币种',
+  utilization_currency: '使用币种条款',
+  interest_period: '计息周期',
+  interest_rate: '利率',
+  term: '期限',
+  repayment_schedule: '还款计划',
+  disbursement_threshold: '受托支付阈值',
+  borrower: '借款人',
+  // 提款指令
+  branch: '分支行',
+  referenced_facility_letter_date: '引用授信函日期',
+  drawdown_date: '拟提款日',
+  maturity_date: '到期日',
+  payment_account: '放款账号',
+  disbursement_method: '支付方式',
+  commitment_text: '承诺内容',
+  // 支付指令
+  amount_in_words: '金额大写',
+  payee: '收款人',
+  payee_account: '收款账号',
+  remitter_name: '汇款人名称',
+  payee_bank_country: '收款行国别',
+  payment_date: '付款日',
+  remittance_remark: '汇款附言',
+  // 商业合同 / 订单
+  validity_seal_signature: '签章有效性',
+  payment_method: '支付方式',
+  payment_terms: '支付条款',
+  effective_terms: '生效条款',
+  // 运单 / 报关单 / 发票
+  bill_of_lading_no: '提单号',
+  shipment_date: '装运日',
+  country_of_departure: '启运国',
+  proforma_invoice_no: '形式发票号',
+  transport_party: '运输方',
+  invoice_no: '发票号',
+}
+
+export function fieldLabel(key: string): string {
+  return FIELD_LABEL[key] || key
+}

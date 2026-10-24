@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import httpx
@@ -376,15 +377,28 @@ def _guess_task_info(documents: list[dict]) -> tuple[str, str, float]:
 # 主入口（接口与 Mock 版保持一致）
 # ---------------------------------------------------------------------------
 
+def _parse_one(abs_path: str, tcode: str) -> list[dict]:
+    """单个文件：调 OCR 识别文本 + 提取字段。供线程池并行调用（纯 I/O 密集）。"""
+    text = ""
+    blocks: list[dict] = []
+    if abs_path and Path(abs_path).is_file():
+        text, blocks = _ocr_detailed(abs_path)
+    return _extract_fields(tcode, text, abs_path, blocks)
+
+
 def parse_files(uploads: list) -> dict:
-    """解析入口：对每个上传文件调用本地 OCR 服务提取字段。
+    """解析入口：对每个上传文件调用 OCR 服务提取字段。
 
     入参兼容两种形式：
       1) list[str]   —— 仅文件名（向后兼容）
       2) list[dict]  —— {"filename": ..., "pdf_url": "uploads/<batch>/<file>"}
                         由 /parse 路由落盘后传入
+
+    多文件场景：OCR 调用是网络 I/O，用线程池并行发起，
+    总耗时≈最慢的单个文件，而非所有文件相加（避免前端超时）。
     """
-    documents: list[dict] = []
+    # 第一遍（顺序、纯 CPU）：推断类型并分配确定的 doc_code 编号
+    metas: list[dict] = []
     type_seq: dict[str, int] = {}
 
     for item in uploads:
@@ -404,21 +418,36 @@ def parse_files(uploads: list) -> dict:
         # 绝对路径：UPLOAD_DIR.parent = backend/ 目录，pdf_url = "uploads/<batch>/<file>"
         abs_path = str(UPLOAD_DIR.parent / uploaded_url) if uploaded_url else ""
 
-        text = ""
-        blocks: list[dict] = []
-        if abs_path and Path(abs_path).is_file():
-            text, blocks = _ocr_detailed(abs_path)
-
-        fields = _extract_fields(tcode, text, abs_path, blocks)
-
-        documents.append({
+        metas.append({
+            "fn": fn,
+            "uploaded_url": uploaded_url,
+            "tcode": tcode,
             "doc_code": doc_code,
-            "type_code": tcode,
-            "type_label": TYPE_LABELS[tcode],
-            "source_filename": fn,
-            "pdf_file": uploaded_url or TYPE_PDF.get(tcode),
-            "fields": fields,
+            "abs_path": abs_path,
         })
+
+    # 第二遍（并行、I/O 密集）：每个文件的 OCR 识别与字段提取
+    log.info("parse_files: 并行处理 %d 个文件", len(metas))
+    if metas:
+        max_workers = min(len(metas), 4)
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            fields_list = list(
+                pool.map(lambda m: _parse_one(m["abs_path"], m["tcode"]), metas)
+            )
+    else:
+        fields_list = []
+
+    documents: list[dict] = [
+        {
+            "doc_code": m["doc_code"],
+            "type_code": m["tcode"],
+            "type_label": TYPE_LABELS[m["tcode"]],
+            "source_filename": m["fn"],
+            "pdf_file": m["uploaded_url"] or TYPE_PDF.get(m["tcode"]),
+            "fields": fields,
+        }
+        for m, fields in zip(metas, fields_list)
+    ]
 
     borrower, currency, amount = _guess_task_info(documents)
 
