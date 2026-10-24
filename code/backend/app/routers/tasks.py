@@ -33,7 +33,7 @@ def _task_out(task: "models.ReviewTask") -> TaskOut:
         customer_no=task.customer.customer_no if task.customer else None,
         customer_name=task.customer.name if task.customer else None,
         drawdown_currency=task.drawdown_currency,
-        drawdown_amount=float(task.drawdown_amount), status=task.status.value,
+        drawdown_amount=task.drawdown_amount, status=task.status.value,
         needs_recheck=bool(task.needs_recheck),
         created_at=task.created_at,
         review_comment=task.review_comment,
@@ -74,41 +74,13 @@ async def parse_documents(
     # 仅业务经办人可上传解析
     user: User = Depends(require_role(Role.OPERATOR)),
 ):
-    """上传材料 → 调用文件解析 Agent（当前为 mock）→ 返回 8 类单据识别字段。
-
-    传输方式：标准 multipart/form-data，前端把 N 个文件以同名字段 `files`
-    依次 append，后端 `list[UploadFile]` 自动收成文件数组（数量不限）。
-
-    真实环境这里会把文件二进制转发给 OCR/LLM 解析服务；
-    当前为 Mock——内容虽不参与识别，但会按批次落盘，使「定位原文」
-    预览到的就是用户本次真实上传的 PDF，而非仓库自带样本。
-    """
-    import uuid
-    from pathlib import Path
-
-    from ..config import UPLOAD_DIR as _UPLOAD_DIR
-
-    batch_id = uuid.uuid4().hex[:12]
-    batch_dir = Path(_UPLOAD_DIR) / batch_id
-    batch_dir.mkdir(parents=True, exist_ok=True)
-
-    # 落盘：保存每个上传文件，记录供预览的相对 URL（/uploads/<批次>/<文件名>）
-    saved: list[dict] = []
-    for i, f in enumerate(files):
-        raw_name = f.filename or f"未命名_{i + 1}.pdf"
-        # 清洗文件名，避免路径穿越
-        safe_name = Path(raw_name).name or f"file_{i + 1}.pdf"
-        dest = batch_dir / safe_name
-        content = await f.read()
-        dest.write_bytes(content)
-        saved.append({
-            "filename": raw_name,
-            "pdf_url": f"uploads/{batch_id}/{safe_name}",
-        })
-
-    if not saved:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="未收到任何文件")
-    result = parse_files(saved)
+    """Real parsing compatibility response; interactive callers use parsing/runs."""
+    from starlette.concurrency import run_in_threadpool
+    from .parsing import save_uploads
+    saved=await save_uploads(files,user.id)
+    result=await run_in_threadpool(parse_files,saved)
+    from ..parsing.jobs import save_completed
+    result=save_completed(result,user.id)
 
     # 按识别出的借款人名称匹配客户主数据，作为客户号建议（经办人可在前端改选）
     borrower = result.get("suggested_borrower")
@@ -177,14 +149,35 @@ def create_task(
         submitted_by=user.id,
     )
     for d in payload.documents:
+        from ..parsing.jobs import verified_document
+        try:
+            fields,sources=verified_document(d,user.id)
+        except (ValueError,FileNotFoundError) as exc:
+            raise HTTPException(400,str(exc)) from None
         task.documents.append(
             models.Document(
-                doc_code=d.doc_code, type_code=d.type_code, fields=d.fields,
-                pdf_file=d.pdf_file, field_sources=d.field_sources,
+                doc_code=d.doc_code, type_code=d.type_code, fields=fields,
+                pdf_file=d.pdf_file, field_sources=sources,
             )
         )
+    from ..parsing.facility import attach_facility_context
+    try:
+        attach_facility_context(task.documents,
+            payload.facility_selection.model_dump() if payload.facility_selection else None,user.id,
+            payload.model_dump(mode='json', include={'borrower','drawdown_currency','drawdown_amount'}))
+    except ValueError as exc:
+        raise HTTPException(400,str(exc)) from None
     db.add(task)
     db.flush()  # 拿到 task.id / documents，便于立即核对
+    # Numeric -> DBAPI -> Numeric may round on SQLite or a misconfigured driver.
+    # Verify actual storage, not the identity-map value, before running rules.
+    db.refresh(task, attribute_names=["drawdown_amount"])
+    if task.drawdown_amount != payload.drawdown_amount:
+        db.rollback()
+        raise HTTPException(503, detail={
+            "code": "TASK_AMOUNT_STORAGE_PRECISION",
+            "message": "当前数据库写入后金额精度发生变化，任务未保存；请配置支持精确金额的数据库及驱动后重试。",
+        })
 
     # 经办人上传即创建：创建后立即执行首次规则核对（基础数据），
     # 但任务状态为「待处理」，等待审核人启动智能审核。
@@ -270,7 +263,7 @@ def get_task_detail(
         customer_no=task.customer.customer_no if task.customer else None,
         customer_name=task.customer.name if task.customer else None,
         drawdown_currency=task.drawdown_currency,
-        drawdown_amount=float(task.drawdown_amount), status=task.status.value,
+        drawdown_amount=task.drawdown_amount, status=task.status.value,
         needs_recheck=bool(task.needs_recheck),
         created_at=task.created_at,
         review_comment=task.review_comment,
@@ -295,6 +288,8 @@ def run_checks(
     user: User = Depends(require_role(Role.REVIEWER)),
 ):
     task = _get_task(db, task_code)
+    if task.status == models.TaskStatus.COMPLETED:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="已归档任务不能重跑核对")
 
     persisted = _run_and_persist(db, task)
 
@@ -332,6 +327,10 @@ def update_document_fields(
     - 返回最新 TaskDetail（含刷新后的核对结果）。
     """
     task = _get_task(db, task_code)
+    if user.role != Role.REVIEWER and task.submitted_by != user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail="无权修改其他经办人提交的任务")
+    if task.status == models.TaskStatus.COMPLETED:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="已归档任务不能更正字段")
     doc = next((d for d in task.documents if d.id == doc_id), None)
     if not doc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="单据不存在")
@@ -399,7 +398,6 @@ def supplement_task(
     if task.status != models.TaskStatus.NEED_SUPPLEMENT:
         raise HTTPException(status.HTTP_409_CONFLICT, detail="仅「待补件」的任务可以补件")
 
-    # 1) 字段级更正：按 doc_code 定位单据，重建 fields dict 以触发 JSON 列更新
     docs_by_code = {d.doc_code: d for d in task.documents}
     for upd in payload.field_updates:
         d = docs_by_code.get(upd.doc_code)
@@ -409,19 +407,14 @@ def supplement_task(
         new_fields[upd.field_key] = upd.value
         d.fields = new_fields
 
-    # 2) 登记补充文件（仅记录文件名，便于审核人看到补了哪些件）
     if payload.added_files:
         note_files = "；".join(payload.added_files)
         extra = f"[补充文件] {note_files}"
         payload.note = f"{payload.note}\n{extra}".strip() if payload.note else extra
 
-    # 3) 记录补件说明 + 状态流转（回到待处理，等待审核人重新智能审核）
     task.supplement_note = payload.note or task.supplement_note
     task.status = models.TaskStatus.PENDING
-
-    # 4) 清空历史规则结果，等审核人重新核对
     db.query(models.CheckResult).filter_by(task_id=task.id).delete()
-
     db.commit()
     db.refresh(task)
     return _task_out(task)
@@ -502,6 +495,8 @@ def ai_resolve(
     并同步到「规则审核结果」。返回处置后的最新计数，前端据此继续播放思考流。
     """
     task = _get_task(db, task_code)
+    if task.status == models.TaskStatus.COMPLETED:
+        raise HTTPException(status.HTTP_409_CONFLICT, detail="已归档任务不能更改审核意见")
     row = (
         db.query(models.CheckResult)
         .filter_by(task_id=task.id, rule_id=payload.pending_id)

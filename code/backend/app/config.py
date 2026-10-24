@@ -5,6 +5,7 @@
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pathlib import Path
+from pydantic import SecretStr
 
 # backend/ 目录绝对路径，保证 SQLite 文件位置与启动 cwd 无关
 _BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -50,6 +51,10 @@ class Settings(BaseSettings):
     # --- OCR 服务 ---
     # 本地开发时在 .env 里设置为服务器地址；部署到同台服务器后默认值直接可用
     OCR_BASE_URL: str = "http://127.0.0.1:7888"
+
+    # Approved decision-model release; credentials are never exposed in repr.
+    BUSINESS_REVIEW_DECISION_RELEASE: str = ""
+    BUSINESS_REVIEW_DECISION_API_KEY: SecretStr = SecretStr("")
 
 
 settings = Settings()

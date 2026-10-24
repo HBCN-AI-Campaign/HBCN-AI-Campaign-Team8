@@ -1,0 +1,15 @@
+{
+  "schema": "parser-term-facts-evaluation/1.0",
+  "annotation_status": "engineering_verified",
+  "scope": "沿用原图核对的parser_set8_fol_terms.json附表范围和条件；不从模型回答生成预期值。仅测具证据的候选类型及拒绝越界，不代表业务批准或法律解释准确率。",
+  "sha256": "68eb01adf085e0e713f883728d7117706f11a8004a41ee26d9371a21809aaad7",
+  "scope_must_remain_unresolved": true,
+  "facilities": [
+    {"name": "Multiple Currency Revolving Loan Facility", "currencies": ["CNY", "USD"], "limit_currency": "USD", "tenor": {"standard_months": [1, 3, 6], "maximum": {"count": 12, "unit": "months"}, "other_requires_agreement": true, "includes_extensions": true}, "pages": [28]},
+    {"name": "Import Facilities", "currencies": ["CNY", "USD"], "limit_currency": "USD", "tenor": null, "pages": [30]},
+    {"name": "Facility for Clean Import Loan", "currencies": ["CNY", "USD"], "limit_currency": "USD", "tenor": {"standard_months": [], "maximum": {"count": 180, "unit": "days"}, "other_requires_agreement": null, "includes_extensions": null}, "parent": "Import Facilities", "pages": [30]},
+    {"name": "Facility for Reimbursement Finance", "currencies": ["CNY", "USD"], "limit_currency": "USD", "tenor": {"standard_months": [], "maximum": {"count": 180, "unit": "days"}, "other_requires_agreement": null, "includes_extensions": null}, "parent": "Import Facilities", "pages": [30]},
+    {"name": "Facility for RMB Bank Acceptance Draft Acceptance", "currencies": null, "tenor": null},
+    {"name": "Facility for RMB Bank Acceptance Draft Discounting", "currencies": null, "tenor": null}
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "schema": "parser-evaluation/1.0",
+  "annotation_version": "set3-scanned-drawdown/1.0",
+  "annotation_status": "engineering_verified",
+  "scope": "第三套脱敏扫描提款指令，先看完整3页原图冻结：7个核心事实、2个真实叉选、1个遮挡主体保护；含交接清单封面，不是完整交易包、全文准确率或业务签字",
+  "annotation_notes": [
+    "原件3页均无原生文字，每页一张扫描图；第1页是交接清单，日期03Dec2020不能作申请日期。",
+    "第2页手写金额62889164.82；授信名称中的USD160000000不是本次提款金额或币种。",
+    "第2页申请日期及拟授信使用日均2020-12-07；第3页可见初始到期日2025-07-18，照录原件不按期限常识改年。",
+    "第3页账号按可见替代文字111-012345-678登记规范值，不推断遮挡区域或还原真实账号。",
+    "第1页客户名称只露出TSE且后续遮挡，不能据此确认完整法定借款主体。",
+    "仅标明确事实；未标注完整用途/利率条款或授信名称，不表示这些字段已全部正确。"
+  ],
+  "documents": [
+    {
+      "filename": "DD notice (masked).pdf",
+      "pages": 3,
+      "sha256": "ee48315ab4d7075211c934543317cefe5279fd791127dc4e3be754ccde099d9b",
+      "type_code": "DRAWDOWN_INSTRUCTION",
+      "fields": [
+        {"key": "date", "value": "2020-12-07", "page": 2},
+        {"key": "facility_letter_date", "value": "2019-12-19", "page": 2},
+        {"key": "currency", "value": "CNY", "page": 2},
+        {"key": "amount", "value": "62889164.82", "page": 2},
+        {"key": "drawdown_date", "value": "2020-12-07", "page": 2},
+        {"key": "maturity_date", "value": "2025-07-18", "page": 3},
+        {"key": "payment_account", "value": "111012345678", "page": 3}
+      ],
+      "visual_cases": [
+        {"field": "interest_period", "expected": "3个月", "page": 2},
+        {"field": "disbursement_method", "expected": "银行受托支付", "page": 3}
+      ],
+      "must_remain_unresolved": ["borrower"]
+    }
+  ]
+}

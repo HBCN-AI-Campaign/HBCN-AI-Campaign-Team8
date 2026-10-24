@@ -15,7 +15,7 @@ from .config import settings
 from .config import SAMPLE_PDF_DIR as _SAMPLE_PDF_DIR
 from .config import UPLOAD_DIR as _UPLOAD_DIR
 from .database import Base, engine
-from .routers import assistant, auth, customers, tasks
+from .routers import assistant, auth, customers, tasks, parsing, files
 
 
 @asynccontextmanager
@@ -39,15 +39,16 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(customers.router)
 app.include_router(tasks.router)
+app.include_router(parsing.router)
+app.include_router(files.router)
 app.include_router(assistant.router)
 
 # 静态托管样本 PDF —— 前端 pdfjs 据此拉取原件做预览/高亮
 if _SAMPLE_PDF_DIR.is_dir():
     app.mount("/pdf", StaticFiles(directory=str(_SAMPLE_PDF_DIR)), name="pdf")
 
-# 静态托管经办人上传的真实 PDF —— 前端经 /uploads/<批次>/<文件名> 预览/高亮
+# Uploaded originals are served by the authenticated files router.
 _UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(_UPLOAD_DIR)), name="uploads")
 
 
 @app.get("/api/health")

@@ -5,6 +5,7 @@ import * as pdfjsLib from 'pdfjs-dist'
 import PdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
 import type { FieldSource } from '@/types'
+import { originalHeaders, originalUrl, fetchOriginal } from '@/parsing/original'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = PdfWorker
 
@@ -19,7 +20,9 @@ interface Props {
 
 export default function PdfSourceViewer({ visible, source, title, onClose }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
   const pdfDocRef = useRef<PDFDocumentProxy | null>(null)
+  const imageRef = useRef<HTMLImageElement | null>(null)
   const loadedUrlRef = useRef('')
   // canvas 挂载前到达的渲染请求，挂载后补渲染
   const pendingPageRef = useRef<number | null>(null)
@@ -35,10 +38,22 @@ export default function PdfSourceViewer({ visible, source, title, onClose }: Pro
   const [cssW, setCssW] = useState(0)
   const [cssH, setCssH] = useState(0)
 
+  // Center the actual field, including those below the first screen of a page.
+  useEffect(() => {
+    const viewport = scrollRef.current
+    const box = source?.bbox
+    if (!visible || loading || !viewport || !box || curPage !== (source?.page || 1) || !cssH) return
+    viewport.scrollTo({
+      top: Math.max(0, 16 + (box[1] + box[3]) * cssH / 2 - viewport.clientHeight / 2),
+      left: Math.max(0, 16 + (box[0] + box[2]) * cssW / 2 - viewport.clientWidth / 2),
+    })
+  }, [visible, loading, curPage, cssW, cssH, source?.bbox, source?.page])
+
   // 渲染某一页到 canvas（高清 devicePixelRatio 缩放）
   const renderPage = useCallback(async (pageNum: number) => {
     const pdfDoc = pdfDocRef.current
-    if (!pdfDoc) return
+    const image = imageRef.current
+    if (!pdfDoc && !image) return
     const canvas = canvasRef.current
     if (!canvas) {
       // canvas 还没挂载（Modal 刚打开），记下来等挂载后补渲染
@@ -46,6 +61,17 @@ export default function PdfSourceViewer({ visible, source, title, onClose }: Pro
       return
     }
     pendingPageRef.current = null
+    if (image) {
+      const w = RENDER_WIDTH, h = Math.round(w * image.naturalHeight / image.naturalWidth)
+      const dpr = window.devicePixelRatio || 1
+      setCssW(w); setCssH(h)
+      canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr)
+      canvas.style.width = `${w}px`; canvas.style.height = `${h}px`
+      const ctx = canvas.getContext('2d')
+      ctx?.setTransform(dpr, 0, 0, dpr, 0, 0)
+      ctx?.drawImage(image, 0, 0, w, h)
+      return
+    }
     // 取消上一个尚未完成的渲染任务，避免同一 canvas 并发 render
     if (renderTaskRef.current) {
       try {
@@ -56,7 +82,7 @@ export default function PdfSourceViewer({ visible, source, title, onClose }: Pro
       renderTaskRef.current = null
     }
     const seq = ++renderSeqRef.current
-    const page = await pdfDoc.getPage(pageNum)
+    const page = await pdfDoc!.getPage(pageNum)
     const baseViewport = page.getViewport({ scale: 1 })
     const scale = RENDER_WIDTH / baseViewport.width
     const viewport = page.getViewport({ scale })
@@ -99,7 +125,7 @@ export default function PdfSourceViewer({ visible, source, title, onClose }: Pro
   // 加载 PDF（按需切换文档）+ 渲染命中页
   const loadPdf = useCallback(async () => {
     if (!source?.pdf_file) {
-      setError('该字段无原件 PDF，无法定位。')
+      setError('该字段无原件，无法定位。')
       return
     }
     setError('')
@@ -108,25 +134,39 @@ export default function PdfSourceViewer({ visible, source, title, onClose }: Pro
     //   1) 经办人本次上传的真实件 —— "uploads/<批次>/<文件名>" → /uploads/... 预览
     //   2) 仓库自带样本件        —— "facility_letter.pdf"      → /pdf/... 预览
     const pf = source.pdf_file
-    const url = pf.startsWith('uploads/')
-      ? '/' + pf.split('/').map(encodeURIComponent).join('/')
-      : `/pdf/${encodeURIComponent(pf)}`
+    const url = originalUrl(pf)
     try {
       if (url !== loadedUrlRef.current) {
-        const doc = await pdfjsLib.getDocument(url).promise
-        pdfDocRef.current = doc
+        renderTaskRef.current?.cancel()
+        if (pdfDocRef.current) await pdfDocRef.current.destroy()
+        pdfDocRef.current = null; imageRef.current = null
+        if (/\.(png|jpe?g|webp)$/i.test(pf)) {
+          const objectUrl = URL.createObjectURL(await fetchOriginal(pf))
+          try {
+            const image = new Image()
+            image.src = objectUrl; await image.decode()
+            imageRef.current = image; setNumPages(1)
+          } finally { URL.revokeObjectURL(objectUrl) }
+        } else {
+          const doc = await pdfjsLib.getDocument({ url, httpHeaders: originalHeaders() }).promise
+          pdfDocRef.current = doc; setNumPages(doc.numPages)
+        }
         loadedUrlRef.current = url
-        setNumPages(doc.numPages)
       }
       const target = Math.min(source.page || 1, pdfDocRef.current?.numPages || 1)
       setCurPage(target)
       await renderPage(target)
     } catch (e) {
-      setError('加载 PDF 失败：' + ((e as Error)?.message || e))
+      setError('加载原件失败：' + ((e as Error)?.message || e))
     } finally {
       setLoading(false)
     }
   }, [source, renderPage])
+
+  useEffect(() => () => {
+    renderTaskRef.current?.cancel()
+    void pdfDocRef.current?.destroy()
+  }, [])
 
   // source 变化且 Modal 已打开时重新加载（命中页/文件切换）
   useEffect(() => {
@@ -199,14 +239,13 @@ export default function PdfSourceViewer({ visible, source, title, onClose }: Pro
 
       <Spin spinning={loading}>
         <div
+          ref={scrollRef}
           style={{
             maxHeight: '72vh',
             overflow: 'auto',
             background: '#f1f5f9',
             borderRadius: 8,
             padding: 16,
-            display: 'flex',
-            justifyContent: 'center',
           }}
         >
           {error ? (
@@ -217,6 +256,7 @@ export default function PdfSourceViewer({ visible, source, title, onClose }: Pro
                 position: 'relative',
                 width: cssW,
                 height: cssH,
+                margin: '0 auto',
                 boxShadow: '0 2px 12px rgba(0, 0, 0, 0.12)',
                 background: '#fff',
               }}

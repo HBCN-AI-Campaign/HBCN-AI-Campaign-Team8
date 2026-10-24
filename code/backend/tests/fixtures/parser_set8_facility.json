@@ -1,0 +1,17 @@
+{
+  "schema": "parser-facility-evaluation/1.1",
+  "annotation_status": "engineering_verified",
+  "scope": "复用已人工核对的第八套原件事实及当前识别未决状态，验证关联不会制造借款主体、币种折算或可用余额；不是业务签字，不修改字段金标。",
+  "revision_note": "循环贷款完整Utilization原文已经核实允许RMB/USD，因此不再要求单项币种未知；改为同时要求该候选准确、来源第28页及完整条款范围仍未决。跨币种金额、主体缺失和余额门槛不变。",
+  "documents": {
+    "FOL-编造完.pdf": "68eb01adf085e0e713f883728d7117706f11a8004a41ee26d9371a21809aaad7",
+    "提款指令 - 编造完.pdf": "92b7f929523a2dbe9b100b4546db450cc8b8c398ba5d0d0d9c09c7c50044d1ab"
+  },
+  "cases": [
+    {"id":"without_selection","selection":null,"status":"needs_review","required_issues":["DRAWDOWN_BORROWER_UNRESOLVED","FACILITY_ASSOCIATION_UNRESOLVED"]},
+    {"id":"choose_revolving_preserve_unknown_borrower_and_currency","borrower_alias":"ABCD China","facility_name":"Multiple Currency Revolving Loan Facility","status":"needs_review","required_issues":["DRAWDOWN_BORROWER_UNRESOLVED","BORROWER_REGISTER_INCOMPLETE","ALLOCATION_REGISTER_INCOMPLETE","CROSS_CURRENCY_COMPARISON","FACILITY_TERMS_UNVERIFIED"],"term_expectation":{"currencies":["CNY","USD"],"status":"needs_review","pages":[28]}},
+    {"id":"choose_acceptance_preserve_conflicting_limits","borrower_alias":"ABCD China","facility_name":"Facility for RMB Bank Acceptance Draft Acceptance","status":"needs_review","required_issues":["FACILITY_LIMIT_CONFLICT","CROSS_CURRENCY_COMPARISON","DRAWDOWN_BORROWER_UNRESOLVED"]},
+    {"id":"choose_alias_typo_must_be_rejected","borrower_alias":"ABCJilin","allocation_borrower":"ABCD Jilin","facility_name":"Multiple Currency Revolving Loan Facility","rejected":true}
+  ],
+  "invariants": ["不回填提款指令借款人","不修改原始字段或候选","计价币种不同不直接比较金额","不计算实际可用余额","选择关联不消除原件冲突"]
+}

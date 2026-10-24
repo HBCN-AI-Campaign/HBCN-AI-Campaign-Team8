@@ -78,6 +78,15 @@ def _handoff(rid, name, dim, why, suggestion=""):
     return RuleResult(rid, name, dim, Status.SKIP, why=f"{HANDOFF} {why}", suggestion=suggestion)
 
 
+def _term_location(docs,fact):
+    sources=(fact.get('evidence') or {}).get('clause_text',{}).get('sources') or []
+    if not sources:return None
+    page=sources[0]['page'];boxes=[s['bbox'] for s in sources if s['page']==page]
+    metas=docs.meta_by_type.get('FACILITY_LETTER') or [{}]
+    return {**metas[0],'type_code':'FACILITY_LETTER','field_key':'facility_terms','page':page,
+        'bbox':[min(b[0] for b in boxes),min(b[1] for b in boxes),max(b[2] for b in boxes),max(b[3] for b in boxes)]}
+
+
 # ================================================================
 # A 维度：授信层（提款指令 ↔ FOL）
 # ================================================================
@@ -92,16 +101,29 @@ class R_DrawdownCurrencyInFacilityScope(Rule):
         fol = docs.first("FACILITY_LETTER")
         if not dd or not fol:
             return _skip(self.id, self.name, self.dimension, "缺少提款指令或授信函，无法校验。")
-        if fol.get("utilization_currency") == "any currency agreed by lender":
-            return RuleResult(self.id, self.name, self.dimension, Status.PASS,
-                              why="FOL 授信条款为“贷款人同意的任何币种”，本项忽略比对。")
+        context=fol.get('_facility_context') or {}
+        application=context.get('term_application')
+        scoped=application is not None or 'facility_terms' in fol
+        if scoped:
+            permitted=(application or {}).get('facts',{}).get('permitted_currencies',{})
+            if context.get('status')!='ready' or (application or {}).get('status')!='accepted' or permitted.get('status')!='accepted':
+                return RuleResult(self.id,self.name,self.dimension,Status.WARN,
+                    why="所选授信的完整条款或允许提款币种尚未核实，不能回退使用全函币种或额度计价币种。")
+            allowed=(permitted.get('value') or {}).get('currencies')
+        elif fol.get("utilization_currency") == "any currency agreed by lender":
+            return RuleResult(self.id, self.name, self.dimension, Status.WARN,
+                              why="FOL要求贷款人同意提款币种，尚须核实本次币种的同意依据。")
         dd_ccy = _norm(dd.get("currency"))
         tranche = _norm(dd.get("tranche"))
-        allowed = fol.get("allowed_currencies") or []
+        if not scoped:allowed = fol.get("allowed_currencies") or []
+        if not dd_ccy or not isinstance(allowed,list) or not allowed:
+            return RuleResult(self.id,self.name,self.dimension,Status.WARN,
+                why="提款币种或FOL允许币种范围尚未核实，无法判定是否超出范围。")
         # 定位信息：提款币种来自提款指令、授信段/币种范围来自 FOL
         loc_ccy = docs.locate("DRAWDOWN_INSTRUCTION", "currency")
         loc_tranche = docs.locate("DRAWDOWN_INSTRUCTION", "tranche")
-        loc_allowed = docs.locate("FACILITY_LETTER", "allowed_currencies")
+        loc_allowed = _term_location(docs,permitted) if scoped else docs.locate("FACILITY_LETTER", "allowed_currencies")
+        if scoped:tranche=application['facility_name']
         if dd_ccy in allowed:
             return RuleResult(
                 self.id, self.name, self.dimension, Status.PASS,
@@ -129,23 +151,41 @@ class R_DrawdownAmountWithinFacility(Rule):
         fol = docs.first("FACILITY_LETTER")
         if not dd or not fol:
             return _skip(self.id, self.name, self.dimension, "缺少提款指令或授信函，无法校验。")
-        amt = _dec(dd.get("amount"))
-        facility = _dec(fol.get("facility_amount"))
-        remaining = facility - amt
+        context=fol.get('_facility_context') or {}
+        limit=context.get('nominal_limit') or {}
+        nominal=limit.get('amount') if context.get('status')=='ready' else fol.get('facility_amount')
+        nominal_currency=limit.get('currency') if context.get('status')=='ready' else fol.get('facility_currency')
+        from ..parsing.normalization import normalize
+        try:
+            amt=normalize(dd.get('amount'),'money');facility=normalize(nominal,'money')
+            if amt is None or facility is None:raise ValueError('missing amount')
+            amt=Decimal(amt);facility=Decimal(facility)
+        except (ValueError,TypeError):
+            return RuleResult(self.id,self.name,self.dimension,Status.WARN,
+                why="提款金额或适用名义限额尚未核实，未识别值不能作为零。")
+        if not nominal_currency or nominal_currency!=dd.get('currency'):
+            return RuleResult(self.id,self.name,self.dimension,Status.WARN,
+                why="名义限额计价币种未明确或与提款币种不同，须核实允许币种及汇率依据，暂不比较金额大小。")
         loc_amt = docs.locate("DRAWDOWN_INSTRUCTION", "amount")
         loc_fac = docs.locate("FACILITY_LETTER", "facility_amount")
+        if context.get('status')=='ready':
+            sources=(limit.get('cells',{}).get('amount') or {}).get('sources') or []
+            meta=(docs.meta_by_type.get('FACILITY_LETTER') or [{}])[0]
+            loc_fac={**meta,'type_code':'FACILITY_LETTER','field_key':'borrower_allocations',
+                'page':sources[0]['page'],'bbox':sources[0]['bbox']} if sources else None
         if amt <= facility:
             return RuleResult(
-                self.id, self.name, self.dimension, Status.PASS,
-                why=f"提款金额落在授信额度内，扣减后剩余可用 {remaining:,.2f}。",
-                detail=[["提款金额", f"{amt:,.2f}", "", loc_amt], ["授信额度", f"{facility:,.2f}", "", loc_fac],
-                        ["剩余可用", f"{remaining:,.2f}", ""]],
+                self.id, self.name, self.dimension, Status.WARN,
+                why=f"提款金额未超过同币种名义限额 {facility:,.2f} {nominal_currency}；尚缺用信、冻结及共享占用等余额依据，不能认定剩余可用额度。",
+                suggestion="核实本次主体及授信的实际可用余额，再确认是否可提款。",
+                detail=[["提款金额", f"{amt:,.2f}", "", loc_amt], ["名义限额", f"{facility:,.2f}", "", loc_fac],
+                        ["额度口径", "名义限额；非可用余额", ""]],
             )
         return RuleResult(
             self.id, self.name, self.dimension, Status.FAIL,
-            why=f"提款金额 {amt:,.2f} 超过授信额度 {facility:,.2f}，构成超额提款。",
+            why=f"提款金额 {amt:,.2f} {nominal_currency} 超过同币种名义限额 {facility:,.2f} {nominal_currency}。",
             suggestion="要求客户下调提款金额或申请提额。",
-            detail=[["提款金额", f"{amt:,.2f}", "bad", loc_amt], ["授信额度", f"{facility:,.2f}", "bad", loc_fac]],
+            detail=[["提款金额", f"{amt:,.2f}", "bad", loc_amt], ["名义限额", f"{facility:,.2f}", "bad", loc_fac]],
         )
 
 
@@ -194,9 +234,18 @@ class R_DrawdownTranche(Rule):
         if not dd or not fol:
             return _skip(self.id, self.name, self.dimension, "缺少提款指令或授信函，无法校验。")
         tranche = _norm(dd.get("tranche"))
+        context=fol.get('_facility_context') or {}
+        if context.get('status')=='ready' and context.get('nominal_limit'):
+            return RuleResult(self.id,self.name,self.dimension,Status.PASS,
+                why="本次授信品种已由服务器原件凭据及登记主体分配唯一关联；对应说明不改写原文字段。",
+                detail=[["所选授信品种",context['nominal_limit']['facility_name'],""],
+                        ["对应方式",context.get('association_method') or '待核实',""]])
         if not tranche:
             return _skip(self.id, self.name, self.dimension, "提款指令未填授信段，跳过。")
         fol_facility = _norm(fol.get("facility"))
+        if not fol_facility:
+            return RuleResult(self.id,self.name,self.dimension,Status.WARN,
+                why="FOL适用授信品种尚未核实，不能因空字符串包含关系判定授信段存在。")
         if tranche == fol_facility or tranche in fol_facility or fol_facility in tranche:
             return RuleResult(self.id, self.name, self.dimension, Status.PASS,
                               why=f"提款所选授信段“{tranche}”在 FOL 授信品种中存在。",
@@ -263,6 +312,46 @@ class R_DrawdownDisbursementThreshold(Rule):
         return RuleResult(self.id, self.name, self.dimension, Status.PASS,
                           why=f"提款金额 {amt:,.2f} 未超阈值，放款方式“{method}”无强制要求。",
                           detail=[["提款金额", f"{amt:,.2f}", ""], ["放款方式", method, ""]])
+
+
+@register
+class R_DrawdownLoanTenor(Rule):
+    id = "DRAWDOWN_VS_FACILITY_LETTER__TENOR"
+    name = "本次贷款期限符合所选授信条款"
+    dimension = "A"
+
+    def evaluate(self, docs: DocBundle) -> RuleResult:
+        dd=docs.first('DRAWDOWN_INSTRUCTION');fol=docs.first('FACILITY_LETTER')
+        if not dd or not fol:return _skip(self.id,self.name,self.dimension,'缺少提款指令或授信函，无法核对期限。')
+        context=fol.get('_facility_context') or {};application=context.get('term_application')
+        if application is None and 'facility_terms' not in fol:
+            return _skip(self.id,self.name,self.dimension,'未提供逐授信条款，期限仍须专项审核。')
+        fact=(application or {}).get('facts',{}).get('loan_tenor') or {}
+        if context.get('status')!='ready' or (application or {}).get('status')!='accepted' or fact.get('status')!='accepted':
+            return RuleResult(self.id,self.name,self.dimension,Status.WARN,
+                why='所选授信的完整期限条款或关联尚未核实，不能借用其他授信期限或以利息期替代。')
+        policy=fact.get('value') or {}
+        def period(p):return f"{p['count']}{'个月' if p['unit']=='months' else '天'}"
+        conditions=[]
+        if policy.get('standard_periods'):conditions.append('标准期限：'+' / '.join(period(p) for p in policy['standard_periods']))
+        if policy.get('other_period_requires_lender_agreement') is True:conditions.append('其他期限须贷款人同意')
+        if policy.get('absolute_maximum'):
+            conditions.append(('包括延期和展期的绝对上限：' if policy.get('maximum_includes_extensions_and_rollovers') is True else '每次用信上限：')+period(policy['absolute_maximum']))
+        for kind,maximum in policy.get('instrument_maxima',{}).items():
+            conditions.append({'paper':'纸质票据','electronic':'电子票据'}.get(kind,kind)+'上限：'+period(maximum))
+        from ..parsing.term_facts import date_span_observation
+        observation=date_span_observation(dd.get('drawdown_date'),dd.get('maturity_date'))
+        elapsed=observation.get('elapsed_days')
+        # No calendar-month/rollover/origin convention or lender approval is
+        # inferred from dates or the independently extracted interest period.
+        return RuleResult(self.id,self.name,self.dimension,Status.WARN,
+            why='已取得所选授信期限条件；起讫日、月期限、展期起点及适用同意依据仍须核实，不能仅凭日期差或利息期判定通过。',
+            suggestion='按完整期限条款核实本次期限、适用日历及展期/贷款人同意依据。',
+            detail=[['所选授信',application['facility_name'],''],
+                    ['期限条件','；'.join(conditions) or '待核实','',_term_location(docs,fact)],
+                    ['提款日',_norm(dd.get('drawdown_date')) or '待核实','',docs.locate('DRAWDOWN_INSTRUCTION','drawdown_date')],
+                    ['到期日',_norm(dd.get('maturity_date')) or '待核实','',docs.locate('DRAWDOWN_INSTRUCTION','maturity_date')],
+                    ['日期差观察值',f'{elapsed}天；不是已核实贷款期限' if elapsed is not None else '日期待核实','']])
 
 
 @register

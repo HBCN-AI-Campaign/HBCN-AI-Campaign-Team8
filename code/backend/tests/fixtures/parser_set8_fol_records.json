@@ -1,0 +1,59 @@
+{
+  "schema": "parser-record-evaluation/1.0",
+  "annotation_status": "engineering_verified",
+  "scope": "人工查看第八套FOL原图第5至8页标注的法定借款人、额度及跨页分配表；不代表本次提款适用关系，不是业务签字",
+  "filename": "FOL-编造完.pdf",
+  "sha256": "68eb01adf085e0e713f883728d7117706f11a8004a41ee26d9371a21809aaad7",
+  "borrowers": [
+    {"name":"ABCD-CHINA HOLDING CORP.","short_name":"ABCD China","name_local":"ABCD（中国）投资有限公司"},
+    {"name":"QINGDAO ABCD STAINLESS STEEL CO., LTD.","short_name":"QPSS","name_local":"青岛ABCD不锈钢有限公司"},
+    {"name":"ABCD (GUANGDONG) STEEL CO LTD","short_name":"Shunde ABCD","name_local":"广东顺德ABCD钢板有限公司"},
+    {"name":"ABCD (SUZHOU) AUTOMOTIVE PROCESSING CENTER CO., LTD","short_name":"Suzhou ABCD","name_local":"ABCD（苏州）汽车配件制造有限公司"},
+    {"name":"ABCD-CFPC CO., LTD","short_name":"Foshan ABCD","name_local":"ABCD（佛山）钢材加工有限公司"},
+    {"name":"ABCD-CTPC","short_name":"POS-Tianjin","name_local":"ABCD（天津）钢材加工有限公司"},
+    {"name":"ABCD-CHINA QINGDAO PROCESSING CENTER CO.,LTD","short_name":"POS-QD","name_local":"ABCD（青岛）钢材加工有限公司"},
+    {"name":"ABCD (CHONGQING) AUTOMOTIVE PROCESSING CENTER CO.,LTD","short_name":"Chongqing ABCD","name_local":"ABCD（重庆）汽车配件制造有限公司"},
+    {"name":"ZHANGJIAGANG ABCD STAINLESS STEEL CO LTD","short_name":"ZPSS","name_local":"张家港ABCD不锈钢有限公司"},
+    {"name":"ABCD (LIAONING) AUTOMOTIVE PROCESSING CENTER CO., LTD","short_name":"Liaoning ABCD","name_local":"ABCD（辽宁）汽车配件制造有限公司"},
+    {"name":"ABCD (WUHU) AUTOMOTIVE PROCESSING CENTER CO.,LTD","short_name":"Wuhu ABCD","name_local":"ABCD（芜湖）汽车配件制造有限公司"},
+    {"name":"ABCD (YANTAI) AUTOMOTIVE PROCESSING CENTER CO., LTD.","short_name":"POS-Yantai","name_local":"ABCD（烟台）汽车配件制造有限公司"},
+    {"name":"ABCD-TISCO (JILIN) PROCESSING CENTER CO., LTD","short_name":"ABCJilin","name_local":"ABCD通钢（吉林）钢材加工有限公司"},
+    {"name":"ABCD GUANGDONG AUTOMOTIVE STEEL CO., LTD.","name_local":"广东ABCD汽车板有限公司"}
+  ],
+  "borrower_notes": ["名单原编号重复、跳号，不用编号作为主体ID。", "第13家法定名单简称原文为ABCJilin，表格使用ABCD Jilin；不得自动认定同一别名。", "第14家简称与英文名称尾部换行交错；不标注一个推测修复后的简称。"],
+  "facility_names": {
+    "aggregate":"aggregate Facility amount",
+    "revolving":"Multiple Currency Revolving Loan Facility",
+    "import":"Import Facilities",
+    "clean_import":"Facility for Clean Import Loan",
+    "reimbursement":"Facility for Reimbursement Finance",
+    "acceptance":"Facility for RMB Bank Acceptance Draft Acceptance",
+    "discounting":"Facility for RMB Bank Acceptance Draft Discounting",
+    "combined":"Multiple Currency Revolving Loan Facility/ Import Facilities/ Facility for RMB Bank Acceptance Draft Acceptance/ Facility for RMB Bank Acceptance Draft Discounting"
+  },
+  "facility_limits": [
+    {"facility":"aggregate","amount":"60000000","currency":"USD","page":7},
+    {"facility":"revolving","amount":"60000000","currency":"USD","page":7},
+    {"facility":"import","amount":"60000000","currency":"USD","page":7},
+    {"facility":"clean_import","amount":"60000000","currency":"USD","page":7},
+    {"facility":"reimbursement","amount":"60000000","currency":"USD","page":7},
+    {"facility":"acceptance","amount":"60000000","currency":"USD","page":7,"status":"conflict"},
+    {"facility":"acceptance","amount":"40000000","currency":"USD","page":8,"status":"conflict"},
+    {"facility":"discounting","amount":"60000000","currency":"USD","page":7},
+    {"facility":"combined","amount":"60000000","currency":"USD","page":8}
+  ],
+  "allocation_amounts": {
+    "ABCD China":"40000000","QPSS":"10000000","Shunde ABCD":"20000000","Suzhou ABCD":"5000000",
+    "Foshan ABCD":"10000000","POS-Tianjin":"5000000","POS-QD":"10000000","Chongqing ABCD":"20000000",
+    "ZPSS":"15000000","Liaoning ABCD":"5000000","Wuhu ABCD":"5000000","POS-Yantai":"5000000",
+    "ABCD Jilin":"7000000","ABCD GDAS":"20000000"
+  },
+  "allocation_groups": [
+    {"facility":"revolving","borrowers":"all","page":7},
+    {"facility":"import","borrowers":"all","pages":[7,8],"must_remain_unresolved":["POS-QD"]},
+    {"facility":"acceptance","borrowers":["ABCD China"],"page":8},
+    {"facility":"discounting","borrowers":"all","page":8},
+    {"facility":"combined","borrowers":"all","page":8}
+  ],
+  "allocation_notes": ["共57行，其中56行金额清晰。Import续表POS-QD原图印为USD]0,000,000，不能将]静默改1。", "共享组及各借款人分配额不得加总作为可用余额。", "评分允许名称的空白、大小写和英文逗号/句点排版差异，括号、连字符、斜线等内容仍须匹配。"]
+}

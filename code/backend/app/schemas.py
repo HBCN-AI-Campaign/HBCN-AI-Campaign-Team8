@@ -1,7 +1,9 @@
 """Pydantic DTO。"""
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from .parsing.facility import FacilitySelection
+from .money import TaskMoney
 
 
 # --- auth ---
@@ -28,6 +30,8 @@ class DocumentIn(BaseModel):
     fields: dict = {}
     pdf_file: str | None = None       # 原件 PDF 文件名（/pdf/<file> 可预览）
     field_sources: dict = {}          # {field_key: {page, bbox}} 字段定位
+    parse_run_id: str | None = None
+    field_confirmations: dict[str, str] = {}
 
 
 class DocumentOut(DocumentIn):
@@ -41,8 +45,17 @@ class TaskCreate(BaseModel):
     customer_no: str | None = None   # 关联客户号（经办人识别/搜索选定）
     borrower: str
     drawdown_currency: str
-    drawdown_amount: float
+    drawdown_amount: TaskMoney
     documents: list[DocumentIn] = []
+    facility_selection: FacilitySelection | None = None
+
+
+class FacilityContextIn(BaseModel):
+    documents: list[DocumentIn]
+    facility_selection: FacilitySelection | None = None
+    borrower: str | None = None
+    drawdown_currency: str | None = None
+    drawdown_amount: TaskMoney | None = None
 
 
 class TaskOut(BaseModel):
@@ -53,7 +66,7 @@ class TaskOut(BaseModel):
     customer_name: str | None = None       # 客户名称
     borrower: str
     drawdown_currency: str
-    drawdown_amount: float
+    drawdown_amount: TaskMoney
     status: str
     needs_recheck: bool = False            # 字段被编辑后待重新核对
     created_at: datetime | None = None
@@ -96,10 +109,16 @@ class SupplementFieldUpdate(BaseModel):
     value: object = None    # 新值（字符串 / 数字 / 列表等）
 
 
+class SupplementDocument(DocumentIn):
+    replaces_doc_code: str | None = None
+
+
 class SupplementIn(BaseModel):
     note: str = ""                                   # 补件说明
     field_updates: list[SupplementFieldUpdate] = []  # 字段级补充 / 更正
     added_files: list[str] = []                      # 新补充的文件名（仅登记，便于展示）
+    documents: list[SupplementDocument] = []
+    input_digest: str | None = None
 
 
 # --- 字段级编辑（经办人/审核人更正抓取内容）---
@@ -129,7 +148,7 @@ class TaskDetail(TaskOut):
     result_counts: dict = {}
 
 
-# --- 文件解析 Agent（mock）返回 ---
+# --- 文件解析 Agent 返回 ---
 class FieldSource(BaseModel):
     """字段在原件 PDF 中的位置（归一化 bbox，左上角原点）。"""
     page: int = 1
@@ -144,6 +163,15 @@ class ParsedField(BaseModel):
     kind: str = "text"             # text / number / currency / list —— 前端控件类型
     confidence: float = 1.0        # 识别置信度（<0.8 前端高亮提醒复核）
     source: FieldSource | None = None   # 定位信息（可空）
+    data_type: str = "text"
+    status: str = "needs_review"
+    required: bool = False
+    raw_value: str | None = None
+    candidates: list[dict] = []
+    issues: list[str] = []
+    method: str | None = None
+    choices: list[str] = []
+    row_results: list[dict] = []
 
 
 class ParsedDocument(BaseModel):
@@ -154,6 +182,16 @@ class ParsedDocument(BaseModel):
     source_filename: str           # 上传的原始文件名
     pdf_file: str | None = None    # 原件 PDF 文件名（/pdf/<file> 预览）
     fields: list[ParsedField]
+    status: str = "needs_review"
+    issues: list = []
+    page_count: int = 0
+    source_sha256: str | None = None
+    schema_version: str | None = None
+    unresolved_required: list[str] = []
+    regional_attempts: list[dict] = []
+    structure_attempts: list[dict] = []
+    page_diagnostics: list[dict] = Field(default_factory=list)
+    field_diagnostics: list[dict] = Field(default_factory=list)
 
 
 class ParseResult(BaseModel):
@@ -161,11 +199,15 @@ class ParseResult(BaseModel):
     suggested_task_code: str
     suggested_borrower: str
     suggested_currency: str
-    suggested_amount: float
+    suggested_amount: str | float | None = None
     # 按借款人名称匹配到的客户（可空；经办人可在前端重新搜索选定）
     suggested_customer_no: str | None = None
     suggested_customer_name: str | None = None
+    status: str = "needs_review"
+    schema_version: str | None = None
+    parse_run_id: str | None = None
     documents: list[ParsedDocument]
+    facility_context: dict | None = None
 
 
 # --- 智能审核 Agent（mock）---

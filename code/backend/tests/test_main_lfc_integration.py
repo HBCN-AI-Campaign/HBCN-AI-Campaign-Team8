@@ -7,7 +7,6 @@ import unittest
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
-import httpx
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -15,6 +14,7 @@ from sqlalchemy.pool import StaticPool
 from app import models
 from app.database import Base, get_db
 from app.main import app
+from app.schemas import ParsedDocument
 from app.security import create_access_token
 
 
@@ -101,36 +101,72 @@ class MainLfcIntegrationTests(unittest.TestCase):
         self.assertEqual(data["status"], "pending")
         self.assertFalse(data["needs_recheck"])
 
-    def test_uploaded_document_uses_ocr_and_keeps_the_parse_contract(self):
-        calls = []
-
-        def ocr(request):
-            calls.append(request)
-            return httpx.Response(200, json={
-                "text": "借款人：Integration Customer\n授信额度：1,000\n允许币种：USD",
-                "blocks": [{"text": "借款人：Integration Customer", "score": 0.98,
-                            "box": [0.1, 0.2, 0.6, 0.3], "page": 1}],
-            })
-
+    def test_legacy_sync_parse_route_keeps_response_contract(self):
         with tempfile.TemporaryDirectory(prefix="hbcn-merge-parse-") as temp:
             uploads = Path(temp) / "uploads"
-            with httpx.Client(transport=httpx.MockTransport(ocr)) as transport, patch(
-                "app.parse_agent.httpx.post", side_effect=transport.post
-            ), patch("app.config.UPLOAD_DIR", uploads), patch("app.parse_agent.UPLOAD_DIR", uploads), patch(
-                "app.parse_agent.settings.OCR_BASE_URL", "http://ocr-service"
-            ):
+            result = {
+                "suggested_task_code": "2026-0001", "suggested_borrower": "Integration Customer",
+                "suggested_currency": "USD", "suggested_amount": "1000.00",
+                "documents": [{"doc_code": "FACILITY_LETTER-01", "type_code": "FACILITY_LETTER",
+                    "type_label": "授信函", "source_filename": "facility_letter.pdf", "pdf_file": "uploads/original.pdf",
+                    "fields": [{"key": "borrower", "label": "借款人", "value": "Integration Customer",
+                        "kind": "text", "data_type": "text", "confidence": 0.0, "source": {"page": 1, "bbox": [.1,.2,.6,.3]},
+                        "status": "accepted", "required": True, "issues": [], "candidates": [], "choices": []}],
+                    "status": "needs_review", "issues": [], "page_count": 1}]
+            }
+            result["documents"][0]["page_diagnostics"] = [{
+                "page": 1, "width": 1191, "height": 1684, "ocr_required": True,
+                "ocr_status": "completed", "block_count": 68,
+                "recognized_character_count": 1319, "valid_box_count": 68,
+                "invalid_box_count": 0,
+                "score_bins": {"lt_085": 0, "085_to_095": 12, "ge_095": 56},
+                "error_codes": [],
+            }]
+            result["documents"][0]["field_diagnostics"] = [{
+                "key": "amount", "data_type": "money", "status": "needs_review",
+                "required": True, "value_present": False, "candidate_count": 1,
+                "active_candidate_count": 1, "candidate_method_counts": {"ocr_semantic": 1},
+                "candidate_issue_counts": {"RAW_VALUE_NOT_GROUNDED": 1},
+                "regional_attempt_count": 0, "regional_attempt_status_counts": {},
+                "regional_attempt_failure_counts": {},
+                "field_issue_codes": ["RAW_VALUE_NOT_GROUNDED"],
+                "source_page_present": False, "source_box_valid": False,
+            }]
+            with patch("app.routers.parsing.UPLOAD_DIR", uploads), patch(
+                "app.routers.tasks.parse_files", return_value=result
+            ) as parse:
                 response = self.client.post("/api/tasks/parse", headers=self.operator,
                     files={"files": ("facility_letter.pdf", b"isolated OCR fixture", "application/pdf")})
+                self.assertEqual(Path(parse.call_args.args[0][0]["path"]).read_bytes(), b"isolated OCR fixture")
         self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(len(calls), 1)
-        self.assertEqual(str(calls[0].url), "http://ocr-service/file/detailed")
+        parse.assert_called_once()
         data = response.json()
-        self.assertEqual(data["suggested_customer_no"], "C0001")
+        self.assertEqual(data["suggested_amount"], "1000.00")
         self.assertEqual(data["suggested_borrower"], "Integration Customer")
         fields = {field["key"]: field for field in data["documents"][0]["fields"]}
-        self.assertEqual(fields["facility_amount"]["value"], 1000.0)
+        self.assertEqual(fields["borrower"]["value"], "Integration Customer")
         self.assertEqual(fields["borrower"]["source"]["page"], 1)
         self.assertTrue(data["documents"][0]["pdf_file"].startswith("uploads/"))
+        self.assertTrue(data["parse_run_id"])
+        diagnostic = data["documents"][0]["page_diagnostics"][0]
+        self.assertEqual(diagnostic["block_count"], 68)
+        self.assertEqual(diagnostic["valid_box_count"], 68)
+        self.assertNotIn("text", diagnostic)
+        self.assertNotIn("Integration Customer", str(diagnostic))
+        field_diagnostic = data["documents"][0]["field_diagnostics"][0]
+        self.assertEqual(field_diagnostic["key"], "amount")
+        self.assertEqual(field_diagnostic["candidate_issue_counts"], {"RAW_VALUE_NOT_GROUNDED": 1})
+        self.assertNotIn("value", field_diagnostic)
+        self.assertNotIn("raw_value", field_diagnostic)
+        self.assertNotIn("OCR body", str(field_diagnostic))
+
+    def test_legacy_parsed_document_defaults_page_diagnostics(self):
+        document = ParsedDocument.model_validate({
+            "doc_code": "F1", "type_code": "FACILITY_LETTER", "type_label": "授信函",
+            "source_filename": "facility.pdf", "fields": [],
+        })
+        self.assertEqual(document.page_diagnostics, [])
+        self.assertEqual(document.field_diagnostics, [])
 
     def test_seed_creates_initial_rule_results_and_is_repeatable(self):
         from app.seed import seed

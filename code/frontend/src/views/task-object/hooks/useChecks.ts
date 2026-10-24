@@ -91,13 +91,16 @@ export function useChecks(
     [docUrl, message],
   )
 
-  // 根据当前结果生成通过/退回邮件草稿
+  // A green rule count alone is insufficient: completion and current parsing evidence are server state.
   const genMail = useCallback(() => {
     const d = detail
     const borrower = d?.borrower ?? ''
-    const pass = !counts.fail
+    const parsingPending = results.some((r) => r.rule_id === 'PARSING_READY')
+    const needsSupplement = d?.status === 'need_supplement'
+    const awaitingReview = !needsSupplement && (!d || d.status !== 'completed' || d.needs_recheck || parsingPending)
+    const outcome = needsSupplement ? '退回补件' : awaitingReview ? '待核实' : counts.fail ? '退回' : '通过'
     const to = '经办人 <operator@example.com>'
-    const subject = `【境外贷款单据审核${pass ? '通过' : '退回'}】${code} - ${borrower}`
+    const subject = `【境外贷款单据审核${outcome}】${code} - ${borrower}`
     const issues = flagged
       .map(
         (r, i) =>
@@ -107,7 +110,24 @@ export function useChecks(
       )
       .join('\n')
     let body: string
-    if (pass) {
+    if (needsSupplement) {
+      body =
+        `您好，\n\n关于贷款审核任务 ${code}（借款人：${borrower}）的材料已退回补件。\n\n` +
+        `${comment ? `审核意见：${comment}\n\n` : ''}` +
+        (issues ? `请核实以下事项后重新提交：\n${issues}\n\n` : '请按审核意见补充或更正材料后重新提交。\n\n') +
+        attachmentBlock() +
+        `\n此致\n审核人员 ${displayName}`
+    } else if (awaitingReview) {
+      body =
+        `您好，\n\n关于贷款审核任务 ${code}（借款人：${borrower}）的单据尚未形成最终审核结论。\n\n` +
+        `${parsingPending ? '解析关口仍有材料或字段待核实；' : ''}${d?.needs_recheck ? '任务材料变更后尚未重新核对；' : ''}` +
+        `${d && d.status !== 'completed' ? `当前任务状态为 ${d.status}，尚未完成终审；` : ''}` +
+        `请先完成必要核实和审核，不要将本任务视为已通过或已归档。\n\n` +
+        (issues ? `当前提示：\n${issues}\n\n` : '') +
+        (comment ? `审核意见：${comment}\n\n` : '') +
+        attachmentBlock() +
+        `\n此致\n审核人员 ${displayName}`
+    } else if (!counts.fail) {
       body =
         `您好，\n\n关于贷款审核任务 ${code}（借款人：${borrower}，提款金额 ${d?.drawdown_currency} ${fmt(
           d?.drawdown_amount ?? 0,

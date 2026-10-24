@@ -1,5 +1,11 @@
-export function fmt(n: number): string {
-  return Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+export function fmt(n: string | number): string {
+  // Group decimal digits directly; Number() can lose cents before formatting.
+  const text = String(n)
+  const match = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(text)
+  if (!match) return text
+  const [, sign, rawInteger, fraction = ''] = match
+  const integer = rawInteger.replace(/^0+(?=\d)/, '')
+  return `${sign}${integer.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${fraction.padEnd(2, '0')}`
 }
 
 // 任务状态文案（按角色区分视角）
