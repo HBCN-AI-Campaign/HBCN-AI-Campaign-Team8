@@ -1,10 +1,16 @@
-# 汇丰云服务器部署交接：独立 RAG 0.5.1
+# 汇丰云服务器部署交接：独立 RAG 0.5.3
 
 这是供同事部署/联调的模块版本，不表示已经迁移到汇丰 ECS 或通过完整业务质量验收。模块只通过 HTTP 与主站、模型 runtime、Embedding、reranker、法宝连接；调用方接口见 [API_CONTRACT.md](../API_CONTRACT.md)，不需要随内部模型或数据库实现改代码。
 
+## 2026-10-23 版本与环境状态
+
+当前源码 `app/version.py`、本文件标题与容器示例一致：服务 `0.5.3`、API 契约 `1.3.3`。目标机只读核查显示 `/opt/hbcn-rag` 和 `/etc/hbcn-rag/rag.env` 均不存在，8011 连接被拒绝；因此 RAG 尚未在目标机部署，云端 `/health`、`/api/v1/ready`、主站调用、数据持久化及恢复演练仍为 **pending**。
+
+`hbcn-rag.service` 模板静态包含非 root、回环监听、`ProtectSystem=strict` 和受限写目录；目标机上的服务账号、环境文件属主/权限、数据目录权限与 systemd 实际生效配置均未核验。`.env.example` 中的凭证仅为占位符。当前没有 Docker/Podman 或本机 PostgreSQL 服务，故本机不能据此构建 Linux 镜像或运行真实 PostgreSQL 集成用例；不连接共享/生产数据库补测。
+
 ## 获取协作分支版本
 
-RAG 协作版本以审核过的 `lfc` commit为准，**不要从 main 部署本版本**。当前源码版本0.5.1；本轮工作区是否已提交/推送以[流程验收报告](../RAG模块流程验收报告.md)为准，不把文件已修改当成GitHub已更新。部署时固定审核过的lfc commit，避免覆盖同事工作区；交接范围为`code/rag-service`及对应RAG文档，不包含个人凭证、已建索引或真实资料。
+RAG 协作版本以审核过的 `lfc` commit为准，**不要从 main 部署本版本**。当前源码版本0.5.3；本轮工作区是否已提交/推送以[流程验收报告](../RAG模块流程验收报告.md)为准，不把文件已修改当成GitHub已更新。部署时固定审核过的lfc commit，避免覆盖同事工作区；交接范围为`code/rag-service`及对应RAG文档，不包含个人凭证、已建索引或真实资料。
 
 ```bash
 git fetch origin lfc
@@ -62,10 +68,10 @@ cd ..
 模块根目录提供多阶段 Dockerfile：构建 React UI，安装锁定的 Python 直接依赖，以非 root 运行。只复制应用、脚本、接口快照和公开目录说明，排除 .env、data、业务原件和 node_modules。镜像中不内置模型、账号、数据库、个人文件或真实知识库；这些由外部服务和受控存储提供。
 
 ```bash
-docker build -t hbcn-rag:0.5.1 .
+docker build -t hbcn-rag:0.5.3 .
 docker volume create hbcn-rag-data
 docker run --name hbcn-rag --env-file /etc/hbcn-rag/rag.env \
-  -p 127.0.0.1:8011:8011 -v hbcn-rag-data:/var/lib/hbcn-rag hbcn-rag:0.5.1
+  -p 127.0.0.1:8011:8011 -v hbcn-rag-data:/var/lib/hbcn-rag hbcn-rag:0.5.3
 ```
 
 部署方确保数据卷 UID/GID 10001 可写；覆盖 RAG_DATA_DIR 时同步挂载。示例不指定 CPU/内存限额；资源按目标质量与实测容量配置。HEALTHCHECK 仅查存活，发布仍要查就绪和真实提问。当前 Windows 开发机无 Docker，**本轮没有验证 Linux 镜像构建和云端运行**；Dockerfile/原生模板均需部署同事在目标环境验证，不能把模板存在视为部署成功。
@@ -79,7 +85,11 @@ docker run --name hbcn-rag --env-file /etc/hbcn-rag/rag.env \
 5. 验证鉴权、错误/空结果、缺口、取消、备份恢复、进程重启、真实任务 ACL 和实际 UI。引用原文不能通过绕过主站鉴权的公网 `/api/v1` 暴露。
 6. 切换失败时恢复旧代码/镜像及匹配的配置/索引/原件快照；不要只切回旧程序却继续读不兼容新索引。当前没有自动灰度或一键数据回滚，部署负责人执行并取证。
 
-无模型费用的模块检查：安装 `requirements-dev.txt` 后运行 `python -m unittest discover -s tests -v`、`python scripts/smoke-isolated-api.py`、`python scripts/export-openapi.py --check`、`python -m pip check`；UI 用 `npm test && npm run build`。默认跳过真实 PostgreSQL/外部语料检查；`HBCN_TEST_POSTGRES=1` 才运行随机 schema 的合成隔离 PG 测试，使用部署测试账号，绝不拿正式业务库当评测集。
+CI workflow [`.github/workflows/rag-ci.yml`](../../.github/workflows/rag-ci.yml) 每次启动一次性 PostgreSQL 16 服务，并以 `HBCN_TEST_POSTGRES=1` 运行完整后端套件；随机测试 schema 执行 FTS、事务、撤回和复核流程，无需真实向量/模型服务。开发机可运行 `scripts/run-postgres-tests.ps1`，但须自行准备 loopback 数据库 `hbcn_rag_test`、PostgreSQL 16+、`CREATE` schema 权限，并设置 `RAG_DATABASE_URL` 为该本地实例；脚本拒绝远端、其他数据库名和非 `sslmode=disable` 目标。它只检查并连接，不创建数据库或启动服务。本工作区当前没有 PostgreSQL 工具/服务/连接配置，不能本机实测这12项。
+
+另1项外部语料清单验收需先获得授权的11文件根目录，再设置 `HBCN_TEST_SOURCE_ROOT` 并运行 `python -m unittest discover -s tests -p test_ragflow.py`。本仓库/工作区不包含这些文件，CI 不拉取真实业务文档；缺少获授权目录时该项保持 skipped，不计通过。所有 13 个原跳过项及补测入口详见[验收报告](../RAG模块流程验收报告.md)和[评测指南](../evaluation/README.md)。
+
+契约 `1.3.3` 是 API-only 更新，无 DDL/数据迁移。回滚到 `0.5.2` 会恢复默认 FastAPI 422，可能回显请求 input；不能直接将旧版重新暴露。若必须回滚，先停/限流服务入口，并在旧代码上应用等效脱敏补丁或由经审查的网关保证清洗，再验证 OpenAPI 与敏感输入测试后恢复流量。回滚处置见 [API 契约升级说明](../API_CONTRACT.md#133-升级与回退)。
 
 ## v0.3.1 撤回与回滚注意
 

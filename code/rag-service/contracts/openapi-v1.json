@@ -2,6 +2,7 @@
   "components": {
     "schemas": {
       "AnswerRequest": {
+        "additionalProperties": false,
         "properties": {
           "conversation": {
             "items": {
@@ -602,19 +603,6 @@
         "title": "EvidenceLink",
         "type": "object"
       },
-      "HTTPValidationError": {
-        "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "title": "Detail",
-            "type": "array"
-          }
-        },
-        "title": "HTTPValidationError",
-        "type": "object"
-      },
       "IndexResponse": {
         "properties": {
           "document_ids": {
@@ -1175,6 +1163,52 @@
         "title": "ReferenceWithdrawal",
         "type": "object"
       },
+      "RequestValidationIssue": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Loc",
+            "type": "array"
+          }
+        },
+        "required": [
+          "loc",
+          "category"
+        ],
+        "title": "RequestValidationIssue",
+        "type": "object"
+      },
+      "RequestValidationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/RequestValidationIssue"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "RequestValidationResponse",
+        "type": "object"
+      },
       "RetrievalResponse": {
         "properties": {
           "clarification_question": {
@@ -1338,39 +1372,6 @@
         "title": "UserFactAssertion",
         "type": "object"
       },
-      "ValidationError": {
-        "properties": {
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "title": "Location",
-            "type": "array"
-          },
-          "msg": {
-            "title": "Message",
-            "type": "string"
-          },
-          "type": {
-            "title": "Error Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
-        "title": "ValidationError",
-        "type": "object"
-      },
       "WebSnapshot": {
         "additionalProperties": false,
         "properties": {
@@ -1441,7 +1442,7 @@
   },
   "info": {
     "title": "HBCN Business Knowledge Service",
-    "version": "0.5.1"
+    "version": "0.5.3"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -1523,11 +1524,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "请求格式错误；只返回字段位置和错误类别"
           }
         },
         "summary": "Answer"
@@ -1609,11 +1610,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "请求格式错误；只返回字段位置和错误类别"
           }
         },
         "summary": "Answer Stream"
@@ -1671,7 +1672,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -1732,7 +1733,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -1802,7 +1803,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -1871,7 +1872,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -1956,7 +1957,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -2041,7 +2042,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -2136,7 +2137,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -2231,7 +2232,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -2300,7 +2301,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -2369,7 +2370,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -2448,7 +2449,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -2518,7 +2519,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -2590,7 +2591,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -2650,7 +2651,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -2748,7 +2749,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -2837,7 +2838,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -2927,7 +2928,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -3016,7 +3017,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -3126,7 +3127,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -3236,7 +3237,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -3346,7 +3347,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
@@ -3438,11 +3439,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/RequestValidationResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "请求格式错误；只返回字段位置和错误类别"
           }
         },
         "summary": "Enhanced Retrieval"

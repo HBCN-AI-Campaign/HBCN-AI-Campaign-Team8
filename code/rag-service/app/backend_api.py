@@ -17,7 +17,7 @@ from .config import settings
 from .engine import engine_kind, get_engine
 from .postgres_engine import SUPPORTED_EXTENSIONS
 from .runtime_client import SDKRuntime
-from .schemas import AnswerResponse, RetrievalResponse
+from .schemas import AnswerResponse, RequestValidationResponse, RetrievalResponse
 from .evidence_context import utf16_units
 from .legal_applicability import LegalContext
 from .graph_transport import GraphRun
@@ -44,6 +44,8 @@ class ConversationMessage(BaseModel):
 
 
 class AnswerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     query: str = Field(min_length=1, max_length=4000)
     scope: Literal["all", "business_rules", "project_design", "law"] = "all"
     top_k: int = Field(default=5, ge=1, le=8)
@@ -89,7 +91,12 @@ def valid_uuid(value):
 
 
 @router.get("/ready")
-def ready():
+def ready(request: Request):
+    startup_error = getattr(request.app.state, "startup_error", None)
+    if startup_error:
+        return JSONResponse(status_code=503, content={
+            "status": "unavailable", "message": startup_error,
+        })
     try:
         resources = postgres_engine().readiness()
         runtime_ready = SDKRuntime().health()
@@ -264,12 +271,16 @@ def answer_state(payload):
     return {**payload.model_dump(exclude={"web_context"}), "attempts": 0, "warnings": []}
 
 
-@router.post("/answers", response_model=AnswerResponse)
+@router.post("/answers", response_model=AnswerResponse, responses={
+    422: {"model": RequestValidationResponse, "description": "请求格式错误；只返回字段位置和错误类别"},
+})
 async def answer(payload: AnswerRequest, request: Request, web_key: str | None = Header(default=None, alias="X-Web-Context-Key")):
     return await graph_response(payload, request, generate_answer=True, web_key=web_key)
 
 
-@router.post("/retrievals", response_model=RetrievalResponse)
+@router.post("/retrievals", response_model=RetrievalResponse, responses={
+    422: {"model": RequestValidationResponse, "description": "请求格式错误；只返回字段位置和错误类别"},
+})
 async def enhanced_retrieval(payload: AnswerRequest, request: Request, web_key: str | None = Header(default=None, alias="X-Web-Context-Key")):
     """Return original evidence after query planning; never generate an answer."""
     return await graph_response(payload, request, generate_answer=False, web_key=web_key)
@@ -318,7 +329,9 @@ class GraphStreamingResponse(StreamingResponse):
             self.run.cancel()
 
 
-@router.post("/answers/stream")
+@router.post("/answers/stream", responses={
+    422: {"model": RequestValidationResponse, "description": "请求格式错误；只返回字段位置和错误类别"},
+})
 async def answer_stream(payload: AnswerRequest, web_key: str | None = Header(default=None, alias="X-Web-Context-Key")):
     run = await start_graph(payload, stream=True, web_key=web_key)
 
