@@ -90,7 +90,7 @@ class AssistantKnowledgeTests(unittest.TestCase):
                 self.invoke(self.payload(), version=version)
 
     def test_accepts_compatible_future_minor_and_patch_contracts(self):
-        for version in ('1.2.0', '1.2.7', '1.3.0'):
+        for version in ('1.2.0', '1.2.7', '1.3.0', '1.3.2', '1.3.3'):
             with self.subTest(version=version):
                 self.assertTrue(self.invoke(self.payload(), version=version)['evidence'])
 
@@ -132,17 +132,23 @@ class AssistantKnowledgeTests(unittest.TestCase):
 
     def test_http_failure_preserves_authorized_context_and_hides_upstream_body(self):
         context = {'task': {'task_code': 'TASK-1'}, 'documents': [], 'results': []}
-        notices = []
-        def handler(request):
-            return httpx.Response(403, json={'detail': 'PRIVATE_UPSTREAM_INFORMATION'})
-        with httpx.Client(transport=httpx.MockTransport(handler)) as http, patch(
-            'app.assistant_knowledge.httpx.post', side_effect=http.post
-        ):
-            hits = _rag_search(context, '核对业务', notices)
-        self.assertEqual(hits[0]['type'], 'task')
-        self.assertEqual(len(hits), 1)
-        self.assertTrue(notices)
-        self.assertNotIn('PRIVATE_UPSTREAM_INFORMATION', str(notices))
+        responses = (
+            (403, {'detail': 'PRIVATE_UPSTREAM_INFORMATION'}),
+            (422, {'detail': [{'loc': ['body', '<unknown_field>'], 'category': 'unknown_field'}]}),
+        )
+        for status, body in responses:
+            with self.subTest(status=status):
+                notices = []
+                def handler(request):
+                    return httpx.Response(status, json=body)
+                with httpx.Client(transport=httpx.MockTransport(handler)) as http, patch(
+                    'app.assistant_knowledge.httpx.post', side_effect=http.post
+                ):
+                    hits = _rag_search(context, '核对业务', notices)
+                self.assertEqual([hit['type'] for hit in hits], ['task'])
+                self.assertEqual(notices, ['知识库暂不可用；本次回复仅基于当前任务已加载的本地证据。'])
+                self.assertNotIn('PRIVATE_UPSTREAM_INFORMATION', str(notices))
+                self.assertNotIn('<unknown_field>', str(notices))
 
     def test_wrong_scope_is_not_sent_to_model_as_review_evidence(self):
         context = {'task': {'task_code': 'TASK-1'}, 'documents': [], 'results': []}
@@ -164,7 +170,7 @@ class AssistantKnowledgeTests(unittest.TestCase):
                 self.assertEqual(request.headers['Authorization'], 'Bearer service-test-token')
                 self.assertEqual(json.loads(request.content)['scope'], 'business_rules')
                 return httpx.Response(200, json=self.payload(),
-                                      headers={'X-RAG-Contract-Version': '1.3.0'})
+                                      headers={'X-RAG-Contract-Version': '1.3.3'})
             self.assertEqual(request.headers['Authorization'], 'Bearer runtime-test-token')
             if request.url.path == '/readyz':
                 return httpx.Response(200, json={'status': 'ready', 'configured': True,

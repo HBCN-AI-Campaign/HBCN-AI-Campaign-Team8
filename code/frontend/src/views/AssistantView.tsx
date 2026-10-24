@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { useSearchParams, Link } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { Bubble, Conversations, Sender, ThoughtChain, XProvider } from '@ant-design/x'
-import { Alert, App, Badge, Button, Card, Collapse, Drawer, Empty, Segmented, Select, Skeleton, Space, Tag, Tooltip, Typography } from 'antd'
-import { CheckCircleOutlined, DeleteOutlined, HistoryOutlined, LoadingOutlined, PlusOutlined, ReloadOutlined, RobotOutlined, SafetyCertificateOutlined, ThunderboltOutlined, UserOutlined } from '@ant-design/icons'
-import { renderMarkdown } from '@/assistant/markdown'
+import { Alert, App, Badge, Button, Collapse, Drawer, Empty, Segmented, Select, Skeleton, Space, Tag, Tooltip, Typography } from 'antd'
+import { CheckCircleOutlined, DeleteOutlined, DownOutlined, FileSearchOutlined, HistoryOutlined, LoadingOutlined, MoreOutlined, PlusOutlined, ReloadOutlined, RobotOutlined, SafetyCertificateOutlined, ThunderboltOutlined, UserOutlined } from '@ant-design/icons'
+import { renderMarkdownWithEvidence } from '@/assistant/markdown'
 import { useAssistant } from '@/assistant/useAssistant'
-import type { AssistantMessage } from '@/assistant/types'
+import type { AssistantCitation, AssistantMessage } from '@/assistant/types'
+import PdfSourceViewer from '@/components/PdfSourceViewer'
+import type { FieldSource } from '@/types'
 import { CollaborationPanel } from '@/assistant/CollaborationPanel'
+import { SkillLibraryDrawer } from '@/assistant/SkillLibraryDrawer'
 import { collaborationApi } from '@/assistant/collaboration'
-import type { LibrarySkill } from '@/assistant/collaboration'
 import { useAuthStore } from '@/stores/auth'
 import './AssistantView.css'
 
@@ -20,11 +22,65 @@ const suggestions = [
 
 function AssistantReply({ message }: { message: AssistantMessage }) {
   const [expanded, setExpanded] = useState(Boolean(message.streaming))
+  const [sourcesExpanded, setSourcesExpanded] = useState(false)
+  const [previewCitation, setPreviewCitation] = useState<AssistantCitation | null>(null)
+  const [citationAnnouncement, setCitationAnnouncement] = useState('')
+  const sourceList = useRef<HTMLOListElement>(null)
+  const pendingReference = useRef<string>()
+  const citationOrigin = useRef<HTMLAnchorElement | null>(null)
+  const scrollToReference = (reference: string) => {
+    const target = sourceList.current?.querySelector<HTMLElement>(`[data-reference-id="${reference}"]`)
+    const panel = target?.closest<HTMLElement>('.ant-collapse-content-box')
+    const chat = target?.closest<HTMLElement>('.hy-chat-scroll')
+    if (!target || !panel || !chat) return
+
+    const chatBounds = chat.getBoundingClientRect()
+    const panelBounds = panel.getBoundingClientRect()
+    if (panelBounds.top < chatBounds.top) chat.scrollTop -= chatBounds.top - panelBounds.top
+    else if (panelBounds.bottom > chatBounds.bottom) chat.scrollTop += panelBounds.bottom - chatBounds.bottom
+
+    const targetBounds = target.getBoundingClientRect()
+    const visiblePanelBounds = panel.getBoundingClientRect()
+    panel.scrollTop += targetBounds.top - visiblePanelBounds.top - 8
+    target.focus({ preventScroll: true })
+    const citation = message.citations.find((item) => item.reference_id === reference)
+    const label = citation?.label || citation?.source || '审核依据'
+    const page = citation?.page != null ? `，第 ${citation.page} 页` : ''
+    const conciseLabel = Array.from(label).slice(0, 60).join('') + (Array.from(label).length > 60 ? '…' : '')
+    setCitationAnnouncement(`已定位到依据 ${reference}：${conciseLabel}${page}。`)
+  }
   useEffect(() => { setExpanded(Boolean(message.streaming)) }, [message.streaming])
+  useEffect(() => {
+    const reference = pendingReference.current
+    if (!sourcesExpanded || !reference) return
+    const timer = window.setTimeout(() => {
+      scrollToReference(reference)
+      pendingReference.current = undefined
+    }, 220)
+    return () => window.clearTimeout(timer)
+  }, [sourcesExpanded, message.id])
   const failed = message.status === 'error' || message.status === 'stopped'
   const evidenceWarnings = message.steps.filter((step) => /^(retrieval-warning-|citation-warning-)/.test(step.key))
+  const messageKey = String(message.id).replace(/[^a-zA-Z0-9_-]/g, '-')
+  const jumpToReference = (reference: string, origin: HTMLAnchorElement) => {
+    pendingReference.current = reference
+    citationOrigin.current = origin
+    if (sourcesExpanded) {
+      window.setTimeout(() => {
+        scrollToReference(reference)
+        pendingReference.current = undefined
+      }, 0)
+    } else setSourcesExpanded(true)
+  }
+  const previewSource: FieldSource | null = previewCitation?.pdf_file ? {
+    pdf_file: previewCitation.pdf_file,
+    doc_code: previewCitation.doc_code || previewCitation.label || previewCitation.source,
+    page: Number.isInteger(previewCitation.page) && Number(previewCitation.page) > 0 ? Number(previewCitation.page) : 1,
+    bbox: [],
+  } : null
   return (
     <div className="hy-reply">
+      <span className="hy-sr-only" role="status" aria-live="polite" aria-atomic="true">{citationAnnouncement}</span>
       {message.steps.length > 0 && <Collapse
         className="hy-execution" size="small" ghost
         activeKey={expanded ? ['execution'] : []}
@@ -38,7 +94,13 @@ function AssistantReply({ message }: { message: AssistantMessage }) {
           }))} />,
         }]}
       />}
-      {message.content ? <div className="hy-markdown" dangerouslySetInnerHTML={{ __html: renderMarkdown(message.content) }} />
+      {message.content ? <div className="hy-markdown" onClick={(event) => {
+        const link = (event.target as HTMLElement).closest<HTMLAnchorElement>('[data-citation-reference]')
+        if (!link) return
+        event.preventDefault()
+        const reference = link.dataset.citationReference
+        if (reference) jumpToReference(reference, link)
+      }} dangerouslySetInnerHTML={{ __html: renderMarkdownWithEvidence(message.content, message.citations, message.id) }} />
         : <span className="hy-muted">{message.streaming ? '正在准备答复…' : failed ? '本轮未获得完整答复，请重新发送。' : '暂无答复内容'}</span>}
       {message.status === 'stopped' && <p className="hy-muted">已停止接收，此答复可能不完整。</p>}
       {message.status === 'error' && <p className="hy-error">本轮未完成，请查看下方错误提示后重试。</p>}
@@ -46,16 +108,43 @@ function AssistantReply({ message }: { message: AssistantMessage }) {
         message="本轮依据存在限制"
         description={evidenceWarnings.map((step) => <p key={step.key}>{step.detail || step.label}</p>)}
       />}
-      {message.citations.length > 0 && <Collapse className="hy-sources" size="small" ghost items={[{
+      {message.citations.length > 0 && <Collapse className="hy-sources" size="small" ghost
+        activeKey={sourcesExpanded ? ['sources'] : []}
+        onChange={(keys) => setSourcesExpanded(keys.includes('sources'))}
+        items={[{
         key: 'sources', label: `参考依据 · ${message.citations.length} 条`,
-        children: <ol>{message.citations.map((citation, index) => <li key={`${citation.id}:${index}`}>
+        children: <ol ref={sourceList} aria-label={`本轮参考依据，共 ${message.citations.length} 条`}>{message.citations.map((citation, index) => <li key={`${citation.id}:${index}`}
+          id={citation.reference_id && /^E\d+$/.test(citation.reference_id) ? `assistant-citation-${messageKey}-${citation.reference_id}` : undefined}
+          data-reference-id={citation.reference_id && /^E\d+$/.test(citation.reference_id) ? citation.reference_id : undefined}
+          tabIndex={citation.reference_id && /^E\d+$/.test(citation.reference_id) ? -1 : undefined}
+          onKeyDown={(event) => {
+            if (event.key !== 'Escape' || !citationOrigin.current) return
+            event.preventDefault()
+            const origin = citationOrigin.current
+            setSourcesExpanded(false)
+            window.setTimeout(() => {
+              if (origin.isConnected) origin.focus()
+            }, 220)
+          }}>
           {citation.reference_id && <Tag>{`[${citation.reference_id}]`}</Tag>}
           <strong>{citation.label || citation.source}</strong>
           {citation.page != null && <Tag>第 {citation.page} 页</Tag>}
           {citation.detail && <p>{citation.detail}</p>}
-          <small>{citation.source}</small>
+          <Space size={8} wrap>
+            <small>{citation.source}</small>
+            {citation.pdf_file && <Tooltip title={citation.page != null ? `打开 ${citation.doc_code || citation.label} 原件，第 ${citation.page} 页` : '引用未标定页码，将从原件第 1 页打开'}>
+              <Button size="small" type="link" icon={<FileSearchOutlined />}
+                aria-label={`打开${citation.doc_code || citation.label || '任务材料'}原件`}
+                onClick={() => setPreviewCitation(citation)}>查看原件</Button>
+            </Tooltip>}
+          </Space>
         </li>)}</ol>,
       }]} />}
+      {previewCitation && <PdfSourceViewer
+        visible={Boolean(previewSource)} source={previewSource}
+        title={`${previewCitation.doc_code || previewCitation.label || '任务材料'}原件`}
+        onClose={() => setPreviewCitation(null)}
+      />}
       {message.content && !message.streaming && <Typography.Paragraph className="hy-copy" copyable={{ text: message.content }}>复制答复</Typography.Paragraph>}
     </div>
   )
@@ -66,37 +155,55 @@ export default function AssistantView() {
   const assistant = useAssistant(query.get('task_code') || query.get('task') || '')
   const { modal } = App.useApp()
   const [draft, setDraft] = useState('')
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [skillsOpen, setSkillsOpen] = useState(false)
   const [collaborationOpen, setCollaborationOpen] = useState(false)
   const [messageMode, setMessageMode] = useState('问 AI')
-  const [library, setLibrary] = useState<LibrarySkill[] | null>(null)
-  const [libraryBusy, setLibraryBusy] = useState(false)
   const role = useAuthStore((state) => state.role)
   const scrollArea = useRef<HTMLDivElement>(null)
   const follow = useRef(true)
+  const previousActiveId = useRef(assistant.activeId)
   const disabled = assistant.loading || assistant.switching || assistant.sending
   const activeSession = assistant.sessions.find((item) => item.id === assistant.activeId)
   const activeSkill = assistant.skills.find((skill) => skill.id === assistant.skillId)
   const requestedSession = query.get('session_id')
   const waitingForRun = Boolean(assistant.activeRun) && !(assistant.shared && messageMode === '发给成员')
 
+  const changeConversation = (switchContext: () => void) => {
+    const apply = () => {
+      switchContext()
+      setDraft('')
+      setMessageMode('问 AI')
+      assistant.setSkillId(undefined)
+      follow.current = true
+      setShowJumpToLatest(false)
+    }
+    if (!draft.trim()) { apply(); return }
+    modal.confirm({
+      title: '当前草稿尚未发送',
+      content: '切换任务或会话会清空这段草稿，避免把问题带到另一个审核上下文。',
+      okText: '清空并切换', cancelText: '继续编辑',
+      onOk: apply,
+    })
+  }
+
   useEffect(() => {
     if (!assistant.loading && requestedSession && /^\d+$/.test(requestedSession)) void assistant.selectSession(Number(requestedSession))
   }, [requestedSession, assistant.loading, assistant.selectSession])
 
   useEffect(() => {
-    if (!skillsOpen) return
-    let current = true
-    // Older deployments still expose the shipped read-only catalog.
-    void collaborationApi.library().then((items) => { if (current) setLibrary(items) }).catch(() => undefined)
-    return () => { current = false }
-  }, [skillsOpen])
-
-  useEffect(() => {
     const area = scrollArea.current
     if (area && follow.current) area.scrollTop = area.scrollHeight
   }, [assistant.messages])
+
+  useEffect(() => {
+    if (previousActiveId.current !== null && assistant.activeId === null) {
+      setDraft('')
+      setMessageMode('问 AI')
+    }
+    previousActiveId.current = assistant.activeId
+  }, [assistant.activeId])
 
   const submit = (value: string) => {
     if (value.trim().length > 8000) {
@@ -104,22 +211,41 @@ export default function AssistantView() {
       return
     }
     follow.current = true
+    setShowJumpToLatest(false)
     if (messageMode === '发给成员' && assistant.shared) void assistant.discuss(value, () => setDraft(''))
-    else void assistant.send(value, () => setDraft(''))
+    else void assistant.send(value, () => { setDraft(''); assistant.setSkillId(undefined) })
   }
 
   const history = <>
     <div className="hy-brand"><span className="hy-logo"><ThunderboltOutlined /></span><div><strong>慧眼助手</strong><small>审核协作空间</small></div></div>
-    <Button block type="primary" icon={<PlusOutlined />} disabled={disabled} onClick={() => { assistant.newConversation(); setHistoryOpen(false); setDraft('') }}>新建会话</Button>
+    <Button block type="primary" icon={<PlusOutlined />} disabled={disabled} onClick={() => changeConversation(() => { assistant.newConversation(); setHistoryOpen(false) })}>新建会话</Button>
     <div className="hy-history-label">最近会话</div>
     {assistant.loading ? <Skeleton active paragraph={{ rows: 4 }} /> : assistant.sessions.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="开始你的第一轮问答" /> : <Conversations
       className="hy-conversations"
       items={assistant.sessions.map((item) => ({ key: String(item.id), label: `${item.shared ? '协作 · ' : ''}${item.title}`, disabled, icon: <HistoryOutlined /> }))}
       activeKey={assistant.activeId === null ? '' : String(assistant.activeId)}
-      onActiveChange={(key) => { follow.current = true; void assistant.selectSession(Number(key)); setHistoryOpen(false) }}
+      onActiveChange={(key) => {
+        const id = Number(key)
+        if (id === assistant.activeId) { setHistoryOpen(false); return }
+        changeConversation(() => { void assistant.selectSession(id); setHistoryOpen(false) })
+      }}
       menu={(item) => ({
         items: [{ key: 'delete', label: '删除会话', icon: <DeleteOutlined />, danger: true, disabled: disabled || assistant.sessions.find((session) => String(session.id) === item.key)?.can_manage === false }],
-        onClick: () => modal.confirm({ title: '删除这段会话？', content: '会话及其消息将被永久删除。', okText: '删除', cancelText: '取消', okButtonProps: { danger: true }, onOk: () => assistant.deleteSession(Number(item.key)) }),
+        trigger: <Button type="text" size="small" aria-label={`会话操作：${item.label}`} icon={<MoreOutlined />} />,
+        onClick: () => modal.confirm({
+          title: '删除这段会话？',
+          content: '会话及其消息将被永久删除。若删除的是当前会话，未发送的问题和已选 Skill 也会清空。',
+          okText: '删除', cancelText: '取消', okButtonProps: { danger: true },
+          onOk: async () => {
+            const id = Number(item.key)
+            const deleted = await assistant.deleteSession(id)
+            if (deleted && id === assistant.activeId) {
+              setDraft('')
+              setMessageMode('问 AI')
+              assistant.setSkillId(undefined)
+            }
+          },
+        }),
       })}
     />}
     <div className="hy-service">
@@ -143,7 +269,10 @@ export default function AssistantView() {
                 ...(assistant.taskCode && !assistant.tasks.some((task) => task.task_code === assistant.taskCode) ? [{ value: assistant.taskCode, label: assistant.taskCode }] : []),
                 ...assistant.tasks.map((task) => ({ value: task.task_code, label: `${task.task_code} · ${task.borrower}` })),
               ]}
-              onChange={(value?: string) => { assistant.newConversation(value || ''); setDraft('') }} />
+              onChange={(value?: string) => {
+                if ((value || '') === assistant.taskCode) return
+                changeConversation(() => assistant.newConversation(value || ''))
+              }} />
             <Tooltip title="更换任务会开启新的会话，避免混用材料"><SafetyCertificateOutlined className="hy-muted" /></Tooltip>
             <Button aria-label="业务技能" icon={<ThunderboltOutlined />} onClick={() => setSkillsOpen(true)}>业务技能</Button>
             {role === 'reviewer' && <Tooltip title={assistant.activeId ? '专家库、成员和共享权限' : '先开始一段对话，再邀请同事'}><Button disabled={!assistant.activeId} onClick={() => setCollaborationOpen(true)}>专家与成员</Button></Tooltip>}
@@ -152,7 +281,10 @@ export default function AssistantView() {
 
         <div className="hy-chat-scroll" ref={scrollArea} onScroll={() => {
           const area = scrollArea.current
-          if (area) follow.current = area.scrollHeight - area.scrollTop - area.clientHeight < 100
+          if (area) {
+            follow.current = area.scrollHeight - area.scrollTop - area.clientHeight < 100
+            setShowJumpToLatest(!follow.current && assistant.messages.length > 0)
+          }
         }}>
           <div className="hy-chat-content">
             {assistant.switching ? <Skeleton active paragraph={{ rows: 8 }} /> : assistant.messages.length === 0 ? <div className="hy-welcome">
@@ -178,10 +310,19 @@ export default function AssistantView() {
         </div>
 
         <div className="hy-composer">
+          {showJumpToLatest && <Button className="hy-jump-latest" aria-label="回到最新消息" title="回到最新消息" icon={<DownOutlined />} onClick={() => {
+            const area = scrollArea.current
+            if (!area) return
+            follow.current = true
+            area.scrollTop = area.scrollHeight
+            setShowJumpToLatest(false)
+          }}>回到最新</Button>}
           {assistant.shared && <div className="hy-collab-mode"><Segmented aria-label="消息发送方式" options={['问 AI', '发给成员']} value={messageMode} onChange={setMessageMode} disabled={assistant.sending} /><span className="hy-muted">{messageMode === '问 AI' ? '本轮回答将对全部会话成员可见' : '仅发给会话成员，不调用模型'}</span></div>}
           {assistant.activeRun && !assistant.sending && <Alert type="info" showIcon message="会话中的 AI 正在工作，执行状态会自动同步。" action={activeSession?.can_manage ? <Button size="small" onClick={() => { void collaborationApi.cancel(assistant.activeId!, assistant.activeRun!.id).then(assistant.refreshSession).catch((cause: Error) => assistant.setError(cause.message)) }}>停止运行</Button> : undefined} />}
           {assistant.error && <Alert type="error" showIcon message={assistant.error} closable onClose={() => assistant.setError('')} />}
           {assistant.notice && <Alert type="warning" showIcon message={assistant.notice} />}
+          {!assistant.loading && assistant.capabilities?.configured && !assistant.capabilities.rag_available &&
+            <Alert type="warning" showIcon message={assistant.capabilities.message} />}
           {!assistant.loading && !assistant.capabilities?.configured && <Alert type="warning" showIcon
             message={assistant.capabilities?.message || '暂未确认模型服务状态，请检查后端与 OpenCode runtime。'}
             action={<Button size="small" icon={<ReloadOutlined />} onClick={() => void assistant.refreshCapabilities()}>重新检查</Button>} />}
@@ -198,26 +339,14 @@ export default function AssistantView() {
         </div>
       </main>
       <CollaborationPanel open={collaborationOpen} onClose={() => setCollaborationOpen(false)} session={activeSession} onChanged={assistant.refreshSession} context={assistant.messages.slice(-8).map((message) => message.content).join('\n')} />
-      <Drawer title="业务技能" width={400} open={skillsOpen} onClose={() => setSkillsOpen(false)}>
-        <p className="hy-muted">项目审核目录：查看来源、版本和权限后加入个人技能库。选择后应用于下一轮问答，数据权限保持不变。</p>
-        {assistant.skills.length === 0 && <Empty description="暂无可用技能" />}
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>{assistant.skills.map((skill) => <Card key={skill.id} size="small" title={skill.name} extra={<Tag>{skill.version}</Tag>}>
-          <p>{skill.desc}</p><p className="hy-muted">{skill.owner} · {skill.license}</p>
-          <div>{skill.permissions.map((permission) => <Tag key={permission}>{permission}</Tag>)}</div>
-          {library?.find((item) => item.id === skill.id) && <div className="hy-library-actions"><small className="hy-muted">{library.find((item) => item.id === skill.id)?.source}</small><Button size="small" loading={libraryBusy} onClick={async () => {
-            setLibraryBusy(true)
-            try {
-              const saved = library.find((item) => item.id === skill.id)!
-              if (saved.installed && !saved.update_available) await collaborationApi.uninstallSkill(skill.id)
-              else await collaborationApi.installSkill(skill.id)
-              setLibrary(await collaborationApi.library())
-            } catch (cause) { assistant.setError(cause instanceof Error ? cause.message : '技能库更新失败') }
-            finally { setLibraryBusy(false) }
-          }}>{library.find((item) => item.id === skill.id)?.update_available ? '确认更新版本' : library.find((item) => item.id === skill.id)?.installed ? '从我的技能移除' : '加入我的技能'}</Button></div>}
-          <Button block type={skill.id === assistant.skillId ? 'primary' : 'default'} disabled={disabled} onClick={() => { assistant.setSkillId(skill.id); setSkillsOpen(false) }}>{skill.id === assistant.skillId ? '已选择' : '使用此技能'}</Button>
-        </Card>)}</Space>
-        {assistant.taskCode && <p><Link to={`/tasks/${encodeURIComponent(assistant.taskCode)}`}>返回关联任务核对原件</Link></p>}
-      </Drawer>
+      <SkillLibraryDrawer
+        open={skillsOpen}
+        disabled={disabled}
+        selectedSkillId={assistant.skillId}
+        onClose={() => setSkillsOpen(false)}
+        onChoose={(skill) => assistant.setSkillId(skill?.id)}
+        onRefreshSkills={assistant.refreshSkills}
+      />
     </section>
   </XProvider>
 }

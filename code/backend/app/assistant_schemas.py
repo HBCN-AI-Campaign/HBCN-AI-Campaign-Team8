@@ -121,12 +121,41 @@ class AssistantSkillOut(BaseModel):
     owner: str
     license: str
     permissions: list[str] = Field(default_factory=list)
+    is_custom: bool = False
+    editable: bool = False
+    revision: int | None = None
 
 
 class AssistantLibrarySkillOut(AssistantSkillOut):
     source: str
     installed: bool
     update_available: bool
+
+
+class AssistantCustomSkillIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    desc: str = Field(min_length=1, max_length=1024)
+    instructions: str = Field(min_length=1, max_length=12000)
+
+    @field_validator("name", "desc", "instructions")
+    @classmethod
+    def trim_non_empty(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("技能名称、说明和指令均不能为空")
+        return value
+
+
+class AssistantCustomSkillUpdate(AssistantCustomSkillIn):
+    expected_revision: int = Field(ge=1)
+
+
+class AssistantCustomSkillOut(AssistantSkillOut):
+    revision: int
+
+
+class AssistantCustomSkillDetail(AssistantCustomSkillOut):
+    instructions: str
 
 
 class AssistantExpertOut(BaseModel):

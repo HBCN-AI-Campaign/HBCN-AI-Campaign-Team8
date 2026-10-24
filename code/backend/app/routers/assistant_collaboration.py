@@ -14,11 +14,14 @@ from ..assistant_collaboration import (
     add_discussion, admit_run, author_out, expire_runs, launch_run, public_event,
     run_out, session_for_user, workers,
 )
-from ..assistant_models import AssistantAudit, AssistantEvent, AssistantExpertProfile, AssistantMember, AssistantRun, AssistantUserSkill
+from ..assistant_models import AssistantAudit, AssistantCustomSkill, AssistantEvent, AssistantExpertProfile, AssistantMember, AssistantRun, AssistantUserSkill
 from ..assistant_schemas import (AssistantChatIn, AssistantMessageOut, AssistantRunOut,
-    AssistantEventPage, AssistantExpertOut, AssistantMemberOut, AssistantLibrarySkillOut)
+    AssistantEventPage, AssistantExpertOut, AssistantMemberOut, AssistantLibrarySkillOut,
+    AssistantCustomSkillIn, AssistantCustomSkillUpdate, AssistantCustomSkillDetail,
+    AssistantCustomSkillOut)
 from ..assistant_service import task_for_user
-from ..assistant_skills import get_skill, list_skills
+from ..assistant_skills import (custom_skill_document, get_skill, get_skill_for_user,
+    list_skills, list_user_skills, new_custom_skill_id)
 from ..database import get_db
 from ..security import get_current_user
 
@@ -34,8 +37,71 @@ def skill_library(db: Session = Depends(get_db), user: models.User = Depends(get
         saved = installed.get(skill['id'])
         result.append({**{key: value for key, value in skill.items() if key != 'instructions'},
                        "source": "项目审核目录 · 随版本发布", "installed": saved is not None,
-                       "update_available": bool(saved and (saved.version != skill['version'] or saved.content_hash != digest))})
+                       "update_available": bool(saved and (saved.version != skill['version'] or saved.content_hash != digest)),
+                       "is_custom": False, "editable": False})
+    for skill in list_user_skills(db, user.id):
+        result.append({key: value for key, value in skill.items() if key != 'instructions'} | {
+            "source": "个人技能 · 仅自己可见", "installed": True,
+            "update_available": False, "is_custom": True, "editable": True,
+        })
     return result
+
+
+@router.post("/skill-library/custom", response_model=AssistantCustomSkillOut, status_code=201)
+def create_custom_skill(payload: AssistantCustomSkillIn, db: Session = Depends(get_db),
+                        user: models.User = Depends(get_current_user)):
+    skill_id = new_custom_skill_id(user.id)
+    row = AssistantCustomSkill(
+        id=skill_id, user_id=user.id,
+        document=custom_skill_document(skill_id, payload.name, payload.desc, payload.instructions, 1),
+        revision=1,
+    )
+    db.add(row)
+    db.commit()
+    return get_skill_for_user(db, user.id, skill_id)
+
+
+@router.get("/skill-library/custom/{skill_id}", response_model=AssistantCustomSkillDetail)
+def custom_skill_detail(skill_id: str, db: Session = Depends(get_db),
+                        user: models.User = Depends(get_current_user)):
+    skill = get_skill_for_user(db, user.id, skill_id)
+    if not skill or not skill.get("is_custom"):
+        raise HTTPException(404, "个人技能不存在")
+    return skill
+
+
+@router.put("/skill-library/custom/{skill_id}", response_model=AssistantCustomSkillOut)
+def update_custom_skill(skill_id: str, payload: AssistantCustomSkillUpdate, db: Session = Depends(get_db),
+                        user: models.User = Depends(get_current_user)):
+    row = db.get(AssistantCustomSkill, skill_id)
+    if row is None or row.user_id != user.id:
+        raise HTTPException(404, "个人技能不存在")
+    if row.revision != payload.expected_revision:
+        raise HTTPException(409, "此技能已被其他操作更新，请刷新后重试")
+    updated = db.query(AssistantCustomSkill).filter_by(
+        id=skill_id, user_id=user.id, revision=payload.expected_revision
+    ).update({
+        "document": custom_skill_document(skill_id, payload.name, payload.desc, payload.instructions, row.revision + 1),
+        "revision": row.revision + 1,
+        "updated_at": datetime.now(timezone.utc),
+    }, synchronize_session=False)
+    if not updated:
+        db.rollback()
+        raise HTTPException(409, "此技能已被其他操作更新，请刷新后重试")
+    db.commit()
+    db.expire(row)
+    return get_skill_for_user(db, user.id, skill_id)
+
+
+@router.delete("/skill-library/custom/{skill_id}")
+def delete_custom_skill(skill_id: str, db: Session = Depends(get_db),
+                        user: models.User = Depends(get_current_user)):
+    row = db.get(AssistantCustomSkill, skill_id)
+    if row is None or row.user_id != user.id:
+        raise HTTPException(404, "个人技能不存在")
+    db.delete(row)
+    db.commit()
+    return {"deleted": True}
 
 
 @router.put("/skill-library/{skill_id}")
@@ -194,7 +260,7 @@ async def start_run(session_id: int, payload: AssistantChatIn, db: Session = Dep
     session = session_for_user(db, session_id, user)
     if payload.task_code and payload.task_code != session.task_code:
         raise HTTPException(409, "会话任务固定，请新建会话切换任务")
-    if payload.skill_id and not get_skill(payload.skill_id):
+    if payload.skill_id and not get_skill_for_user(db, user.id, payload.skill_id):
         raise HTTPException(404, "审核技能不存在或未发布")
     run, created = admit_run(db, user, session, payload)
     if created:

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuthStore } from '@/stores/auth'
-import { assistantApi } from './api'
-import { collaborationApi, restoreActiveReply, STOP_ASSISTANT_RUN } from './collaboration'
+import { AssistantApiError, assistantApi } from './api'
+import { CollaborationApiError, collaborationApi, restoreActiveReply, STOP_ASSISTANT_RUN } from './collaboration'
 import type { Run } from './collaboration'
 import type { AssistantCapabilities, AssistantMessage, AssistantSession, AssistantSkill, AssistantStep, AssistantTaskOption } from './types'
 
 const errorText = (error: unknown) => error instanceof Error ? error.message : '助手请求失败，请稍后重试'
+const accessWasRevoked = (error: unknown) =>
+  (error instanceof AssistantApiError || error instanceof CollaborationApiError) && [401, 403, 404].includes(error.status)
 
 function upsertStep(steps: AssistantStep[], step: AssistantStep): AssistantStep[] {
   return steps.some((item) => item.key === step.key)
@@ -63,12 +65,21 @@ export function useAssistant(initialTask = '') {
       setMessages(restored)
       setActiveRun(detail.active_run || null)
       setSessions((items) => items.map((item) => item.id === detail.id ? detail : item))
+      setError('')
     } catch (cause) {
       if (request === generation.current) {
-        setError(errorText(cause))
-        // Revoke cached material immediately when the server denies access.
-        setMessages([])
-        setActiveRun(null)
+        if (accessWasRevoked(cause)) {
+          setSessions((items) => items.filter((item) => item.id !== activeId))
+          setMessages([])
+          setActiveRun(null)
+          setActiveId(null)
+          setTaskCode('')
+          setSkillId(undefined)
+          replay.current = null
+          setError('此会话的访问权限已变更，请重新选择会话。')
+        } else {
+          setError('连接暂时中断，正在尝试恢复本轮状态；请勿重复发送。')
+        }
       }
     }
   }, [activeId])
@@ -103,6 +114,7 @@ export function useAssistant(initialTask = '') {
           replay.current = null
           setActiveId(null)
           setTaskCode('')
+          setSkillId(undefined)
           setError('此会话的访问权限已变更，请重新选择会话。')
         }
       }).catch(() => undefined)
@@ -143,6 +155,12 @@ export function useAssistant(initialTask = '') {
     } catch (cause) { setNotice(errorText(cause)) }
   }, [])
 
+  const refreshSkills = useCallback(async () => {
+    const available = await assistantApi.skills()
+    setSkills(available)
+    return available
+  }, [])
+
   const newConversation = useCallback((nextTask = '') => {
     if (stream.current) return
     generation.current += 1
@@ -152,6 +170,7 @@ export function useAssistant(initialTask = '') {
     setActiveRun(null)
     replay.current = null
     setTaskCode(nextTask)
+    setSkillId(undefined)
     setError('')
   }, [])
 
@@ -169,6 +188,7 @@ export function useAssistant(initialTask = '') {
       setMessages(session.messages.map(restoredMessage))
       setActiveRun(session.active_run || null)
       setTaskCode(session.task_code || '')
+      setSkillId(undefined)
     } catch (cause) {
       if (request === generation.current) setError(errorText(cause))
     } finally {
@@ -177,12 +197,14 @@ export function useAssistant(initialTask = '') {
   }, [])
 
   const deleteSession = useCallback(async (id: number) => {
-    if (stream.current) return
+    if (stream.current) return false
     try {
       await assistantApi.deleteSession(id)
       setSessions((items) => items.filter((item) => item.id !== id))
       if (activeId === id) newConversation()
+      return true
     } catch (cause) { setError(errorText(cause)) }
+    return false
   }, [activeId, newConversation])
 
   const send = useCallback(async (text: string, accepted?: () => void) => {
@@ -288,7 +310,7 @@ export function useAssistant(initialTask = '') {
   return {
     sessions, activeId, messages, capabilities, tasks, skills, taskCode, skillId,
     loading, switching, sending, error, notice, setSkillId, setError,
-    refreshCapabilities, newConversation, selectSession, deleteSession, send,
+    refreshCapabilities, refreshSkills, newConversation, selectSession, deleteSession, send,
     shared, activeRun, refreshSession, discuss,
     stop: () => stream.current?.abort(STOP_ASSISTANT_RUN),
   }

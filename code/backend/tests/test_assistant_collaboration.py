@@ -321,6 +321,49 @@ class CollaborationTests(unittest.TestCase):
         self.assertFalse(next(item for item in other if item['id'] == skill_id)['installed'])
         self.assertEqual(self.client.put('/api/assistant/skill-library/not-approved', headers=self.reviewer_headers).status_code, 404)
 
+    def test_custom_skill_crud_is_owner_scoped_and_uses_optimistic_revision(self):
+        endpoint = '/api/assistant/v1/skill-library/custom'
+        created = self.client.post(endpoint, headers=self.reviewer_headers, json={
+            'name': '合同付款核对', 'desc': '检查合同约定与付款材料是否一致',
+            'instructions': '逐项列出合同金额、币种、收款方与付款材料的差异。',
+        })
+        self.assertEqual(created.status_code, 201, created.text)
+        skill = created.json()
+        self.assertTrue(skill['is_custom'])
+        self.assertTrue(skill['editable'])
+        self.assertEqual(skill['revision'], 1)
+        detail = self.client.get(endpoint + '/' + skill['id'], headers=self.reviewer_headers)
+        self.assertEqual(detail.status_code, 200)
+        self.assertIn('逐项列出合同金额', detail.json()['instructions'])
+        self.assertEqual(self.client.get(endpoint + '/' + skill['id'], headers=self.expert_headers).status_code, 404)
+        mine = self.client.get('/api/assistant/v1/skills', headers=self.reviewer_headers).json()
+        theirs = self.client.get('/api/assistant/v1/skills', headers=self.expert_headers).json()
+        self.assertIn(skill['id'], [item['id'] for item in mine])
+        self.assertNotIn(skill['id'], [item['id'] for item in theirs])
+        self.invite()
+        self.assertEqual(self.client.post(
+            self.base + '/runs', headers=self.expert_headers,
+            json={'content': '调用他人技能', 'skill_id': skill['id']},
+        ).status_code, 404)
+        self.assertEqual(self.client.put(
+            endpoint + '/' + skill['id'], headers=self.expert_headers,
+            json={'name': '越权编辑', 'desc': '不应保存', 'instructions': '修改其他人的内容。', 'expected_revision': 1},
+        ).status_code, 404)
+
+        updated = self.client.put(endpoint + '/' + skill['id'], headers=self.reviewer_headers, json={
+            'name': '合同付款核对（更新）', 'desc': '增加收款主体复核',
+            'instructions': '对照合同、收款方和付款材料，明确记录差异。', 'expected_revision': 1,
+        })
+        self.assertEqual(updated.status_code, 200, updated.text)
+        self.assertEqual(updated.json()['revision'], 2)
+        stale = self.client.put(endpoint + '/' + skill['id'], headers=self.reviewer_headers, json={
+            'name': '覆盖旧版本', 'desc': '不应覆盖', 'instructions': '旧表单内容。', 'expected_revision': 1,
+        })
+        self.assertEqual(stale.status_code, 409)
+        self.assertEqual(self.client.delete(endpoint + '/' + skill['id'], headers=self.expert_headers).status_code, 404)
+        self.assertEqual(self.client.delete(endpoint + '/' + skill['id'], headers=self.reviewer_headers).json(), {'deleted': True})
+        self.assertNotIn(skill['id'], [item['id'] for item in self.client.get('/api/assistant/v1/skills', headers=self.reviewer_headers).json()])
+
     def test_workflow_client_uses_delegated_business_auth_and_resumes_same_run(self):
         import httpx
         from app.assistant_client import AssistantClient

@@ -1,7 +1,7 @@
 """Additive assistant tables. Existing task/user/message columns are untouched."""
 import datetime as dt
 
-from sqlalchemy import JSON, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import JSON, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
@@ -74,3 +74,15 @@ class AssistantUserSkill(Base):
     version: Mapped[str] = mapped_column(String(64))
     content_hash: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[dt.datetime] = mapped_column(AssistantUTCDateTime(), default=_now)
+
+
+class AssistantCustomSkill(Base):
+    """Personal instruction-only skills; they never execute code or grant tools."""
+    __tablename__ = "assistant_custom_skills"
+    __table_args__ = (Index("ix_assistant_custom_skills_user_id", "user_id"),)
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    document: Mapped[str] = mapped_column(Text)
+    revision: Mapped[int] = mapped_column(default=1)
+    created_at: Mapped[dt.datetime] = mapped_column(AssistantUTCDateTime(), default=_now)
+    updated_at: Mapped[dt.datetime] = mapped_column(AssistantUTCDateTime(), default=_now, onupdate=_now)

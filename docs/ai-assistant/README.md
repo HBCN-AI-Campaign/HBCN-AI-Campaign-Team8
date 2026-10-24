@@ -6,6 +6,8 @@
 
 **其他模块接入：** 先看[模块接入清单与可运行示例](模块接入.md)，详细字段查[对外接口 V1](对外接口V1.md)与[独立 Python SDK](../../code/assistant-sdk/README.md)。固定前缀 `/api/assistant/v1`，OpenAPI 基线随仓库交付；内部模型/检索实现可继续升级，调用方不直接依赖内部代码。云端隔离预览已发布此版本，正式主站尚未切换。
 
+**当前体验修正（第 31–39 轮）：**切换会话或成功删除当前会话时清空旧草稿并重置待用 Skill/“问 AI / 发给成员”；取消或删除失败保留输入。历史会话操作支持键盘聚焦和触发。答复中仅本轮已验证的 `[E编号]` 可点击或键盘触发并跳到对应依据；长引用在固定高度面板中独立滚动，宽表格留在正文内滚动。技能版本冲突时保留编辑内容并允许对照最新版合并；专家与成员目录独立滚动，长专家姓名在窄屏内换行，资料弹窗固定操作区并滚动正文，未关联任务时不能邀请。长成员列表下审核权限提醒保持可见。详情与测试边界见[持续优化实施规划](持续优化实施规划.md)和[核心测试集](核心测试集.md)。
+
 当前接入交付：`create / ask / resume` 示例已用独立 Python 子进程和真实本机 TCP API 验证，覆盖同键仅一次执行、持久结果恢复及 JWT 失败；API/契约 28 项、SDK 8 项通过。此项使用隔离合成库与 mock 模型，不替代下方真实模型和目标部署验收。
 
 ## 1. 当前做到哪里
@@ -24,7 +26,7 @@
 | 专家服务端搜索、介绍、标签匹配推荐 | 查询全部授权候选后最多返回 50 位；本人资料独立读取，不依赖搜索列表；不编造专家，不自动邀请 |
 | 可恢复的 AI 运行及公开事件 | 单人/多人页面统一 runs/events；幂等请求、单会话运行槽、数据库游标 |
 | 任务证据、RAG 适配、引用、折叠轨迹 | 中文提问也保留授权任务概要；来源编号绑定本轮送入模型的证据，只有正文引用的来源显示在引用面板；RAG 由另一模块负责，编号可追溯不等于事实已核验 |
-| 技能库：目录、加入/移除、版本更新提示 | 仅仓库审核发布的指引；不执行任意远程技能或上传脚本 |
+| 技能库：审核目录、个人增删改查、按次应用 | 项目技能只读发布；个人技能只含文字指引、仅本人可见，不执行脚本 |
 | 独立可安装 Python SDK / 助手 V1 契约 | 只依赖 HTTPX；委托的审核 JWT；不依赖后端源码，独立机器身份尚未实现 |
 
 **尚未验收：** 正式主站/目标 PostgreSQL 与真实 RAG 联合链路、不同同学电脑访问展示、多实例协调与压力测试；云端预览的 SQLite + 汇丰 HTTP 验收不替代这些项目。正文尚非模型 token 实时流，不能据此宣称生产级或给出未经用户测试的高分。
@@ -38,7 +40,7 @@ flowchart LR
   W[业务工作流 / Agent] -->|AssistantClient + 业务 JWT| API
   UI -->|JWT · JSON / 事件游标| API[FastAPI 助手 API]
   API --> ACL[审核角色 AND 成员身份 AND 现有任务权限]
-  ACL --> DB[(会话 / 作者 / 运行 / 事件 / 审计)]
+  ACL --> DB[(会话 / 运行 / 事件 / 审计 / 私有技能)]
   API --> TASK[获准的任务字段 / 规则结果]
   API --> RAG[assistant_knowledge · 业务规则检索]
   API -->|本轮授权上下文 · 私网 token| RT[独立 runtime / OpenCode SDK]
@@ -51,15 +53,15 @@ flowchart LR
 
 | 层 | 当前组件 / 主要文件 | 职责 |
 |---|---|---|
-| 界面 | React 18、Ant Design 5、Ant Design X 1.6.1；AssistantView.tsx | 上游 Sender/Bubble/Conversations/ThoughtChain；成员管理用 Ant Design Drawer/List/Modal |
+| 界面 | React 18、Ant Design 5、Ant Design X 1.6.1；AssistantView.tsx、SkillLibraryDrawer.tsx | 上游 Sender/Bubble/Conversations/ThoughtChain；技能目录复用 Ant Design Drawer/Tabs/List/Form/Modal |
 | 页面适配 | useAssistant.ts、collaboration.ts | JWT 请求、状态、断线回放和目录同步；不做权限决策 |
 | 对外边界 | assistant_contract.py、assistant-sdk/hbcn_assistant | V1 版本声明、独立 HTTP SDK、OpenAPI 契约回归；旧路径兼容 |
 | 业务边界 | routers/assistant*.py、assistant_collaboration.py | 会话/任务鉴权、运行调度、持久事件、审计 |
 | 证据与回答 | assistant_service.py、assistant_knowledge.py | 任务证据、仅业务规则知识检索、专家候选和答复校验；不修改审核状态或 RAG 实现 |
 | Agent 执行 | code/assistant-runtime、OpenCode SDK 2.0.32 | 仅本轮只读工具；不直接读业务库或任意业务文件 |
-| 数据 | assistant_models.py、独立 Alembic 迁移 | 新增助手专属表，不改队友任务表或 RAG 数据层 |
+| 数据 | assistant_models.py、独立 Alembic 迁移 | 新增助手专属表与用户私有技能表，不改队友任务表或 RAG 数据层 |
 
-上游按锁文件安装：[Ant Design X](https://github.com/ant-design/x)（MIT）、[OpenCode](https://github.com/anomalyco/opencode)（MIT）。资源授权借鉴 [LibreChat ACL](https://www.librechat.ai/docs/features/access_control)。只写本项目业务适配，不重复引入认证/聊天框架；升级前先验证 React/Ant Design 和 SDK 兼容性。
+上游按锁文件安装：[Ant Design X](https://github.com/ant-design/x)（MIT）、[OpenCode](https://github.com/anomalyco/opencode)（MIT）。技能格式遵循 [OpenCode Skills](https://opencode.ai/docs/skills/) 的 `SKILL.md` 约定；本项目只存文本指引，禁止上传脚本。目录交互使用 [Ant Design Drawer](https://ant.design/components/drawer/)、[Tabs](https://ant.design/components/tabs/) 与 [Form](https://ant.design/components/form/) 现成组件。只写本项目业务适配，不重复引入认证/聊天框架；升级前先验证 React/Ant Design 和 SDK 兼容性。
 
 ## 3. 多人如何协作
 
@@ -147,7 +149,8 @@ RAG 按现有接口检索共享资料；任务概要、字段/规则结果先经
 | GET /sessions/{id}/events?after_id=&run_id= | events,cursor,has_more,active_run；每页最多 100 条 |
 | POST /sessions/{id}/runs/{run_id}/cancel | 创建者/发起者停止运行 |
 | GET /sessions/{id}/audit | 创建者查看邀请/撤权/取消记录 |
-| GET /skill-library；PUT/DELETE /skill-library/{skill_id} | 发布目录、个人加入/更新/移除 |
+| GET /skill-library；PUT/DELETE /skill-library/{skill_id} | 发布目录、项目技能加入/更新/移除 |
+| POST /skill-library/custom；GET/PUT/DELETE /skill-library/custom/{skill_id} | 本人私有文字技能；更新带 revision 防并发覆盖 |
 | GET /skills；POST /sessions/{id}/messages/stream | 技能目录；SSE 仅兼容旧单人客户端，正式页面统一 runs/events |
 
 事件：message_start / step / tool / delta / citations / message_end / error；协作增加 discussion / members_changed / run_end。持久事件带 id、run_id；message_end 的落库消息为权威正文，run_end.status 为最终运行状态。字段及调试见后端 /docs。
@@ -215,4 +218,4 @@ SDK **1.1.2** 提供[双账号 HTTP 部署验收命令](../../code/assistant-sdk
 
 本轮真实模型链路 `rag_available=false`；前轮重新探测配置 RAG ready 返回 404、8011 不可达，未宣称真实检索成功。前轮 Node 构建保留主站大 chunk 告警；SDK 1.1.2 wheel 安装通过，此前干净环境独立安装和 Windows/Linux runtime 各 **3 项 / 52 断言**通过，本轮未改 runtime。Linux systemd 模板已离线校验，未安装服务。云端助手、真实 RAG、目标 PostgreSQL和多台团队电脑联合验收仍待完成。
 
-维护三层：[本文](README.md)说当前是什么；[修改规划](持续优化实施规划.md)记录本轮实现和验证；[决策记录](决策记录.md)解释长期取舍。接口/行为落地时同步，不按日期复制。[早期调研](多人协作AI对话调研与优化方案.md)与[旧交接](开发记录与交接.md)是历史，遇冲突以当前代码和本文为准。
+维护四份：[本文](README.md)说明现状与架构；[修改规划](持续优化实施规划.md)记录迭代；[核心测试集](核心测试集.md)记录真实用户验收；[决策记录](决策记录.md)解释长期取舍。接口/行为落地时同步，不按日期复制。[早期调研](多人协作AI对话调研与优化方案.md)与[旧交接](开发记录与交接.md)是历史，遇冲突以当前代码和本文为准。

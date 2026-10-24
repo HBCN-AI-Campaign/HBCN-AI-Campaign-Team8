@@ -29,6 +29,8 @@ describe('reviewer collaboration with Ant Design components', () => {
   it('shows real expert descriptions, searches, confirms history sharing before inviting', async () => {
     const changed = mount()
     await screen.findByText('核验贸易材料')
+    expect(screen.getByRole('region', { name: '专家搜索结果' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '维护我的专业资料' })).toBeTruthy()
     expect(screen.getByText('与当前讨论匹配的专家')).toBeTruthy()
     fireEvent.change(screen.getByRole('searchbox', { name: '搜索专家' }), { target: { value: '不存在' } })
     await screen.findByText('暂无匹配专家；可请同事维护自己的专业资料')

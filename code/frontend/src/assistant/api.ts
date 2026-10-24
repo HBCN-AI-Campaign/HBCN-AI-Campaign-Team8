@@ -10,6 +10,13 @@ import { useAuthStore } from '@/stores/auth'
 
 const base = '/api/assistant/v1'
 
+export class AssistantApiError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message)
+    this.name = 'AssistantApiError'
+  }
+}
+
 function token(): string {
   return useAuthStore.getState().token
 }
@@ -21,11 +28,11 @@ function headers(json = false): HeadersInit {
   }
 }
 
-function rejectExpiredSession(requestToken: string): Error {
+function rejectExpiredSession(requestToken: string): AssistantApiError {
   // ProtectedRoute reacts to the store and retains the current URL for login.
   // An old request must not sign out a user who has since logged in again.
   if (token() === requestToken) useAuthStore.getState().logout()
-  return new Error('登录已过期，请重新登录')
+  return new AssistantApiError(401, '登录已过期，请重新登录')
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -34,7 +41,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     if (response.status === 401) throw rejectExpiredSession(requestToken)
     const body = await response.json().catch(() => ({})) as { detail?: string }
-    throw new Error(body.detail || `助手请求失败（${response.status}）`)
+    throw new AssistantApiError(response.status, body.detail || `助手请求失败（${response.status}）`)
   }
   return response.json() as Promise<T>
 }
@@ -83,7 +90,7 @@ export const assistantApi = {
     if (!response.ok || !response.body) {
       if (response.status === 401) throw rejectExpiredSession(requestToken)
       const body = await response.json().catch(() => ({})) as { detail?: string }
-      throw new Error(body.detail || `助手流式请求失败（${response.status}）`)
+      throw new AssistantApiError(response.status, body.detail || `助手流式请求失败（${response.status}）`)
     }
     if (!response.headers.get('content-type')?.includes('text/event-stream')) {
       throw new Error('助手未返回事件流，请检查前端代理和后端地址')

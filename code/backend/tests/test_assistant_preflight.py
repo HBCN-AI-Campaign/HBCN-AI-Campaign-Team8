@@ -199,7 +199,7 @@ class AssistantRagReadinessTests(unittest.TestCase):
                 report = self.probe(version)
                 self.assertFalse(report['ready'])
                 self.assertEqual(report['code'], 'contract_missing' if version in (None, '', 'invalid') else 'contract_mismatch')
-        for version in ('1.2.0', '1.2.5', '1.3.0'):
+        for version in ('1.2.0', '1.2.5', '1.3.0', '1.3.2', '1.3.3'):
             with self.subTest(version=version):
                 report = self.probe(version)
                 self.assertTrue(report['ready'])
