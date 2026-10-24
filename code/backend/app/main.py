@@ -16,12 +16,35 @@ from .config import SAMPLE_PDF_DIR as _SAMPLE_PDF_DIR
 from .config import UPLOAD_DIR as _UPLOAD_DIR
 from .database import Base, engine
 from .routers import auth, customers, tasks
+from .seed import seed as _seed
+
+
+def _migrate(eng):
+    """为旧版数据库补齐新增列（兼容 SQLite / PostgreSQL）。"""
+    from sqlalchemy import inspect, text
+
+    inspector = inspect(eng)
+    if "review_tasks" not in inspector.get_table_names():
+        return  # 表还没建，create_all 会完整建，不需要补列
+    existing = {col["name"] for col in inspector.get_columns("review_tasks")}
+    pending = [
+        ("needs_recheck",   "BOOLEAN DEFAULT FALSE"),
+        ("review_comment",  "TEXT"),
+        ("supplement_note", "TEXT"),
+        ("submitted_by",    "INTEGER"),
+    ]
+    with eng.begin() as conn:
+        for col, definition in pending:
+            if col not in existing:
+                conn.execute(text(f"ALTER TABLE review_tasks ADD COLUMN {col} {definition}"))
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 建表（POC 阶段用 create_all；生产应改用 Alembic 迁移）
+    # 补列（老库升级）→ 建表（首次部署）
+    _migrate(engine)
     Base.metadata.create_all(bind=engine)
+    _seed()
     yield
 
 
